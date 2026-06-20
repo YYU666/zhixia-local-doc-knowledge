@@ -1,0 +1,82 @@
+# Dependencies
+node_modules/
+
+# Build and packaging output
+dist/
+release/
+out/
+*.blockmap
+*.exe
+*.msi
+*.zip
+*.7z
+*.asar
+*.asar.unpacked/
+
+# TypeScript / Vite / test output
+*.tsbuildinfo
+.vite/
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Local databases and app data
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+userData/
+app-data/
+local-data/
+Local State
+
+# Generated Zhixia / Memory Runtime private artifacts
+.codex-knowledge/
+**/.codex-knowledge/
+codex-history-vault/
+thread-history-vault/
+vault/
+vaults/
+backups/
+backup/
+evidence/
+private-evidence/
+runtime-evidence/
+flow-skill-candidates/
+flowskill-candidates/
+memory-writeback-inbox/
+
+# Logs, screenshots, temp files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+screenshots/
+qa-*.png
+*.tmp
+*.temp
+tmp/
+temp/
+.cache/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/

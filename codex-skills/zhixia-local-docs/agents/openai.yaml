@@ -1,0 +1,7 @@
+interface:
+  display_name: "知匣 Local Docs"
+  short_description: "Use Zhixia project knowledge."
+  default_prompt: "Use $zhixia-local-docs to read Zhixia project knowledge and create sourced local documents."
+
+policy:
+  allow_implicit_invocation: true
