@@ -13,13 +13,13 @@ Zhixia is the official local-first Memory Runtime for CEO Flow. It gives CEO Flo
 | Harvest / writeback | `writeback_evidence(result)` | Store compact accepted/revised/blocked evidence receipt in app-owned storage. |
 | Promotion review | `promote_memory(candidate)` | Queue safe, source-backed memory or FlowSkill-ready candidate metadata for private review. |
 | Handoff | `retrieve_context("handoff")` | Build a compact continuation packet for the next CEO Flow turn. |
-| Old-thread recovery | `retrieve_precedent("old_thread_recovery")` | Return metadata pointers and vault/receipt evidence, not raw session bodies by default. |
+| Old-thread recovery | `recover_thread(threadId/title/projectPath)` then `retrieve_context("thread_recovery")` | Build a compact ThreadRecoveryPacket from lineage, vault manifests, project docs, and cold-history pointers; raw session bodies remain excluded by default. |
 
 ## Provider Modes
 
 - `none`: No Memory Runtime lookup; CEO Flow proceeds from prompt context only.
 - `project-memory`: Use Zhixia project records, knowledge items, experience cards, working memory, and sourceRefs.
-- `zhixia-local-docs`: Use the packaged Codex helper under `codex-skills/zhixia-local-docs` for compact local files and dry-run evidence packets.
+- `zhixia-local-docs`: Use the packaged Codex helper under `codex-skills/zhixia-local-docs` for compact local files, old-thread recovery packets, and dry-run evidence packets.
 - `guardian-history`: Use history/vault/pointer metadata for old-thread recovery; raw session body remains excluded by default.
 - `hybrid`: Combine project-memory, helper packets, and safe history metadata under token and sourceRef bounds.
 
@@ -44,7 +44,24 @@ Response shape:
   "schemaVersion": "zhixia.runtime_context.v1",
   "request": {
     "taskGoal": "prepare implementation lane for project detection polish",
-    "providerMode": "hybrid"
+    "providerMode": "hybrid",
+    "queryType": "task_dispatch",
+    "tokenBudget": 1200
+  },
+  "routerPlan": {
+    "strategy": "hot_warm_cold_metadata_first",
+    "taskType": "task_dispatch",
+    "retrieval": {
+      "includeKinds": ["project_record", "project_artifact", "knowledge_item", "experience_card"],
+      "maxResults": 8
+    },
+    "backgroundPolicy": {
+      "startsTimers": false,
+      "scansFullDatabase": false,
+      "scansVault": false,
+      "runsAiSummary": false,
+      "rebuildsGraph": false
+    }
   },
   "project": {
     "path": "workspace root or null",
@@ -69,6 +86,29 @@ Response shape:
       "hash": "sha256-or-source-hash"
     }
   ],
+  "hotState": {
+    "activeItemIds": ["project-record"],
+    "nextAction": "Compact next step.",
+    "sourceRefs": []
+  },
+  "memoryLayers": {
+    "hot": { "count": 1, "tokenEstimate": 120 },
+    "warm": { "count": 2, "tokenEstimate": 520 },
+    "cold": { "count": 0, "tokenEstimate": 0 }
+  },
+  "memoryGraph": {
+    "mode": "bounded_association_graph",
+    "nodes": [],
+    "edges": []
+  },
+  "performance": {
+    "metadataFirst": true,
+    "noRawSessionBody": true,
+    "noFullTextRead": true,
+    "noVaultScan": true,
+    "noBackgroundTimer": true,
+    "boundedByRouterPlan": true
+  },
   "warnings": [],
   "tokenEstimate": 900,
   "generatedAt": "ISO-8601 timestamp"
@@ -78,9 +118,73 @@ Response shape:
 Rules:
 
 - Default output is compact and metadata-first.
+
+## Hook: recover_thread(threadId/title/projectPath)
+
+Use this before `retrieve_context` when a CEO Flow thread is broken, archived, slimmed, or replaced and the new thread only knows an old thread id, title, memory pointer, or project path.
+
+Request shape:
+
+```json
+{
+  "threadId": "public-thread-id",
+  "title": "Refmuse game Studio CEO",
+  "projectPath": "C:/Users/example/Documents/2D游戏项目",
+  "tokenBudget": 1600
+}
+```
+
+Response shape:
+
+```json
+{
+  "schemaVersion": "zhixia.thread_recovery_packet.v1",
+  "thread": {
+    "threadId": "old-thread-id",
+    "title": "old thread title",
+    "projectPath": "workspace root",
+    "confidence": "source_backed"
+  },
+  "lineage": [],
+  "vault": {
+    "hasVault": true,
+    "policy": "pointer_only_no_default_raw_body_read",
+    "manifests": []
+  },
+  "recommendedReadOrder": [],
+  "coldHistorySources": [],
+  "prompt": "compact starter prompt for the replacement CEO thread",
+  "safety": {
+    "mutatesRawSession": false,
+    "archiveCompactDeleteMoveRestore": false,
+    "rawSessionDefaultRead": false
+  },
+  "warnings": []
+}
+```
+
+CEO Flow bootstrap rule:
+
+1. If the user provides an old thread id/title or says a previous CEO thread broke, call `recover_thread`.
+2. Give the replacement thread the returned `prompt`, `recommendedReadOrder`, and compact `sourceRefs`.
+3. Then call `retrieve_context` with `queryType="thread_recovery"` for current hot/warm project context.
+4. Only read `coldHistorySources` raw/vault session paths after an explicit narrow recovery request. They are pointers, not default context.
+5. Write a `WorkingMemoryRecord` for the replacement thread so future recovery does not depend on manual `.codex` searching.
+
+Codex helper fallback when Electron IPC is unavailable:
+
+```powershell
+node codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs <workspace-path> --recover-thread --thread-id "<old thread id>" --thread-title "<old thread title>" --query "<project or task keywords>" --json
+```
+
+The helper fallback is workspace-metadata-only. It can recommend project docs and compact `.codex-knowledge` sourceRefs, but it does not walk Thread History Vault and does not read raw/vault session bodies.
+- `routerPlan` is advisory for CEO Flow dispatch. It explains the chosen task profile, retrieval budget, hot/warm/cold policy, and performance boundaries.
+- `hotState` is the short-lived project/task continuity seed; `memoryGraph` is a bounded association graph derived only from returned compact items and sourceRefs.
 - Include sourceRefs whenever possible.
 - Include freshness/status/human-confirmation signals when available.
 - Do not include raw session JSONL, full chats, giant generated Markdown, screenshots/base64 payloads, credentials, or long logs.
+- Do not treat `memoryGraph` as permission to scan the whole library or rebuild an always-on graph. It is packet-local and disposable.
+- `performance.noFullTextRead` means the default packet avoids document/raw bodies. It does not mean the provider never reads metadata rows; metadata-first bounded row reads are allowed under the router plan.
 
 ## Hook: retrieve_precedent(task_type)
 

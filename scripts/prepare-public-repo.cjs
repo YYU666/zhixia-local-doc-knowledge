@@ -223,6 +223,9 @@ function writePublicReleaseNotes() {
     "",
     "## 0.8.3",
     "",
+    "- One-click safe relief now starts with Codex hot-log cleanup before thread preservation, slimming, and archive-queue generation. If Codex, codex, or node_repl is still running, Zhixia stops the flow and asks the user to close Codex first, so the large Codex runtime log database is not silently left behind.",
+    "- Memory Runtime now includes an explicit memory graph and activation loop for CEO Flow usage: compact project/history/experience metadata can be activated by task goal, project path, and thread id without reading raw session bodies by default.",
+    "- Thread recovery support provides compact recovery packets for damaged, archived, or slimmed Codex threads, including source-backed pointers and a restart prompt instead of giant transcript dumps.",
     "- Project IA classification is conservative: only high-confidence project candidates become project cards; low-confidence material moves to pending leads.",
     "- Memory Runtime contract support covers compact context retrieval, precedent retrieval, evidence writeback, working memory, and private review candidates.",
     "- Codex / CEO Flow integration remains local-first, metadata-first, and fail-closed for raw sessions, secrets, destructive actions, public export, install, and execute.",
@@ -272,6 +275,7 @@ function listFiles(dir, relativeBase = "") {
   const files = [];
   if (!fs.existsSync(dir)) return files;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === ".git") continue;
     const relativePath = path.join(relativeBase, entry.name);
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) files.push(...listFiles(fullPath, relativePath));
@@ -341,13 +345,32 @@ function writeManifest() {
   fs.writeFileSync(path.join(stagingDir, "PUBLIC_STAGING_MANIFEST.md"), sanitizePublicText(manifest), "utf8");
 }
 
+function preserveStagingGitMetadata(target) {
+  const gitPath = path.join(target, ".git");
+  if (!fs.existsSync(gitPath)) return null;
+  const keepPath = path.join(stagingRoot, `.zhixia-public-staging-git-${process.pid}-${Date.now()}`);
+  fs.renameSync(gitPath, keepPath);
+  return keepPath;
+}
+
+function restoreStagingGitMetadata(target, keepPath) {
+  if (!keepPath) return;
+  const gitPath = path.join(target, ".git");
+  if (fs.existsSync(gitPath)) {
+    throw new Error(`Refusing to overwrite unexpected staging Git metadata: ${gitPath}`);
+  }
+  fs.renameSync(keepPath, gitPath);
+}
+
 function main() {
   const target = assertOwnedStagingTarget(stagingDir);
   ensureDir(stagingRoot);
+  const preservedGit = preserveStagingGitMetadata(target);
   if (fs.existsSync(target)) {
     fs.rmSync(target, { recursive: true, force: true, maxRetries: 8, retryDelay: 200 });
   }
   ensureDir(target);
+  restoreStagingGitMetadata(target, preservedGit);
   copyTree(appRoot);
   writePublicPackageJson();
   writePublicReadme();

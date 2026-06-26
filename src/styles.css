@@ -650,6 +650,21 @@ summary:focus-visible {
   align-items: center;
 }
 
+.search-result-note {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 8px !important;
+  padding: 5px 9px;
+  border: 1px solid rgba(10, 127, 114, 0.18);
+  border-radius: 999px;
+  background: rgba(10, 127, 114, 0.07);
+  color: var(--teal) !important;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .project-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(284px, 1fr));

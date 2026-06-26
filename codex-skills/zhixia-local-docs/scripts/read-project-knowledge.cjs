@@ -42,10 +42,12 @@ const KIND_ALIASES = {
 const DEFAULT_QUERY_TYPE = "task_dispatch";
 const DEFAULT_LIMIT = 6;
 const DEFAULT_TOKEN_BUDGET = 1200;
+const DEFAULT_RECOVERY_TOKEN_BUDGET = 1800;
 const MAX_LIMIT = 40;
 const MIN_TOKEN_BUDGET = 200;
 const MAX_TOKEN_BUDGET = 4000;
 const MAX_KNOWLEDGE_FILE_BYTES = 256 * 1024;
+const MAX_RECOVERY_RECOMMENDED_DOC_BYTES = 768 * 1024;
 const RUNTIME_ALLOWED_KINDS = [
   "project_record",
   "project_resume_packet",
@@ -60,6 +62,23 @@ const RUNTIME_ALLOWED_KINDS = [
   "thread_history_warm",
 ];
 const PRECEDENT_KINDS = ["knowledge", "experience", "artifacts", "tool_inventory", "skill_candidates"];
+const RECOVERY_DOCS = [
+  "docs/PROGRAM_GOAL_BRIEF.md",
+  "docs/PRD.md",
+  "docs/TECHNICAL_DESIGN.md",
+  "docs/TEST_PLAN.md",
+  "docs/RELEASE_NOTES.md",
+  "docs/CEO_FLOW_MEMORY_RUNTIME.md",
+  "docs/REFMUSE_GAME_STUDIO_CEO_RECOVERY_PACKET.md",
+  "docs/REFMUSE_GAME_STUDIO_CEO_TRANSCRIPT_EXTRACT.md",
+  "docs/REFMUSE_GAME_STUDIO_NEW_THREAD_START.md",
+  ".codex-knowledge/project-resume.md",
+  ".codex-knowledge/retrieval-packet.md",
+  ".codex-knowledge/project-index.md",
+  ".codex-knowledge/project-artifacts.md",
+  ".codex-knowledge/knowledge-items.md",
+  ".codex-knowledge/experience-cards.md",
+];
 const RUNTIME_KIND_BY_HELPER_KIND = {
   resume: "project_resume_packet",
   retrieval_packet: "project_resume_packet",
@@ -139,6 +158,10 @@ function parseArgs(argv) {
     json: false,
     runtimeContext: false,
     precedent: false,
+    recoverThread: false,
+    threadId: "",
+    threadTitle: "",
+    parentCeoThreadId: "",
     taskGoal: "",
     writebackDryRun: false,
     evidenceJson: "",
@@ -181,6 +204,25 @@ function parseArgs(argv) {
         args.query = argv[index + 1];
         index += 1;
       }
+    } else if (item === "--recover-thread" || item === "--retrieve-thread") {
+      args.recoverThread = true;
+      args.queryType = "thread_recovery";
+      args.tokenBudget = Math.max(args.tokenBudget, DEFAULT_RECOVERY_TOKEN_BUDGET);
+      if (argv[index + 1] && !argv[index + 1].startsWith("--")) {
+        args.query = argv[index + 1];
+        index += 1;
+      }
+    } else if (item === "--thread-id") {
+      args.threadId = cleanText(argv[index + 1] || "");
+      if (!args.query) args.query = args.threadId;
+      index += 1;
+    } else if (item === "--thread-title" || item === "--title") {
+      args.threadTitle = cleanText(argv[index + 1] || "");
+      if (!args.query) args.query = args.threadTitle;
+      index += 1;
+    } else if (item === "--parent-ceo-thread-id") {
+      args.parentCeoThreadId = cleanText(argv[index + 1] || "");
+      index += 1;
     } else if (item === "--writeback-dry-run") {
       args.writebackDryRun = true;
     } else if (item === "--evidence-json") {
@@ -207,7 +249,9 @@ function parseArgs(argv) {
   }
   if (args.queryType === "retrieve_context") args.runtimeContext = true;
   if (args.queryType === "retrieve_precedent") args.precedent = true;
+  if (args.queryType === "recover_thread" || args.queryType === "thread_recovery") args.recoverThread = true;
   if (args.precedent && args.includeKinds.length === 0) args.includeKinds = PRECEDENT_KINDS;
+  if (args.recoverThread && !args.query) args.query = [args.threadId, args.threadTitle, args.taskGoal].filter(Boolean).join(" ");
   return args;
 }
 
@@ -551,6 +595,153 @@ function buildRuntimePrecedentPacket(retrieval, options) {
   };
 }
 
+function normalizeRecoveryPointer(pointer = {}) {
+  const pointerPath = pointer.path ? String(pointer.path) : null;
+  return {
+    kind: compact(pointer.kind || "source", 80),
+    path: pointerPath,
+    title: pointer.title ? compact(pointer.title, 180) : null,
+    threadId: pointer.threadId ? compact(pointer.threadId, 120) : null,
+    hash: pointer.hash || pointer.sha256 || null,
+    sizeBytes: Number.isFinite(Number(pointer.sizeBytes)) ? Number(pointer.sizeBytes) : null,
+    updatedAt: pointer.updatedAt || null,
+    readByDefault: false,
+    rawSessionPolicy: RAW_SESSION_RE.test([pointer.kind, pointerPath, pointer.title].filter(Boolean).join(" "))
+      ? "explicit_user_recovery_only_no_default_body_read"
+      : "metadata_pointer_only",
+  };
+}
+
+function collectRecoveryProjectDocs(workspace) {
+  const docs = [];
+  for (const rel of RECOVERY_DOCS) {
+    const filePath = path.join(workspace, rel);
+    if (!fs.existsSync(filePath)) continue;
+    const stats = fs.statSync(filePath);
+    if (!stats.isFile()) continue;
+    docs.push(normalizeRecoveryPointer({
+      kind: "project_artifact",
+      path: filePath,
+      title: rel,
+      sizeBytes: stats.size,
+      updatedAt: stats.mtime.toISOString(),
+    }));
+    if (docs.length >= 12) break;
+  }
+  return docs;
+}
+
+function buildThreadRecoveryPrompt(packet) {
+  const docs = (packet.recommendedReadOrder || []).map((item) => item.path).filter(Boolean).slice(0, 8);
+  return [
+    "你接替一个旧 Codex/CEO 线程继续工作。先读取这个 ThreadRecoveryPacket，不要直接加载原始 session。",
+    packet.thread.threadId ? `目标 threadId: ${packet.thread.threadId}` : "",
+    packet.thread.title ? `线程标题/查询: ${packet.thread.title}` : "",
+    packet.thread.projectPath ? `项目路径: ${packet.thread.projectPath}` : "",
+    docs.length ? `优先读取项目文档: ${docs.join(" ; ")}` : "",
+    "raw session / vault session 只作为 cold evidence，默认不读正文；需要时按 sourceRefs 小范围回查。",
+    "接手后先检查当前文件状态和测试状态，再更新 WorkingMemory。",
+  ].filter(Boolean).join("\n");
+}
+
+function buildThreadRecoveryPacket(retrieval, options) {
+  const context = buildRuntimeContextPacket(retrieval, {
+    ...options,
+    queryType: "thread_recovery",
+    taskGoal: options.taskGoal || options.query || options.threadTitle || options.threadId,
+  });
+  const title = compact(options.threadTitle || options.query || context.project.summary || "", 180);
+  const projectDocPointers = collectRecoveryProjectDocs(retrieval.workspace);
+  const projectDocs = projectDocPointers.filter((doc) => !doc.sizeBytes || doc.sizeBytes <= MAX_RECOVERY_RECOMMENDED_DOC_BYTES);
+  const largeProjectDocs = projectDocPointers.filter((doc) => doc.sizeBytes && doc.sizeBytes > MAX_RECOVERY_RECOMMENDED_DOC_BYTES);
+  const sourceRefs = [
+    ...projectDocs,
+    ...largeProjectDocs.map((doc) => ({
+      ...doc,
+      kind: "large_project_artifact_pointer",
+      title: doc.title ? `${doc.title}（大文件，默认不读）` : "大文件，默认不读",
+    })),
+    ...collectPacketSourceRefs(context.items).map((ref) => normalizeRecoveryPointer({
+      kind: ref.kind || "zhixia_knowledge_file",
+      path: ref.path,
+      title: ref.title,
+      hash: ref.hash,
+      updatedAt: ref.updatedAt,
+    })),
+  ].filter(Boolean).slice(0, 24);
+  const packet = {
+    schemaVersion: "zhixia.thread_recovery_packet.v1",
+    provider: retrieval.provider,
+    mode: "thread_recovery_packet",
+    generatedAt: retrieval.generatedAt,
+    request: {
+      threadId: options.threadId || null,
+      title: title || null,
+      query: compact(options.query || title || options.threadId || "", 240),
+      projectPath: retrieval.workspace,
+      tokenBudget: Math.min(MAX_TOKEN_BUDGET, Math.max(MIN_TOKEN_BUDGET, options.tokenBudget || DEFAULT_RECOVERY_TOKEN_BUDGET)),
+    },
+    thread: {
+      threadId: options.threadId || null,
+      title: title || "",
+      projectPath: retrieval.workspace,
+      parentCeoThreadId: options.parentCeoThreadId || null,
+      confidence: context.items.length > 0 || projectDocs.length > 0 ? "source_backed" : "needs_review",
+    },
+    lineage: [],
+    vault: {
+      hasVault: false,
+      manifests: [],
+      policy: "helper_metadata_only_no_vault_walk",
+    },
+    context: {
+      packetId: context.cacheKey || null,
+      itemCount: context.items.length,
+      items: context.items.slice(0, 10),
+    },
+    recommendedReadOrder: projectDocs,
+    coldHistorySources: largeProjectDocs.map((doc) => ({
+      ...doc,
+      kind: "large_project_artifact_pointer",
+      title: doc.title ? `${doc.title}（大文件，默认不读）` : "大文件，默认不读",
+    })),
+    sourceRefs,
+    nextActions: [
+      "先读取 recommendedReadOrder 中的项目文档。",
+      "再用 retrieve_context(task_goal, thread_recovery) 获取当前热/温上下文。",
+      "只有 compact 恢复包不足时，才按 coldHistorySources/sourceRefs 小范围读取 raw/vault session。",
+      "接手线程启动后写入 WorkingMemoryRecord，结束时 writeback_evidence。",
+    ],
+    prompt: "",
+    performance: {
+      metadataFirst: true,
+      rawSessionBodyRead: false,
+      scansFullDatabase: false,
+      startsTimers: false,
+      boundedSourcePointers: true,
+      helperReadsOnlyWorkspaceKnowledge: true,
+    },
+    safety: {
+      mutatesRawSession: false,
+      archiveCompactDeleteMoveRestore: false,
+      installsOrExecutes: false,
+      rawSessionDefaultRead: false,
+    },
+    warnings: [
+      "metadata_first_recovery_packet",
+      "raw_session_body_not_read_by_default",
+      "helper_does_not_walk_thread_history_vault",
+      "no_archive_compact_delete_move_restore",
+      ...(largeProjectDocs.length > 0 ? ["large_recovery_docs_pointer_only"] : []),
+      ...(context.items.length === 0 ? ["no_runtime_context_items_matched"] : []),
+      ...retrieval.warnings,
+    ],
+    tokenEstimate: estimateTokens(`${title} ${context.items.map((item) => item.summary).join(" ")}`),
+  };
+  packet.prompt = buildThreadRecoveryPrompt(packet);
+  return packet;
+}
+
 function readEvidenceJson(rawValue, workspace) {
   if (!rawValue) return {};
   const trimmed = String(rawValue).trim();
@@ -782,7 +973,9 @@ function main() {
   const payload = collectResults(workspace, args);
   const lifecyclePayload = args.precedent
     ? buildRuntimePrecedentPacket(payload, args)
-    : args.runtimeContext
+    : args.recoverThread
+      ? buildThreadRecoveryPacket(payload, args)
+      : args.runtimeContext
       ? buildRuntimeContextPacket(payload, args)
       : payload;
   if (args.json) {

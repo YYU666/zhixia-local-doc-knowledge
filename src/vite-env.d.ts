@@ -291,6 +291,8 @@ export type CodexGuardianCompactReceipt = {
   changed_lines: number;
   parse_errors: number;
   restore_hint: string;
+  protected_skip?: boolean;
+  protected_skip_reason?: string;
   receipt_path?: string;
   receipt_sha256?: string;
   evidence_schema?: string;
@@ -404,6 +406,7 @@ export type CodexGuardianHistoryEnvelope = {
   query: string;
   mode: "read_only" | string;
   items: CodexGuardianHistoryItem[];
+  archiveQueueItems?: CodexGuardianHistoryItem[];
   warnings: string[];
   provenance: {
     guardianInventoryPath: string;
@@ -487,6 +490,12 @@ export type CodexThreadArchiveQueueSkipped = {
   reasons?: string[];
   reason: string;
   archiveCandidate?: CodexGuardianHistoryItem["archiveCandidate"];
+  hostArchiveState?: {
+    status: "host_archive_completed" | "host_archive_protected" | "host_thread_not_found" | "host_archive_persist_failed" | "host_archive_error" | string;
+    reason: string;
+    receiptPath?: string;
+    seenAt?: string;
+  };
 };
 
 export type CodexThreadArchiveQueue = {
@@ -768,13 +777,125 @@ export type AgentRetrieveCacheInfo = {
 };
 
 export type SourceRef = {
-  kind: AgentRetrieveKind | "document";
+  kind: AgentRetrieveKind | "document" | string;
   path: string | null;
   title: string | null;
   hash: string | null;
   updatedAt: string | null;
   artifactType?: string | null;
   sourceType?: string | null;
+};
+
+export type MemoryRouterTaskType =
+  | "project_resume"
+  | "task_dispatch"
+  | "review_gate"
+  | "bug_repair"
+  | "architecture"
+  | "release"
+  | "thread_recovery"
+  | "archive_candidate"
+  | "runtime_diagnosis"
+  | "tool_skill_lookup"
+  | "workflow_reuse"
+  | "handoff"
+  | "memory_writeback"
+  | "retrieve_precedent";
+
+export type MemoryLayerName = "hot" | "warm" | "cold";
+
+export type MemoryRouterPlan = {
+  schemaVersion: 1;
+  taskType: MemoryRouterTaskType | string;
+  queryType: string;
+  providerMode: string;
+  strategy: "hot_warm_cold_metadata_first" | string;
+  retrieval: {
+    query: string;
+    includeKinds: string[];
+    maxResults: number;
+    cacheTtlMs: number;
+  };
+  budgets: {
+    tokenBudget: number;
+    topK: number;
+    timeBudgetMs: number;
+    packetTokenTarget: number;
+  };
+  layers: Record<MemoryLayerName, {
+    enabled: boolean;
+    purpose: string;
+    maxItems: number;
+    rawSessionDefaultRead?: false;
+  }>;
+  rawSessionGate: {
+    defaultRead: false;
+    allowed: boolean;
+    reason: string;
+  };
+  backgroundPolicy: {
+    startsTimers: false;
+    scansFullDatabase: false;
+    scansVault: false;
+    runsAiSummary: false;
+    rebuildsGraph: false;
+  };
+};
+
+export type HotStateCacheSeed = {
+  schemaVersion: 1;
+  project: RuntimeContextPacket["project"];
+  activeItemIds: string[];
+  nextAction: string;
+  sourceRefs: SourceRef[];
+  expiresAt: string;
+};
+
+export type MemoryGraphNode = {
+  id: string;
+  kind: string;
+  label: string;
+  title?: string;
+  summary?: string;
+  projectPath?: string | null;
+  threadId?: string | null;
+  sourceTable?: string | null;
+  sourceId?: string | null;
+  freshness?: string;
+  status?: string;
+  tags?: string[];
+  sourceRefs?: SourceRef[];
+  activation?: number;
+  whyActivated?: string[];
+  memoryLayer?: MemoryLayerName | string;
+  tokenEstimate?: number;
+};
+
+export type MemoryGraphEdge = {
+  from: string;
+  to: string;
+  kind: string;
+  weight: number;
+};
+
+export type MemoryGraph = {
+  schemaVersion: 1;
+  mode: "bounded_association_graph" | "persisted_activation_graph" | string;
+  taskGoal?: string;
+  tokens?: string[];
+  activatedNodeIds?: string[];
+  nodes: MemoryGraphNode[];
+  edges: MemoryGraphEdge[];
+  packetLocalGraph?: MemoryGraph;
+  performance?: {
+    metadataOnly?: boolean;
+    rawSessionBodyRead?: false;
+    scansVault?: false;
+    boundedSeedNodes?: number;
+    boundedSeedEdges?: number;
+    maxNodes?: number;
+  };
+  warnings?: string[];
 };
 
 export type AgentRetrieveItem = {
@@ -833,6 +954,7 @@ export type RuntimeMemoryItem = {
   tokenEstimate: number;
   requiresHumanConfirmation: boolean;
   rawSessionPolicy: "not_allowed" | "explicit_only";
+  memoryLayer?: MemoryLayerName | string;
 };
 
 export type RuntimeContextPacket = {
@@ -860,6 +982,49 @@ export type RuntimeContextPacket = {
   } | null;
   items: RuntimeMemoryItem[];
   sourceRefs: SourceRef[];
+  hotState?: HotStateCacheSeed;
+  memoryGraph?: MemoryGraph;
+  activatedMemory?: {
+    nodeCount: number;
+    edgeCount: number;
+    topNodes: Array<{
+      id: string;
+      kind: string;
+      title: string;
+      activation: number;
+      whyActivated: string[];
+    }>;
+    sync?: {
+      nodes: number;
+      edges: number;
+      projectCount: number;
+      projectPath?: string | null;
+      limit: number;
+    } | null;
+  };
+  memoryLayers?: Record<MemoryLayerName, { count: number; tokenEstimate: number }>;
+  routerPlan?: MemoryRouterPlan;
+  performance?: {
+    metadataFirst: true;
+    noRawSessionBody: true;
+    noFullTextRead: true;
+    noVaultScan: true;
+    noBackgroundTimer: true;
+    boundedByRouterPlan?: true;
+    metadataRowReadsMayUseIndexes?: true;
+    cacheTtlMs: number;
+    timeBudgetMs: number;
+    retrievalDurationMs?: number;
+    timeBudgetExceeded?: boolean;
+    memoryGraphMetadataOnly?: true;
+    memoryGraphRawSessionBodyRead?: false;
+    memoryGraphVaultScan?: false;
+    memoryGraphSeedNodes?: number;
+    memoryGraphSeedEdges?: number;
+  };
+  partial?: boolean;
+  expiresAt?: string;
+  cacheKey?: string;
   warnings: string[];
   tokenEstimate: number;
   generatedAt: string;
@@ -982,6 +1147,93 @@ export type WorkingMemoryRecord = {
   nextAction: string;
   updatedAt: string;
   storagePath?: string;
+};
+
+export type ThreadRecoveryPacket = {
+  schemaVersion: "zhixia.thread_recovery_packet.v1";
+  generatedAt: string;
+  request: {
+    threadId?: string | null;
+    title?: string | null;
+    query: string;
+    projectPath?: string | null;
+    tokenBudget: number;
+  };
+  thread: {
+    threadId?: string | null;
+    title: string;
+    projectPath?: string | null;
+    confidence: "source_backed" | "needs_review" | string;
+  };
+  lineage: Array<{
+    id: string;
+    kind: "thread_lineage_index";
+    ceoThreadId: string;
+    title: string;
+    workspacePaths: string[];
+    relationships: Record<string, string[]>;
+    governance: {
+      rawSessionPolicy: "metadata_only_no_raw_body" | string;
+      mutationPolicy: "read_only_no_archive_compact_restore_delete" | string;
+      status: string;
+    };
+    sourceRefs: SourceRef[];
+  }>;
+  vault: {
+    hasVault: boolean;
+    manifests: Array<{
+      threadId: string;
+      title: string;
+      projectPath?: string | null;
+      vaultManifestPath?: string | null;
+      vaultSessionPath?: string | null;
+      memoryPointer?: string | null;
+      originalSha256?: string | null;
+      copiedSha256?: string | null;
+      completeHistoryStored: boolean;
+      rawSessionPolicy: "vault_pointer_only_no_default_body_read" | string;
+    }>;
+    policy: "pointer_only_no_default_raw_body_read" | string;
+  };
+  context: {
+    packetId?: string | null;
+    itemCount: number;
+    items: Array<{
+      id: string;
+      kind: AgentRetrieveKind | string;
+      title: string;
+      summary: string;
+      freshness: string;
+      memoryLayer?: string | null;
+      whyMatched: string[];
+      sourceRefs: SourceRef[];
+    }>;
+  };
+  recommendedReadOrder: SourceRef[];
+  coldHistorySources: Array<SourceRef & {
+    threadId?: string | null;
+    sizeBytes?: number | null;
+    readByDefault: false;
+    rawSessionPolicy: string;
+  }>;
+  sourceRefs: SourceRef[];
+  nextActions: string[];
+  prompt: string;
+  performance: {
+    metadataFirst: true;
+    rawSessionBodyRead: false;
+    scansFullDatabase: false;
+    startsTimers: false;
+    boundedSourcePointers: true;
+  };
+  safety: {
+    mutatesRawSession: false;
+    archiveCompactDeleteMoveRestore: false;
+    installsOrExecutes: false;
+    rawSessionDefaultRead: false;
+  };
+  warnings: string[];
+  tokenEstimate: number;
 };
 
 export type MemoryPromotionCandidate = {
@@ -1421,7 +1673,9 @@ declare global {
       ) => Promise<{ ok: true; candidate: SkillCandidate | null; overview: MemoryOverview }>;
       retrieveAgentContext: (options?: AgentRetrieveOptions) => Promise<AgentRetrieveResult>;
       retrieveMemoryRuntimeContext: (options?: AgentRetrieveOptions & { taskGoal?: string; threadId?: string | null; allowedKinds?: AgentRetrieveKind[] }) => Promise<RuntimeContextPacket>;
+      activateMemoryRuntimeGraph: (options?: AgentRetrieveOptions & { taskGoal?: string; threadId?: string | null; maxNodes?: number; seedLimit?: number }) => Promise<MemoryGraph & { sync?: { nodes: number; edges: number; projectCount: number; projectPath?: string | null; limit: number } }>;
       retrieveMemoryRuntimePrecedent: (options?: { taskType?: string; task_type?: string; query?: string; projectPath?: string | null; parentCeoThreadId?: string | null; tokenBudget?: number; maxResults?: number; allowedKinds?: AgentRetrieveKind[] }) => Promise<RuntimeContextPacket>;
+      recoverMemoryRuntimeThread: (options?: { threadId?: string | null; ceoThreadId?: string | null; title?: string; threadTitle?: string; query?: string; taskGoal?: string; projectPath?: string | null; tokenBudget?: number; maxResults?: number }) => Promise<ThreadRecoveryPacket>;
       writebackMemoryRuntimeEvidence: (packet: EvidenceWritebackPacket) => Promise<EvidenceWritebackReceipt>;
       upsertWorkingMemory: (record: Partial<WorkingMemoryRecord> & { taskId: string }) => Promise<WorkingMemoryRecord>;
       listWorkingMemory: (options?: { status?: WorkingMemoryRecord["status"]; projectPath?: string | null; limit?: number }) => Promise<{ records: WorkingMemoryRecord[] }>;

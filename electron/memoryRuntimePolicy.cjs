@@ -23,6 +23,42 @@ const DEFAULT_PRECEDENT_ALLOWED_KINDS = [
   "skill_candidate",
   "thread_lineage_index",
 ];
+const MEMORY_ROUTER_TASK_TYPES = [
+  "project_resume",
+  "task_dispatch",
+  "review_gate",
+  "bug_repair",
+  "architecture",
+  "release",
+  "thread_recovery",
+  "archive_candidate",
+  "runtime_diagnosis",
+  "tool_skill_lookup",
+  "workflow_reuse",
+  "handoff",
+  "memory_writeback",
+  "retrieve_precedent",
+];
+const MEMORY_ROUTER_KIND_PROFILES = {
+  project_resume: ["project_record", "project_resume_packet", "ceo_flow_record", "thread_lineage_index", "project_artifact", "knowledge_item", "experience_card"],
+  task_dispatch: ["project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "knowledge_item", "experience_card", "tool_skill_record", "skill_candidate"],
+  review_gate: ["project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "knowledge_item", "experience_card", "tool_skill_record"],
+  bug_repair: ["experience_card", "knowledge_item", "project_artifact", "tool_skill_record", "project_record"],
+  architecture: ["project_record", "project_resume_packet", "project_artifact", "knowledge_item", "experience_card", "tool_skill_record"],
+  release: ["project_record", "project_resume_packet", "project_artifact", "experience_card", "tool_skill_record", "knowledge_item"],
+  thread_recovery: ["thread_lineage_index", "ceo_flow_record", "project_record", "project_resume_packet", "experience_card", "knowledge_item", "project_artifact"],
+  archive_candidate: ["thread_lineage_index", "ceo_flow_record", "experience_card", "knowledge_item", "project_artifact", "project_record"],
+  runtime_diagnosis: ["experience_card", "tool_skill_record", "project_artifact", "knowledge_item", "project_record"],
+  tool_skill_lookup: ["tool_skill_record", "skill_candidate", "experience_card", "knowledge_item", "project_artifact"],
+  workflow_reuse: ["experience_card", "skill_candidate", "tool_skill_record", "knowledge_item", "project_artifact"],
+  handoff: ["project_record", "project_resume_packet", "ceo_flow_record", "thread_lineage_index", "experience_card", "knowledge_item"],
+  memory_writeback: ["project_record", "experience_card", "knowledge_item", "project_artifact", "thread_lineage_index"],
+  retrieve_precedent: DEFAULT_PRECEDENT_ALLOWED_KINDS,
+};
+const MEMORY_ROUTER_DEFAULT_TTL_MS = 90 * 1000;
+const MEMORY_ROUTER_DEFAULT_TIME_BUDGET_MS = 250;
+const THREAD_RECOVERY_PACKET_SCHEMA = "zhixia.thread_recovery_packet.v1";
+const MAX_RECOVERY_RECOMMENDED_DOC_BYTES = 768 * 1024;
 const WORKING_MEMORY_STATUSES = ["active", "waiting_review", "blocked", "accepted", "superseded"];
 const WRITEBACK_DECISIONS = ["accept", "revise", "block", "supersede"];
 const SAFE_MEMORY_TARGETS = ["knowledge_item", "experience_card", "memory_card", "project_update", "lineage_update", "flowskill_candidate"];
@@ -46,6 +82,12 @@ function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function clampNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(number, max));
+}
+
 function compactText(value, maxChars = 600) {
   const text = redactCompactText(value).replace(/\s+/g, " ").trim();
   if (text.length <= maxChars) return text;
@@ -54,6 +96,12 @@ function compactText(value, maxChars = 600) {
 
 function hashJson(value) {
   return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function addMillisecondsToIso(value, milliseconds) {
+  const parsed = Date.parse(value);
+  const base = Number.isFinite(parsed) ? parsed : Date.now();
+  return new Date(base + milliseconds).toISOString();
 }
 
 function safeIdPart(value) {
@@ -101,6 +149,122 @@ function normalizeSourceRefs(refs, limit = 12) {
   return result;
 }
 
+function inferMemoryTaskType(options = {}) {
+  const explicitQueryType = compactText(options.queryType || "", 80);
+  if (MEMORY_ROUTER_TASK_TYPES.includes(explicitQueryType)) return explicitQueryType;
+  const explicitTaskType = compactText(options.taskType || options.task_type || "", 80);
+  if (MEMORY_ROUTER_TASK_TYPES.includes(explicitTaskType)) return explicitTaskType;
+  const text = compactText([
+    options.taskGoal,
+    options.task_goal,
+    options.query,
+    options.taskType,
+    options.task_type,
+    options.queryType,
+  ].filter(Boolean).join(" "), 800).toLowerCase();
+  if (options.threadId || /thread_recovery|old[-_ ]?thread|recover|restore|slimmed|归档|瘦身|老线程|恢复|回忆/.test(text)) return "thread_recovery";
+  if (/archive_candidate|archive|cooling|减负|入库|归档规则/.test(text)) return "archive_candidate";
+  if (/review|audit|qa|验收|审计|复查/.test(text)) return "review_gate";
+  if (/bug|fix|regression|crash|卡顿|cpu|memory|内存|性能|退出/.test(text)) return /cpu|memory|内存|性能|卡顿|退出/.test(text) ? "runtime_diagnosis" : "bug_repair";
+  if (/release|package|installer|github|publish|开源|打包|安装/.test(text)) return "release";
+  if (/skill|tool|mcp|插件|工具|技能/.test(text)) return "tool_skill_lookup";
+  if (/architecture|design|prd|ui|ux|架构|设计|界面/.test(text)) return "architecture";
+  if (/handoff|callback|交接|回调/.test(text)) return "handoff";
+  if (/writeback|memory|knowledge|记忆|知识/.test(text)) return "memory_writeback";
+  return "task_dispatch";
+}
+
+function runtimeKindsFromProfile(profileKinds, options = {}) {
+  const requestedSource = safeArray(options.allowedKinds).length > 0 ? options.allowedKinds : options.includeKinds;
+  const hasExplicitRequest = safeArray(requestedSource).length > 0;
+  const requested = safeArray(requestedSource)
+    .filter((kind) => DEFAULT_RUNTIME_ALLOWED_KINDS.includes(kind))
+    .filter((kind, index, array) => array.indexOf(kind) === index);
+  const profile = safeArray(profileKinds).filter((kind) => DEFAULT_RUNTIME_ALLOWED_KINDS.includes(kind));
+  const base = profile.length > 0 ? profile : DEFAULT_RUNTIME_ALLOWED_KINDS;
+  const limited = hasExplicitRequest
+    ? base.filter((kind) => requested.includes(kind))
+    : base;
+  return limited.filter((kind, index, array) => array.indexOf(kind) === index);
+}
+
+function buildMemoryRouterPlan(options = {}) {
+  const taskType = inferMemoryTaskType(options);
+  const queryType = taskType === "retrieve_precedent" ? "retrieve_precedent" : taskType;
+  const topKDefault = ["project_resume", "thread_recovery"].includes(taskType) ? 10 : 8;
+  const topK = clampNumber(options.topK || options.maxResults, topKDefault, 1, 12);
+  const tokenBudget = clampNumber(options.tokenBudget, taskType === "project_resume" ? 1500 : 1200, 400, 3000);
+  const timeBudgetMs = clampNumber(options.timeBudgetMs, MEMORY_ROUTER_DEFAULT_TIME_BUDGET_MS, 50, 1200);
+  const allowColdLayer = options.allowColdLayer === true || ["thread_recovery", "archive_candidate"].includes(taskType);
+  const hardRawGate = options.rawSessionHardGate === true && options.explicitRawSessionRequest === true && options.sourceRange;
+  const rawSessionDefaultRead = false;
+  const profileKinds = MEMORY_ROUTER_KIND_PROFILES[taskType] || MEMORY_ROUTER_KIND_PROFILES.task_dispatch;
+  const runtimeAllowedKinds = runtimeKindsFromProfile(profileKinds, options);
+  const requestedKinds = safeArray(options.allowedKinds).length > 0 ? options.allowedKinds : options.includeKinds;
+  const hasExplicitKindRequest = safeArray(requestedKinds).length > 0;
+  const routerWarnings = [];
+  if (hasExplicitKindRequest && runtimeAllowedKinds.length === 0) routerWarnings.push("no_allowed_runtime_kinds_after_filter");
+  return {
+    schemaVersion: MEMORY_RUNTIME_SCHEMA_VERSION,
+    taskType,
+    queryType,
+    providerMode: compactText(options.providerMode || options.provider || "hybrid", 80),
+    strategy: "hot_warm_cold_metadata_first",
+    retrieval: {
+      query: compactText(options.taskGoal || options.task_goal || options.query || options.taskType || options.task_type || "", 260),
+      includeKinds: runtimeAllowedKinds,
+      maxResults: topK,
+      cacheTtlMs: MEMORY_ROUTER_DEFAULT_TTL_MS,
+    },
+    budgets: {
+      tokenBudget,
+      topK,
+      timeBudgetMs,
+      packetTokenTarget: Math.min(tokenBudget, taskType === "project_resume" ? 1500 : 1200),
+    },
+    layers: {
+      hot: {
+        enabled: true,
+        purpose: "current_project_state_and_open_work",
+        maxItems: Math.min(topK, 4),
+      },
+      warm: {
+        enabled: true,
+        purpose: "project_summaries_decisions_experience_and_tools",
+        maxItems: Math.min(topK, 8),
+      },
+      cold: {
+        enabled: allowColdLayer,
+        purpose: "history_vault_or_guardian_pointers_only",
+        maxItems: allowColdLayer ? Math.min(topK, 4) : 0,
+        rawSessionDefaultRead,
+      },
+    },
+    rawSessionGate: {
+      defaultRead: false,
+      allowed: Boolean(hardRawGate),
+      reason: hardRawGate
+        ? "explicit_user_recovery_gate_present_pointer_only_until_separately_read"
+        : "raw_session_body_requires_explicit_recovery_gate",
+    },
+    warnings: routerWarnings,
+    backgroundPolicy: {
+      startsTimers: false,
+      scansFullDatabase: false,
+      scansVault: false,
+      runsAiSummary: false,
+      rebuildsGraph: false,
+    },
+  };
+}
+
+function memoryLayerForRuntimeItem(item = {}, routerPlan = {}) {
+  if (["project_record", "project_resume_packet", "ceo_flow_record"].includes(item.kind)) return "hot";
+  if (item.kind === "thread_lineage_index") return routerPlan.layers?.cold?.enabled ? "cold" : "warm";
+  if (item.freshness === "fresh" && ["active", "ready", "curated"].includes(item.status)) return "hot";
+  return "warm";
+}
+
 function normalizeFlowSkillReusablePatterns(compact = {}) {
   return [
     ...safeArray(compact.evidence?.reusablePattern),
@@ -131,6 +295,7 @@ function normalizeRuntimeItem(item = {}) {
   const kind = runtimeKindFromAgentKind(item.kind);
   if (!kind) return null;
   const sourceRefs = normalizeSourceRefs(item.sourceRefs, 8);
+  if (sourceRefsContainRawSession(sourceRefs) || sourceRefsContainSecrets(sourceRefs)) return null;
   const summary = compactText(item.summary || item.excerpt || item.body || "", 520);
   const title = compactText(item.title || item.id || kind, 180);
   return {
@@ -145,6 +310,17 @@ function normalizeRuntimeItem(item = {}) {
     tokenEstimate: Math.max(40, Math.ceil(Number(item.tokenEstimate || estimateTokensFromText(title, summary)))),
     requiresHumanConfirmation: item.requiresHumanConfirmation === true || ["candidate", "review", "stale", "blocked"].includes(item.status),
     rawSessionPolicy: item.rawSessionPolicy && /explicit/i.test(String(item.rawSessionPolicy)) ? "explicit_only" : "not_allowed",
+  };
+}
+
+function normalizeRuntimeItemForRouter(item = {}, routerPlan = {}) {
+  const normalized = normalizeRuntimeItem(item);
+  if (!normalized) return null;
+  const layer = memoryLayerForRuntimeItem(normalized, routerPlan);
+  if (layer === "cold" && routerPlan.layers?.cold?.enabled !== true) return null;
+  return {
+    ...normalized,
+    memoryLayer: layer,
   };
 }
 
@@ -175,55 +351,344 @@ function normalizeAllowedKinds(options = {}, fallback = DEFAULT_RUNTIME_ALLOWED_
 }
 
 function buildRuntimeContextPacket(retrieveResult = {}, options = {}) {
-  const allowedKinds = normalizeAllowedKinds(options);
+  const routerPlan = options.routerPlan && typeof options.routerPlan === "object"
+    ? options.routerPlan
+    : buildMemoryRouterPlan(options);
+  const routerPlanHasKinds = Array.isArray(routerPlan.retrieval?.includeKinds);
+  const allowedKinds = routerPlanHasKinds
+    ? safeArray(routerPlan.retrieval?.includeKinds)
+      .filter((kind) => DEFAULT_RUNTIME_ALLOWED_KINDS.includes(kind))
+      .filter((kind, index, array) => array.indexOf(kind) === index)
+    : runtimeKindsFromProfile(DEFAULT_RUNTIME_ALLOWED_KINDS, options);
   const rawItems = safeArray(retrieveResult.items);
-  const items = rawItems.map(normalizeRuntimeItem).filter(Boolean);
+  const items = rawItems
+    .map((item) => normalizeRuntimeItemForRouter(item, routerPlan))
+    .filter((item) => item && allowedKinds.includes(item.kind))
+    .slice(0, routerPlan.budgets?.topK || 8);
   const tokenEstimate = Math.min(
     Math.max(0, Number(retrieveResult.tokenEstimate || 0)) || items.reduce((sum, item) => sum + item.tokenEstimate, 0),
-    Math.max(200, Number(options.tokenBudget || retrieveResult.tokenBudget || 1200)),
+    Math.max(200, Number(routerPlan.budgets?.tokenBudget || options.tokenBudget || retrieveResult.tokenBudget || 1200)),
   );
+  const generatedAt = retrieveResult.generatedAt || new Date().toISOString();
+  const expiresAt = addMillisecondsToIso(generatedAt, routerPlan.retrieval?.cacheTtlMs || MEMORY_ROUTER_DEFAULT_TTL_MS);
+  const retrievalDurationMs = Math.max(0, Number(retrieveResult.durationMs || options.retrievalDurationMs || 0));
+  const timeBudgetMs = routerPlan.budgets?.timeBudgetMs || MEMORY_ROUTER_DEFAULT_TIME_BUDGET_MS;
+  const timeBudgetExceeded = retrievalDurationMs > timeBudgetMs;
+  const routerWarnings = safeArray(routerPlan.warnings).map((warning) => compactText(warning, 200)).filter(Boolean);
   return {
     schemaVersion: MEMORY_RUNTIME_SCHEMA_VERSION,
     request: {
       taskGoal: compactText(options.taskGoal || options.query || retrieveResult.query || "", 260),
-      queryType: compactText(options.queryType || retrieveResult.queryType || "task_dispatch", 80),
+      queryType: compactText(routerPlan.queryType || options.queryType || retrieveResult.queryType || "task_dispatch", 80),
       projectPath: options.projectPath || retrieveResult.projectPath || null,
       threadId: options.threadId || null,
       parentCeoThreadId: options.parentCeoThreadId || retrieveResult.parentCeoThreadId || null,
-      tokenBudget: Math.max(200, Math.min(Number(options.tokenBudget || retrieveResult.tokenBudget || 1200), 4000)),
+      tokenBudget: Math.max(200, Math.min(Number(routerPlan.budgets?.tokenBudget || options.tokenBudget || retrieveResult.tokenBudget || 1200), 4000)),
       allowedKinds,
     },
     project: projectFromRuntimeItems(items, options),
     items,
     sourceRefs: collectPacketSourceRefs(items),
+    hotState: buildHotStateCacheSeed(items, options),
+    memoryGraph: buildMemoryGraph(items),
+    memoryLayers: summarizeMemoryLayers(items),
+    routerPlan,
+    performance: {
+      metadataFirst: true,
+      noRawSessionBody: true,
+      noFullTextRead: true,
+      noVaultScan: true,
+      noBackgroundTimer: true,
+      boundedByRouterPlan: true,
+      metadataRowReadsMayUseIndexes: true,
+      cacheTtlMs: routerPlan.retrieval?.cacheTtlMs || MEMORY_ROUTER_DEFAULT_TTL_MS,
+      timeBudgetMs,
+      retrievalDurationMs,
+      timeBudgetExceeded,
+    },
+    partial: items.length < rawItems.length || timeBudgetExceeded || allowedKinds.length === 0,
+    expiresAt,
+    cacheKey: hashJson({
+      taskGoal: options.taskGoal || options.query || retrieveResult.query || "",
+      queryType: routerPlan.queryType,
+      projectPath: options.projectPath || retrieveResult.projectPath || null,
+      threadId: options.threadId || null,
+      parentCeoThreadId: options.parentCeoThreadId || retrieveResult.parentCeoThreadId || null,
+      allowedKinds,
+      topK: routerPlan.budgets?.topK,
+      tokenBudget: routerPlan.budgets?.tokenBudget,
+    }).slice(0, 24),
     warnings: [
       "metadata_first_no_raw_session_body",
       "no_archive_compact_delete_move_restore",
+      "memory_router_no_background_scan",
+      ...routerWarnings,
+      ...(timeBudgetExceeded ? ["memory_router_time_budget_exceeded_partial"] : []),
       ...safeArray(retrieveResult.warnings).map((warning) => compactText(warning, 200)).filter(Boolean),
     ],
     tokenEstimate,
-    generatedAt: retrieveResult.generatedAt || new Date().toISOString(),
+    generatedAt,
+  };
+}
+
+function summarizeMemoryLayers(items = []) {
+  const summary = {
+    hot: { count: 0, tokenEstimate: 0 },
+    warm: { count: 0, tokenEstimate: 0 },
+    cold: { count: 0, tokenEstimate: 0 },
+  };
+  for (const item of safeArray(items)) {
+    const layer = summary[item.memoryLayer] ? item.memoryLayer : "warm";
+    summary[layer].count += 1;
+    summary[layer].tokenEstimate += Number(item.tokenEstimate || 0);
+  }
+  return summary;
+}
+
+function buildHotStateCacheSeed(items = [], options = {}) {
+  const hotItems = safeArray(items).filter((item) => item.memoryLayer === "hot");
+  const project = projectFromRuntimeItems(hotItems.length > 0 ? hotItems : items, options);
+  return {
+    schemaVersion: MEMORY_RUNTIME_SCHEMA_VERSION,
+    project,
+    activeItemIds: hotItems.map((item) => item.id).slice(0, 6),
+    nextAction: project?.nextAction || hotItems.find((item) => item.whyMatched.length > 0)?.whyMatched?.[0] || "",
+    sourceRefs: collectPacketSourceRefs(hotItems, []).slice(0, 8),
+    expiresAt: new Date(Date.now() + MEMORY_ROUTER_DEFAULT_TTL_MS).toISOString(),
+  };
+}
+
+function buildMemoryGraph(items = []) {
+  const nodes = [];
+  const edges = [];
+  const seen = new Set();
+  function addNode(node) {
+    if (!node.id || seen.has(node.id) || nodes.length >= 24) return;
+    seen.add(node.id);
+    nodes.push(node);
+  }
+  for (const item of safeArray(items).slice(0, 12)) {
+    const itemNodeId = `item:${safeIdPart(item.id)}`;
+    addNode({ id: itemNodeId, kind: item.kind, label: item.title, memoryLayer: item.memoryLayer, tokenEstimate: item.tokenEstimate });
+    for (const ref of safeArray(item.sourceRefs).slice(0, 3)) {
+      const refNodeId = `source:${safeIdPart(ref.hash || ref.path || ref.title || ref.kind)}`;
+      addNode({ id: refNodeId, kind: ref.kind || "source", label: ref.title || ref.path || ref.kind || "source", memoryLayer: item.memoryLayer });
+      if (edges.length < 32) {
+        edges.push({ from: itemNodeId, to: refNodeId, kind: "source_ref", weight: 1 });
+      }
+    }
+  }
+  return {
+    schemaVersion: MEMORY_RUNTIME_SCHEMA_VERSION,
+    mode: "bounded_association_graph",
+    nodes,
+    edges,
+  };
+}
+
+function tokenizeMemoryGraphQuery(value) {
+  const text = compactText(value || "", 1000).toLowerCase();
+  const ascii = text.match(/[a-z0-9][a-z0-9._-]{1,}/g) || [];
+  const cjk = text.match(/[\u4e00-\u9fff]{2,12}/g) || [];
+  return [...ascii, ...cjk]
+    .map((token) => compactText(token, 40))
+    .filter(Boolean)
+    .filter((token, index, array) => array.indexOf(token) === index)
+    .slice(0, 20);
+}
+
+function normalizeMemoryGraphSeedNode(row = {}) {
+  const id = compactText(row.id || row.nodeId || `${row.kind || "memory"}:${row.sourceId || row.title || "unknown"}`, 220);
+  const kind = compactText(row.kind || row.nodeKind || "memory", 80);
+  const title = compactText(row.title || row.label || id, 180);
+  const summary = compactText(row.summary || row.excerpt || row.body || "", 520);
+  const tags = safeArray(row.tags || row.tagList).map((tag) => compactText(tag, 80)).filter(Boolean).slice(0, 16);
+  const sourceRefs = normalizeSourceRefs(row.sourceRefs, 8);
+  return {
+    id,
+    kind,
+    label: title,
+    title,
+    summary,
+    projectPath: row.projectPath || null,
+    threadId: row.threadId || row.ceoThreadId || null,
+    sourceId: row.sourceId || row.id || null,
+    sourceTable: row.sourceTable || row.sourceKind || null,
+    memoryLayer: compactText(row.memoryLayer || "warm", 40),
+    freshness: normalizeFreshness(row.freshness),
+    status: normalizeRuntimeStatus(row.status),
+    tags,
+    sourceRefs,
+    updatedAt: row.updatedAt || row.lastActivityAt || null,
+    tokenEstimate: Math.max(24, Math.ceil(Number(row.tokenEstimate || estimateTokensFromText(title, summary, tags.join(" "))))),
+  };
+}
+
+function normalizeMemoryGraphSeedEdge(row = {}) {
+  const from = compactText(row.from || row.fromId || row.sourceNodeId || "", 220);
+  const to = compactText(row.to || row.toId || row.targetNodeId || "", 220);
+  if (!from || !to || from === to) return null;
+  return {
+    from,
+    to,
+    kind: compactText(row.kind || row.edgeKind || "related", 80),
+    weight: Math.max(0.05, Math.min(Number(row.weight || 1), 10)),
+    reason: compactText(row.reason || "", 180),
+  };
+}
+
+function scoreMemoryGraphNode(node, tokens, options = {}) {
+  const text = [node.title, node.summary, node.projectPath, node.threadId, safeArray(node.tags).join(" ")].join(" ").toLowerCase();
+  let score = 0;
+  const why = [];
+  for (const token of tokens) {
+    if (!token) continue;
+    if (String(node.title || "").toLowerCase().includes(token)) {
+      score += 16;
+      why.push(`title:${token}`);
+    }
+    if (String(node.projectPath || "").toLowerCase().includes(token)) {
+      score += 12;
+      why.push(`project:${token}`);
+    }
+    if (String(node.threadId || "").toLowerCase().includes(token)) {
+      score += 14;
+      why.push(`thread:${token}`);
+    }
+    if (safeArray(node.tags).join(" ").toLowerCase().includes(token)) {
+      score += 8;
+      why.push(`tag:${token}`);
+    }
+    if (text.includes(token)) score += 5;
+  }
+  if (options.projectPath && node.projectPath === options.projectPath) {
+    score += 18;
+    why.push("projectPath:exact");
+  }
+  if (options.threadId && node.threadId === options.threadId) {
+    score += 240;
+    why.push("threadId:exact");
+  }
+  if (node.kind === "thread_lineage_index") score += 6;
+  if (node.kind === "experience_card") score += 4;
+  if (node.freshness === "fresh") score += 4;
+  if (node.status === "ready" || node.status === "accepted" || node.status === "curated") score += 3;
+  const updatedMs = Date.parse(String(node.updatedAt || ""));
+  if (Number.isFinite(updatedMs)) {
+    const ageDays = Math.max(0, (Date.now() - updatedMs) / 86_400_000);
+    score += Math.max(0, 8 - Math.min(8, ageDays / 4));
+  }
+  return { score, why: why.slice(0, 8) };
+}
+
+function buildActivatedMemoryGraph(seed = {}, options = {}) {
+  const taskGoal = options.taskGoal || options.query || "";
+  const tokens = tokenizeMemoryGraphQuery([taskGoal, options.projectPath || "", options.threadId || ""].filter(Boolean).join(" "));
+  const maxNodes = Math.max(4, Math.min(Number(options.maxNodes || options.limit || 32), 80));
+  const rawNodes = safeArray(seed.nodes).map(normalizeMemoryGraphSeedNode).filter((node) => node.id);
+  const nodeById = new Map(rawNodes.map((node) => [node.id, node]));
+  const rawEdges = safeArray(seed.edges).map(normalizeMemoryGraphSeedEdge).filter(Boolean);
+  const edgeByNode = new Map();
+  for (const edge of rawEdges) {
+    if (!nodeById.has(edge.from) || !nodeById.has(edge.to)) continue;
+    if (!edgeByNode.has(edge.from)) edgeByNode.set(edge.from, []);
+    if (!edgeByNode.has(edge.to)) edgeByNode.set(edge.to, []);
+    edgeByNode.get(edge.from).push({ ...edge, neighbor: edge.to });
+    edgeByNode.get(edge.to).push({ ...edge, neighbor: edge.from });
+  }
+  const scored = rawNodes
+    .map((node) => {
+      const direct = scoreMemoryGraphNode(node, tokens, options);
+      return { ...node, activation: direct.score, whyActivated: direct.why };
+    })
+    .filter((node) => node.activation > 0)
+    .sort((a, b) => b.activation - a.activation || String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+
+  const activatedIds = new Set(scored.slice(0, Math.max(1, Math.ceil(maxNodes / 2))).map((node) => node.id));
+  for (const node of scored.slice(0, Math.max(1, Math.ceil(maxNodes / 3)))) {
+    for (const edge of safeArray(edgeByNode.get(node.id)).sort((a, b) => b.weight - a.weight).slice(0, 4)) {
+      if (activatedIds.size >= maxNodes) break;
+      activatedIds.add(edge.neighbor);
+    }
+  }
+  const nodes = Array.from(activatedIds)
+    .map((id) => {
+      const base = nodeById.get(id);
+      const scoredNode = scored.find((node) => node.id === id);
+      if (scoredNode) return scoredNode;
+      return { ...base, activation: Math.max(1, Math.min(8, safeArray(edgeByNode.get(id)).reduce((sum, edge) => sum + edge.weight, 0))), whyActivated: ["neighbor:activated"] };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.activation - a.activation)
+    .slice(0, maxNodes);
+  const activeIdSet = new Set(nodes.map((node) => node.id));
+  const edges = rawEdges
+    .filter((edge) => activeIdSet.has(edge.from) && activeIdSet.has(edge.to))
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, Math.max(8, maxNodes * 2));
+  return {
+    schemaVersion: MEMORY_RUNTIME_SCHEMA_VERSION,
+    mode: "persisted_activation_graph",
+    taskGoal: compactText(taskGoal, 260),
+    tokens,
+    activatedNodeIds: nodes.map((node) => node.id),
+    nodes,
+    edges,
+    performance: {
+      metadataOnly: true,
+      rawSessionBodyRead: false,
+      scansVault: false,
+      boundedSeedNodes: rawNodes.length,
+      boundedSeedEdges: rawEdges.length,
+      maxNodes,
+    },
+    warnings: rawNodes.length === 0 ? ["memory_graph_seed_empty"] : [],
+  };
+}
+
+function mergeMemoryGraphs(packetGraph, activatedGraph) {
+  if (!activatedGraph || safeArray(activatedGraph.nodes).length === 0) return packetGraph;
+  if (!packetGraph || !Array.isArray(packetGraph.nodes)) return activatedGraph;
+  return {
+    ...activatedGraph,
+    packetLocalGraph: packetGraph,
+    nodes: [...safeArray(activatedGraph.nodes), ...safeArray(packetGraph.nodes)]
+      .filter((node, index, array) => array.findIndex((candidate) => candidate.id === node.id) === index)
+      .slice(0, 80),
+    edges: [...safeArray(activatedGraph.edges), ...safeArray(packetGraph.edges)]
+      .filter((edge, index, array) => array.findIndex((candidate) => candidate.from === edge.from && candidate.to === edge.to && candidate.kind === edge.kind) === index)
+      .slice(0, 160),
   };
 }
 
 function buildRuntimePrecedentRequest(options = {}) {
+  const routerPlan = buildMemoryRouterPlan({
+    ...options,
+    queryType: "retrieve_precedent",
+    taskGoal: options.taskType || options.task_type || options.query,
+    allowedKinds: options.allowedKinds || options.includeKinds || DEFAULT_PRECEDENT_ALLOWED_KINDS,
+  });
   return {
     query: compactText(options.taskType || options.task_type || options.query || "", 240),
     queryType: "retrieve_precedent",
     projectPath: options.projectPath || null,
     parentCeoThreadId: options.parentCeoThreadId || null,
-    tokenBudget: Math.max(200, Math.min(Number(options.tokenBudget || 1200), 4000)),
-    maxResults: Math.max(1, Math.min(Number(options.maxResults || 8), 12)),
-    includeKinds: normalizeAllowedKinds(options, DEFAULT_PRECEDENT_ALLOWED_KINDS),
+    tokenBudget: routerPlan.budgets.tokenBudget,
+    maxResults: routerPlan.budgets.topK,
+    includeKinds: routerPlan.retrieval.includeKinds.filter((kind) => DEFAULT_PRECEDENT_ALLOWED_KINDS.includes(kind)),
+    routerPlan,
   };
 }
 
 function buildRuntimePrecedentPacket(retrieveResult = {}, options = {}) {
+  const explicitPrecedentKinds = Array.isArray(options.routerPlan?.retrieval?.includeKinds)
+    ? safeArray(options.routerPlan.retrieval.includeKinds).filter((kind) => DEFAULT_PRECEDENT_ALLOWED_KINDS.includes(kind))
+    : normalizeAllowedKinds(options, DEFAULT_PRECEDENT_ALLOWED_KINDS);
   const contextPacket = buildRuntimeContextPacket(retrieveResult, {
     ...options,
     taskGoal: options.taskType || options.task_type || options.query,
     queryType: "retrieve_precedent",
-    allowedKinds: normalizeAllowedKinds(options, DEFAULT_PRECEDENT_ALLOWED_KINDS),
+    allowedKinds: explicitPrecedentKinds,
   });
   return {
     ...contextPacket,
@@ -236,8 +701,214 @@ function buildRuntimePrecedentPacket(retrieveResult = {}, options = {}) {
       rawSessionDefaultRead: false,
       giantMarkdownDefaultRead: false,
       allowedKinds: contextPacket.request.allowedKinds,
+      memoryRouter: contextPacket.routerPlan?.strategy || "hot_warm_cold_metadata_first",
     },
   };
+}
+
+function normalizeRecoveryPointer(pointer = {}) {
+  if (!pointer || typeof pointer !== "object") return null;
+  const kind = compactText(pointer.kind || pointer.sourceType || "source", 80);
+  const pointerPath = pointer.path ? String(pointer.path) : null;
+  return {
+    kind,
+    path: pointerPath,
+    title: pointer.title ? compactText(pointer.title, 180) : null,
+    threadId: pointer.threadId ? compactText(pointer.threadId, 120) : null,
+    sha256: pointer.sha256 || pointer.hash || null,
+    sizeBytes: Number.isFinite(Number(pointer.sizeBytes || pointer.size_bytes)) ? Number(pointer.sizeBytes || pointer.size_bytes) : null,
+    updatedAt: pointer.updatedAt || pointer.lastWriteTime || pointer.last_write_time || null,
+    readByDefault: false,
+    rawSessionPolicy: RAW_SESSION_KIND_RE.test(kind) || RAW_SESSION_PATH_RE.test(String(pointerPath || ""))
+      ? "explicit_user_recovery_only_no_default_body_read"
+      : "metadata_pointer_only",
+  };
+}
+
+function normalizeRecoveryPointers(pointers, limit = 16) {
+  const result = [];
+  const seen = new Set();
+  for (const pointer of safeArray(pointers)) {
+    const normalized = normalizeRecoveryPointer(pointer);
+    if (!normalized) continue;
+    const key = `${normalized.kind}|${normalized.path || ""}|${normalized.threadId || ""}|${normalized.sha256 || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+    if (result.length >= limit) break;
+  }
+  return result;
+}
+
+function normalizeRecoveryLineageRecord(record = {}) {
+  if (!record || typeof record !== "object") return null;
+  return {
+    id: compactText(record.id || record.ceoThreadId || "thread-lineage", 160),
+    kind: "thread_lineage_index",
+    ceoThreadId: compactText(record.ceoThreadId || "", 120),
+    title: compactText(record.title || "ThreadLineageIndex", 180),
+    scope: compactText(record.scope || "project", 80),
+    projectIds: safeArray(record.projectIds).map((item) => compactText(item, 120)).filter(Boolean).slice(0, 12),
+    workspacePaths: safeArray(record.workspacePaths).map((item) => compactText(item, 260)).filter(Boolean).slice(0, 12),
+    relationships: {
+      childThreadIds: safeArray(record.relationships?.childThreadIds || record.childThreadIds).map((item) => compactText(item, 120)).filter(Boolean).slice(0, 30),
+      workerThreadIds: safeArray(record.relationships?.workerThreadIds || record.workerThreadIds).map((item) => compactText(item, 120)).filter(Boolean).slice(0, 30),
+      reviewerThreadIds: safeArray(record.relationships?.reviewerThreadIds || record.reviewerThreadIds).map((item) => compactText(item, 120)).filter(Boolean).slice(0, 30),
+      memoryThreadIds: safeArray(record.relationships?.memoryThreadIds || record.memoryThreadIds).map((item) => compactText(item, 120)).filter(Boolean).slice(0, 20),
+      handoffIds: safeArray(record.relationships?.handoffIds || record.handoffIds).map((item) => compactText(item, 140)).filter(Boolean).slice(0, 20),
+      vaultPointers: safeArray(record.relationships?.vaultPointers || record.vaultPointers).map((item) => compactText(item, 180)).filter(Boolean).slice(0, 20),
+    },
+    relationshipCounts: record.relationshipCounts || {},
+    governance: {
+      status: compactText(record.governance?.status || "metadata_only", 120),
+      rawSessionPolicy: "metadata_only_no_raw_body",
+      mutationPolicy: "read_only_no_archive_compact_restore_delete",
+    },
+    archiveState: compactText(record.archiveState || "unknown", 80),
+    lastActivityAt: record.lastActivityAt || null,
+    lastSummary: compactText(record.lastSummary || record.summary || "", 520),
+    nextAction: compactText(record.nextAction || "", 360),
+    sourceRefs: normalizeSourceRefs(record.sourceRefs, 8),
+  };
+}
+
+function buildThreadRecoveryPrompt(packet) {
+  const docs = safeArray(packet.recommendedReadOrder).map((item) => item.path).filter(Boolean).slice(0, 8);
+  return [
+    "你接替一个旧 Codex/CEO 线程继续工作。先读取这个 ThreadRecoveryPacket，不要直接加载原始 400MB session。",
+    packet.thread.threadId ? `目标 threadId: ${packet.thread.threadId}` : "",
+    packet.thread.title ? `线程标题/查询: ${packet.thread.title}` : "",
+    packet.thread.projectPath ? `项目路径: ${packet.thread.projectPath}` : "",
+    docs.length ? `优先读取项目文档: ${docs.join(" ; ")}` : "",
+    "raw session / vault session 只作为 cold evidence，默认不读正文；需要时按 sourceRefs 小范围回查。",
+    "接手后先检查当前文件状态和测试状态，再更新 WorkingMemory。",
+  ].filter(Boolean).join("\n");
+}
+
+function buildThreadRecoveryPacket(input = {}) {
+  const threadId = compactText(input.threadId || input.thread?.threadId || "", 120);
+  const title = compactText(input.title || input.threadTitle || input.query || input.thread?.title || "", 180);
+  const projectPath = input.projectPath || input.thread?.projectPath || null;
+  const generatedAt = input.generatedAt || new Date().toISOString();
+  const lineage = safeArray(input.lineageRecords)
+    .map(normalizeRecoveryLineageRecord)
+    .filter(Boolean)
+    .slice(0, 12);
+  const vaultManifests = safeArray(input.vaultManifests).map((manifest) => ({
+    threadId: compactText(manifest.threadId || threadId, 120),
+    title: compactText(manifest.title || title, 180),
+    projectPath: manifest.projectPath || null,
+    vaultManifestPath: manifest.vaultManifestPath || manifest.path || null,
+    vaultSessionPath: manifest.vaultSessionPath || null,
+    memoryPointer: manifest.memoryPointer || (manifest.threadId || threadId ? `codex-history:${manifest.threadId || threadId}` : null),
+    originalSha256: manifest.originalSha256 || manifest.vaultOriginalSha256 || null,
+    copiedSha256: manifest.copiedSha256 || manifest.vaultCopiedSha256 || null,
+    sizeBytes: Number.isFinite(Number(manifest.sizeBytes || manifest.size_bytes)) ? Number(manifest.sizeBytes || manifest.size_bytes) : null,
+    createdAt: manifest.createdAt || null,
+    updatedAt: manifest.updatedAt || manifest.lastWriteTime || null,
+    completeHistoryStored: manifest.completeHistoryStored !== false,
+    rawSessionPolicy: "vault_pointer_only_no_default_body_read",
+  })).slice(0, 12);
+  const contextItems = safeArray(input.contextPacket?.items || input.contextItems).slice(0, 12);
+  const projectDocPointers = normalizeRecoveryPointers(safeArray(input.projectDocs).map((doc) => ({
+    kind: "project_artifact",
+    path: doc.path || doc.filePath,
+    title: doc.title || doc.name,
+    updatedAt: doc.updatedAt || doc.lastWriteTime,
+    sizeBytes: doc.sizeBytes,
+  })), 16);
+  const projectDocs = projectDocPointers.filter((doc) => !doc.sizeBytes || doc.sizeBytes <= MAX_RECOVERY_RECOMMENDED_DOC_BYTES);
+  const largeProjectDocs = projectDocPointers.filter((doc) => doc.sizeBytes && doc.sizeBytes > MAX_RECOVERY_RECOMMENDED_DOC_BYTES);
+  const coldHistorySources = normalizeRecoveryPointers([
+    ...largeProjectDocs.map((doc) => ({
+      ...doc,
+      kind: "large_project_artifact_pointer",
+      title: doc.title ? `${doc.title}（大文件，默认不读）` : "大文件，默认不读",
+    })),
+    ...safeArray(input.coldHistorySources),
+    ...vaultManifests.flatMap((manifest) => [
+      { kind: "thread_history_vault_manifest", path: manifest.vaultManifestPath, title: manifest.title, threadId: manifest.threadId, sha256: manifest.originalSha256, updatedAt: manifest.updatedAt },
+      { kind: "thread_history_vault_session", path: manifest.vaultSessionPath, title: manifest.title, threadId: manifest.threadId, sha256: manifest.copiedSha256, updatedAt: manifest.updatedAt },
+    ]),
+  ], 20);
+  const sourceRefs = normalizeRecoveryPointers([
+    ...projectDocs,
+    ...coldHistorySources,
+    ...lineage.flatMap((record) => record.sourceRefs || []),
+  ], 24);
+  const warnings = [
+    "metadata_first_recovery_packet",
+    "raw_session_body_not_read_by_default",
+    "no_archive_compact_delete_move_restore",
+    ...(vaultManifests.length === 0 ? ["no_thread_history_vault_manifest_matched"] : []),
+    ...(lineage.length === 0 ? ["no_thread_lineage_record_matched"] : []),
+    ...(largeProjectDocs.length > 0 ? ["large_recovery_docs_pointer_only"] : []),
+    ...safeArray(input.warnings).map((warning) => compactText(warning, 200)).filter(Boolean),
+  ].filter((warning, index, array) => array.indexOf(warning) === index);
+  const packet = {
+    schemaVersion: THREAD_RECOVERY_PACKET_SCHEMA,
+    generatedAt,
+    request: {
+      threadId: threadId || null,
+      title: title || null,
+      query: compactText(input.query || title || threadId || "", 240),
+      projectPath,
+      tokenBudget: clampNumber(input.tokenBudget, 1200, 400, 3000),
+    },
+    thread: {
+      threadId: threadId || vaultManifests[0]?.threadId || lineage[0]?.ceoThreadId || null,
+      title: title || vaultManifests[0]?.title || lineage[0]?.title || "",
+      projectPath: projectPath || vaultManifests[0]?.projectPath || lineage[0]?.workspacePaths?.[0] || null,
+      confidence: vaultManifests.length > 0 || lineage.length > 0 ? "source_backed" : "needs_review",
+    },
+    lineage,
+    vault: {
+      hasVault: vaultManifests.length > 0,
+      manifests: vaultManifests,
+      policy: "pointer_only_no_default_raw_body_read",
+    },
+    context: {
+      packetId: input.contextPacket?.cacheKey || null,
+      itemCount: contextItems.length,
+      items: contextItems.map((item) => ({
+        id: compactText(item.id || "", 180),
+        kind: compactText(item.kind || "", 80),
+        title: compactText(item.title || "", 180),
+        summary: compactText(item.summary || item.excerpt || "", 520),
+        freshness: normalizeFreshness(item.freshness),
+        memoryLayer: item.memoryLayer || null,
+        whyMatched: safeArray(item.whyMatched).map((value) => compactText(value, 160)).filter(Boolean).slice(0, 6),
+        sourceRefs: normalizeSourceRefs(item.sourceRefs, 4),
+      })),
+    },
+    recommendedReadOrder: projectDocs,
+    coldHistorySources,
+    sourceRefs,
+    nextActions: [
+      "先读取 recommendedReadOrder 中的项目文档。",
+      "再用 retrieve_context(task_goal, thread_recovery) 获取当前热/温上下文。",
+      "只有当 compact 恢复包不足时，才按 coldHistorySources 小范围读取 raw/vault session。",
+      "接手线程启动后写入 WorkingMemoryRecord，结束时 writeback_evidence。",
+    ],
+    prompt: "",
+    performance: {
+      metadataFirst: true,
+      rawSessionBodyRead: false,
+      scansFullDatabase: false,
+      startsTimers: false,
+      boundedSourcePointers: true,
+    },
+    safety: {
+      mutatesRawSession: false,
+      archiveCompactDeleteMoveRestore: false,
+      installsOrExecutes: false,
+      rawSessionDefaultRead: false,
+    },
+    warnings,
+    tokenEstimate: estimateTokensFromText(title, projectPath, JSON.stringify(lineage), JSON.stringify(projectDocs), JSON.stringify(vaultManifests)),
+  };
+  packet.prompt = buildThreadRecoveryPrompt(packet);
+  return packet;
 }
 
 function actionSignalParts(value) {
@@ -647,14 +1318,20 @@ module.exports = {
   DEFAULT_PRECEDENT_ALLOWED_KINDS,
   DEFAULT_RUNTIME_ALLOWED_KINDS,
   MEMORY_RUNTIME_SCHEMA_VERSION,
+  buildHotStateCacheSeed,
+  buildMemoryGraph,
+  buildMemoryRouterPlan,
   buildRuntimeContextPacket,
   buildRuntimePrecedentPacket,
   buildRuntimePrecedentRequest,
+  buildThreadRecoveryPacket,
   buildFlowSkillReadyCandidate,
+  buildActivatedMemoryGraph,
   evaluatePromotionCandidate,
   evaluateWritebackEvidence,
   listFlowSkillCandidateRecords,
   listWorkingMemoryRecords,
+  mergeMemoryGraphs,
   normalizeRuntimeItem,
   promoteMemoryCandidate,
   upsertWorkingMemoryRecord,

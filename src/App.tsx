@@ -58,6 +58,7 @@ import type {
   SkillStatus,
   ToolSkillInventoryResult,
   ToolSkillRecord,
+  ThreadRecoveryPacket,
   WatchStatus,
   ZhixiaSkillDefinition,
 } from "./vite-env";
@@ -324,6 +325,11 @@ const archiveBlockerLabels: Record<string, string> = {
   compact_receipt_incompatible: "thread store 与 compact receipt 不兼容",
   missing_project_resume_packet: "缺少 Resume Packet",
   role_cooling_period_not_reached: "未达到该线程类型的冷却时间",
+  host_archive_completed: "宿主已归档",
+  host_archive_protected: "宿主保护跳过",
+  host_thread_not_found: "宿主侧栏未找到",
+  host_archive_persist_failed: "宿主归档未持久化",
+  host_archive_error: "宿主归档异常",
 };
 
 function archiveLabel(value: string, labels: Record<string, string>) {
@@ -769,6 +775,14 @@ function classifyProjectCandidate(
   const hasActivityBackedEvidence = projectEvidenceDocs.length >= 1 && project.codexCount >= 2 && memoryCount >= 2;
   if (confidence >= 34 && hasProjectAnchor && (hasDocumentEvidence || hasActivityBackedEvidence)) {
     return { kind: "project", confidence, label: "项目", reasons: reasons.slice(0, 3) };
+  }
+  if (
+    projectKnowledge.some((item) => item.provider === "codex_guardian" && (item.model === "thread_history_vault" || item.tags.includes("codex-history"))) &&
+    project.codexCount >= 2 &&
+    project.path &&
+    !pathLooksLikeNonProjectSource(project.path)
+  ) {
+    return { kind: "project", confidence: Math.max(confidence, 28), label: "项目", reasons: [...reasons, "有旧线程历史入口"].slice(0, 3) };
   }
   if (confidence >= 18 && projectEvidenceDocs.length > 0) {
     return { kind: "lead", confidence, label: "待整理线索", reasons: reasons.slice(0, 3) };
@@ -1444,6 +1458,7 @@ function App() {
   const [historyOptimizeSummary, setHistoryOptimizeSummary] = useState<string | null>(null);
   const [historyOptimizeProgress, setHistoryOptimizeProgress] = useState<HistoryOptimizeProgress | null>(null);
   const [historyArchiveQueue, setHistoryArchiveQueue] = useState<CodexThreadArchiveQueue | null>(null);
+  const [threadRecoveryPacket, setThreadRecoveryPacket] = useState<ThreadRecoveryPacket | null>(null);
   const [longThreadsLoaded, setLongThreadsLoaded] = useState(false);
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<AgentRuntimeMonitorSnapshot | null>(null);
   const [runtimeMonitorBusy, setRuntimeMonitorBusy] = useState(false);
@@ -2313,6 +2328,13 @@ function App() {
     }
   }
 
+  function summarizeCodexLogCleanup(receipt: CodexGuardianCleanReceipt | null) {
+    if (!receipt) return "运行日志未清理";
+    const before = Object.values(receipt.before || {}).reduce((sum, item) => sum + Number(item || 0), 0);
+    const after = Object.values(receipt.after || {}).reduce((sum, item) => sum + Number(item || 0), 0);
+    return `运行日志 ${formatBytes(before)} -> ${formatBytes(after)}`;
+  }
+
   async function searchOldThreads(nextQuery = historyQuery) {
     setHistoryBusy(true);
     setHistoryError(null);
@@ -2332,6 +2354,7 @@ function App() {
             : result.result?.items[0]?.threadId || null,
         );
         setHistoryContextEnvelope(null);
+        setThreadRecoveryPacket(null);
         setNotice(`老线程检索完成：命中 ${result.result.items.length} 条历史摘要。`);
       } else {
         setHistoryError(result.error || "Guardian 未返回历史检索结果。");
@@ -2363,6 +2386,7 @@ function App() {
         setHistoryEnvelope(result.result);
         setSelectedHistoryThreadId(result.result.items[0]?.threadId || null);
         setHistoryContextEnvelope(null);
+        setThreadRecoveryPacket(null);
         setNotice(
           result.result.items.length > 0
             ? `长线程体检完成：发现 ${result.result.items.length} 条过长老线程。`
@@ -2782,14 +2806,15 @@ function App() {
 
   async function oneClickRelieveOldThreadPressure() {
     setHistoryBusy(true);
+    setCodexGuardianBusy(true);
     setHistoryError(null);
     setHistoryArchiveQueue(null);
     setHistoryOptimizeSummary(null);
     setHistoryOptimizeProgress({
       active: true,
       mode: "安全减负",
-      label: "正在体检老线程",
-      detail: "正在找出体积大、长时间未写入、可安全处理的历史线程。",
+      label: "正在清理运行日志",
+      detail: "一键安全减负会先清理 Codex 巨型运行日志；请先关闭 Codex，避免日志库被占用。",
       current: 0,
       total: 0,
       indexed: 0,
@@ -2797,7 +2822,7 @@ function App() {
       queued: 0,
       failed: 0,
     });
-    setNotice("正在安全减负：体检老线程，先入库，再瘦身可处理的候选...");
+    setNotice("正在安全减负：先清理 Codex 运行日志，再入库、瘦身和生成归档队列。");
     const indexed: string[] = [];
     const compacted: string[] = [];
     const imageProtected: string[] = [];
@@ -2813,7 +2838,41 @@ function App() {
     let autoActivePreservedCount = 0;
     let beforeTotal = 0;
     let afterTotal = 0;
+    let logCleanupReceipt: CodexGuardianCleanReceipt | null = null;
     try {
+      const logCleanup = await window.docKnowledge.cleanCodexHotLogs();
+      setCodexGuardianStatus(logCleanup);
+      if (!logCleanup.ok || !isCodexGuardianCleanReceipt(logCleanup.result)) {
+        const message = logCleanup.refused
+          ? "一键安全减负需要先清理 Codex 巨型运行日志。请关闭 Codex、codex 和 node_repl 进程后，再打开知匣点击“一键安全减负”。"
+          : `一键安全减负前置日志清理失败：${logCleanup.error || "Guardian 未返回清理回执"}`;
+        setHistoryError(message);
+        setNotice(message);
+        setHistoryOptimizeProgress((current) =>
+          current
+            ? {
+                ...current,
+                active: false,
+                label: logCleanup.refused ? "需要先关闭 Codex" : "日志清理失败",
+                detail: message,
+                failed: current.failed + 1,
+              }
+            : current,
+        );
+        return;
+      }
+      logCleanupReceipt = logCleanup.result;
+      setNotice(`Codex 运行日志清理完成：${summarizeCodexLogCleanup(logCleanupReceipt)}；继续入库和瘦身老线程。`);
+      setHistoryOptimizeProgress((current) =>
+        current
+          ? {
+              ...current,
+              label: "正在体检老线程",
+              detail: `${summarizeCodexLogCleanup(logCleanupReceipt)}，正在找出体积大、长时间未写入、可安全处理的历史线程。`,
+            }
+          : current,
+      );
+      setCodexGuardianBusy(false);
       const autoPreserve = await window.docKnowledge.autoIngestCodexHistory({
         limit: 1000,
         recentWriteMinutes: 60,
@@ -2837,6 +2896,7 @@ function App() {
       }
 
       const items = triage.result.items || [];
+      const archiveQueueBacklogItems = triage.result.archiveQueueItems || [];
       const backlog = triage.result.backlog || null;
       const backlogTotal = backlog?.totalCandidates ?? items.length;
       const incrementalTotal = backlog?.incrementalCandidateCount ?? items.length;
@@ -2864,7 +2924,27 @@ function App() {
           : current,
       );
       if (items.length === 0) {
-        const message = `增量体检完成：自动保留 ${autoPreservedCount} 条，已保留 ${autoAlreadyPreservedCount + alreadyProcessed} 条，活跃跳过归档 ${autoActivePreservedCount} 条，暂无新的入库/瘦身任务。`;
+        if (archiveQueueBacklogItems.length > 0) {
+          const archiveQueue = await generateArchiveQueueForItems(archiveQueueBacklogItems, compactedHistoryReceipts);
+          const message = `增量体检完成：${summarizeCodexLogCleanup(logCleanupReceipt)}，自动保留 ${autoPreservedCount} 条，已保留 ${autoAlreadyPreservedCount + alreadyProcessed} 条，活跃跳过归档 ${autoActivePreservedCount + (archiveQueue.skippedActiveCount || 0)} 条，暂无新的入库/瘦身任务；已重新生成待宿主归档队列 ${archiveQueue.readyCount} 条，自动跳过 ${archiveQueue.skippedCount} 条。`;
+          setNotice(`${message} 完整历史已保留在知匣；冷线程侧栏归档仍需要 Codex 宿主桥接消费队列。`);
+          setHistoryOptimizeSummary(message);
+          setHistoryOptimizeProgress((current) =>
+            current
+              ? {
+                  ...current,
+                  active: false,
+                  label: "体检完成，已刷新归档队列",
+                  detail: message,
+                  queued: archiveQueue.readyCount,
+                  total: incrementalTotal,
+                  backlogTotal,
+                }
+              : current,
+          );
+          return;
+        }
+        const message = `增量体检完成：${summarizeCodexLogCleanup(logCleanupReceipt)}，自动保留 ${autoPreservedCount} 条，已保留 ${autoAlreadyPreservedCount + alreadyProcessed} 条，活跃跳过归档 ${autoActivePreservedCount} 条，暂无新的入库/瘦身任务。`;
         setNotice(message);
         setHistoryOptimizeSummary(message);
         setHistoryOptimizeProgress((current) => (current ? { ...current, active: false, label: "体检完成", detail: message, total: incrementalTotal, backlogTotal } : current));
@@ -2872,8 +2952,13 @@ function App() {
       }
 
       const flushArchiveQueue = async (processedCount: number, finalFlush = false) => {
-        if (processedCount <= 0) return;
-        const archiveQueueItems = items.slice(0, processedCount).map((item) => optimizedItemsForQueue[item.threadId] || item);
+        if (processedCount <= 0 && archiveQueueBacklogItems.length === 0) return;
+        const archiveQueueByThreadId = new Map<string, CodexGuardianHistoryItem>();
+        for (const item of archiveQueueBacklogItems) archiveQueueByThreadId.set(item.threadId, item);
+        for (const item of items.slice(0, processedCount).map((entry) => optimizedItemsForQueue[entry.threadId] || entry)) {
+          archiveQueueByThreadId.set(item.threadId, item);
+        }
+        const archiveQueueItems = Array.from(archiveQueueByThreadId.values());
         const archiveQueue = await generateArchiveQueueForItems(archiveQueueItems, {
           ...compactedHistoryReceipts,
           ...compactReceiptsForQueue,
@@ -3070,7 +3155,7 @@ function App() {
       const completionLabel = remainingAfterBatch > 0 ? "本批增量减负完成，仍有待处理" : "增量安全减负完成";
       const processedText = remainingAfterBatch > 0 ? `本批处理 ${items.length} 条增量` : `本次处理 ${items.length} 条增量`;
       const imageProtectedText = imageProtected.length > 0 ? `图片线程保护跳过瘦身 ${imageProtected.length} 条，` : "";
-      const message = `${completionLabel}：自动保留 ${autoPreservedCount} 条，已保留 ${autoAlreadyPreservedCount + alreadyProcessed} 条，活跃跳过归档 ${autoActivePreservedCount + archiveQueueSkippedActiveCount} 条，增量待处理 ${incrementalTotal} 条，${processedText}，入库 ${indexed.length} 条，大线程瘦身 ${compacted.length} 条，${imageProtectedText}${archiveText}剩余 ${remainingAfterBatch} 条；释放 ${formatBytes(saved)}。`;
+      const message = `${completionLabel}：${summarizeCodexLogCleanup(logCleanupReceipt)}，自动保留 ${autoPreservedCount} 条，已保留 ${autoAlreadyPreservedCount + alreadyProcessed} 条，活跃跳过归档 ${autoActivePreservedCount + archiveQueueSkippedActiveCount} 条，增量待处理 ${incrementalTotal} 条，${processedText}，入库 ${indexed.length} 条，大线程瘦身 ${compacted.length} 条，${imageProtectedText}${archiveText}剩余 ${remainingAfterBatch} 条；释放 ${formatBytes(saved)}。`;
       setHistoryOptimizeSummary(failed.length > 0 ? `${message} 失败：${failed.slice(0, 3).join("；")}` : message);
       setHistoryOptimizeProgress((current) =>
         current
@@ -3098,6 +3183,7 @@ function App() {
       setNotice(`一键安全减负失败：${message}`);
     } finally {
       setHistoryBusy(false);
+      setCodexGuardianBusy(false);
     }
   }
 
@@ -3125,6 +3211,58 @@ function App() {
       } else {
         setHistoryError("老线程优化摘要复制失败，请手动选中下方内容复制。");
       }
+    }
+  }
+
+  async function generateThreadRecoveryPacket(item: CodexGuardianHistoryItem | null = selectedHistoryItem) {
+    if (!item) {
+      setHistoryError("请先选择一条历史线程。");
+      return;
+    }
+    setHistoryBusy(true);
+    setHistoryError(null);
+    setNotice("正在生成旧线程接续包...");
+    try {
+      const packet = await window.docKnowledge.recoverMemoryRuntimeThread({
+        threadId: item.threadId,
+        title: historyDisplayTitle(item, 120),
+        query: [historyQuery, item.summary, item.provenance?.projectRoot].filter(Boolean).join(" "),
+        projectPath: item.provenance?.projectRoot || effectiveProjectPath || null,
+        tokenBudget: 1800,
+        maxResults: 10,
+      });
+      setThreadRecoveryPacket(packet);
+      setNotice("旧线程接续包已生成；新线程可先读取 prompt 和推荐文档，不会默认读取 raw session。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setHistoryError(`旧线程接续包生成失败：${message}`);
+      setNotice(`旧线程接续包生成失败：${message}`);
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+
+  async function copyThreadRecoveryPacket(packet: ThreadRecoveryPacket | null = threadRecoveryPacket) {
+    if (!packet) {
+      setHistoryError("还没有可复制的旧线程接续包。");
+      return;
+    }
+    const text = JSON.stringify(packet, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      setNotice("旧线程接续包已复制。");
+    } catch {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.setAttribute("readonly", "true");
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textArea);
+      if (copied) setNotice("旧线程接续包已复制。");
+      else setHistoryError("旧线程接续包复制失败，请手动选中下方内容复制。");
     }
   }
 
@@ -3221,6 +3359,27 @@ function App() {
     if (firstProjectDocument) setSelectedId(firstProjectDocument.id);
   }
 
+  function handleGlobalSearchSubmit() {
+    const cleanQuery = query.trim();
+    if (!cleanQuery) {
+      setNotice("输入项目名、线程名或关键词后再搜索。");
+      return;
+    }
+    setView("project");
+    setActiveProject(null);
+    setProjectTab("overview");
+    const resultText = `${projectCards.length} 个项目，${projectLeads.length} 条待整理线索`;
+    setNotice(`正在按“${clipText(cleanQuery, 40)}”筛选：命中 ${resultText}。`);
+    if (projectCards.length === 1 && projectLeads.length === 0) {
+      openProject(projectCards[0].project.path);
+    }
+  }
+
+  function clearGlobalSearch() {
+    setQuery("");
+    setNotice("已清空搜索，恢复项目列表。");
+  }
+
   function handleExportMemoryPackage() {
     if (!selected) {
       setNotice("导出记忆包前，请先在“历史”页或项目历史标签里选中一份来源。");
@@ -3272,8 +3431,44 @@ function App() {
       if (new Date(doc.updatedAt).getTime() > new Date(current.updatedAt).getTime()) current.updatedAt = doc.updatedAt;
       map.set(doc.workspacePath, current);
     }
+    for (const item of knowledgeItems) {
+      if (!item.projectPath) continue;
+      const current = map.get(item.projectPath) || {
+        path: item.projectPath,
+        name: projectName(item.projectPath),
+        count: 0,
+        updatedAt: item.updatedAt,
+        codexCount: 0,
+        activeCount: 0,
+        reviewCount: 0,
+        staleCount: 0,
+      };
+      current.count += 1;
+      if (item.provider === "codex_guardian" || item.tags.includes("codex-history")) current.codexCount += 2;
+      if (item.status === "ready") current.activeCount += 1;
+      if (new Date(item.updatedAt).getTime() > new Date(current.updatedAt).getTime()) current.updatedAt = item.updatedAt;
+      map.set(item.projectPath, current);
+    }
+    for (const item of experienceCards) {
+      if (!item.projectPath) continue;
+      const current = map.get(item.projectPath) || {
+        path: item.projectPath,
+        name: projectName(item.projectPath),
+        count: 0,
+        updatedAt: item.updatedAt,
+        codexCount: 0,
+        activeCount: 0,
+        reviewCount: 0,
+        staleCount: 0,
+      };
+      current.count += 1;
+      if (item.status === "accepted" || item.status === "curated") current.activeCount += 1;
+      if (item.status === "candidate") current.reviewCount += 1;
+      if (new Date(item.updatedAt).getTime() > new Date(current.updatedAt).getTime()) current.updatedAt = item.updatedAt;
+      map.set(item.projectPath, current);
+    }
     return Array.from(map.values()).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [documents]);
+  }, [documents, experienceCards, knowledgeItems]);
 
   const projectMemoryByPath = useMemo(() => {
     const map = new Map<string, { experienceCards: number; skillCandidates: number; knowledgeItems: number }>();
@@ -3303,6 +3498,17 @@ function App() {
     return map;
   }, [knowledgeItems]);
 
+  const projectExperienceByPath = useMemo(() => {
+    const map = new Map<string, ExperienceCard[]>();
+    for (const item of experienceCards) {
+      if (!item.projectPath) continue;
+      const list = map.get(item.projectPath) || [];
+      list.push(item);
+      map.set(item.projectPath, list);
+    }
+    return map;
+  }, [experienceCards]);
+
   const documentsByProject = useMemo(() => {
     const map = new Map<string, KnowledgeDocument[]>();
     for (const doc of documents) {
@@ -3315,38 +3521,84 @@ function App() {
   }, [documents]);
 
   const projectCards = useMemo(() => {
+    const searchText = query.trim();
     return projects
       .map((project) => {
         const projectDocs = documentsByProject.get(project.path) || [];
         const projectMemory = projectMemoryByPath.get(project.path);
         const projectKnowledge = projectKnowledgeByPath.get(project.path) || [];
+        const projectExperience = projectExperienceByPath.get(project.path) || [];
         const classification = classifyProjectCandidate(project, projectDocs, projectMemory, projectKnowledge);
+        const displayName = readableProjectDisplayName(project.path, projectDocs);
+        const summary = projectCardSummaryText(project.path, projectDocs, projectMemory, projectKnowledge);
+        const searchScore = searchText
+          ? scoreTextBlock(
+              displayName,
+              [
+                project.path,
+                project.name,
+                summary,
+                classification.reasons.join(" "),
+                projectDocs.slice(0, 18).map((doc) => `${doc.title} ${doc.summary} ${doc.fileName} ${doc.tags.join(" ")}`).join(" "),
+                projectKnowledge.slice(0, 12).map((item) => `${item.title} ${item.summary} ${item.body} ${item.tags.join(" ")}`).join(" "),
+                projectExperience.slice(0, 12).map((item) => `${item.title} ${item.summary} ${item.body} ${item.tags.join(" ")}`).join(" "),
+              ].join(" "),
+              searchText,
+              0,
+            )
+          : 0;
         return {
           project,
           projectDocs,
           projectMemory,
           projectKnowledge,
           classification,
+          searchScore,
           activityScore: projectActivityScore(project, projectDocs, projectMemory),
         };
       })
       .filter((item) => item.classification.kind === "project")
-      .sort((a, b) => b.activityScore - a.activityScore || new Date(b.project.updatedAt).getTime() - new Date(a.project.updatedAt).getTime());
-  }, [documentsByProject, projectKnowledgeByPath, projectMemoryByPath, projects]);
+      .filter((item) => !searchText || item.searchScore > 0)
+      .sort((a, b) => {
+        if (searchText && b.searchScore !== a.searchScore) return b.searchScore - a.searchScore;
+        return b.activityScore - a.activityScore || new Date(b.project.updatedAt).getTime() - new Date(a.project.updatedAt).getTime();
+      });
+  }, [documentsByProject, projectExperienceByPath, projectKnowledgeByPath, projectMemoryByPath, projects, query]);
 
   const projectLeads = useMemo(() => {
+    const searchText = query.trim();
     return projects
       .map((project) => {
         const projectDocs = documentsByProject.get(project.path) || [];
         const projectMemory = projectMemoryByPath.get(project.path);
         const projectKnowledge = projectKnowledgeByPath.get(project.path) || [];
+        const projectExperience = projectExperienceByPath.get(project.path) || [];
         const classification = classifyProjectCandidate(project, projectDocs, projectMemory, projectKnowledge);
-        return { project, projectDocs, projectMemory, projectKnowledge, classification };
+        const searchScore = searchText
+          ? scoreTextBlock(
+              readableProjectDisplayName(project.path, projectDocs),
+              [
+                project.path,
+                project.name,
+                classification.reasons.join(" "),
+                projectDocs.slice(0, 12).map((doc) => `${doc.title} ${doc.summary} ${doc.fileName} ${doc.tags.join(" ")}`).join(" "),
+                projectKnowledge.slice(0, 8).map((item) => `${item.title} ${item.summary} ${item.body}`).join(" "),
+                projectExperience.slice(0, 8).map((item) => `${item.title} ${item.summary} ${item.body}`).join(" "),
+              ].join(" "),
+              searchText,
+              0,
+            )
+          : 0;
+        return { project, projectDocs, projectMemory, projectKnowledge, classification, searchScore };
       })
       .filter((item) => item.classification.kind === "lead")
-      .sort((a, b) => b.classification.confidence - a.classification.confidence || new Date(b.project.updatedAt).getTime() - new Date(a.project.updatedAt).getTime())
+      .filter((item) => !searchText || item.searchScore > 0)
+      .sort((a, b) => {
+        if (searchText && b.searchScore !== a.searchScore) return b.searchScore - a.searchScore;
+        return b.classification.confidence - a.classification.confidence || new Date(b.project.updatedAt).getTime() - new Date(a.project.updatedAt).getTime();
+      })
       .slice(0, 8);
-  }, [documentsByProject, projectKnowledgeByPath, projectMemoryByPath, projects]);
+  }, [documentsByProject, projectExperienceByPath, projectKnowledgeByPath, projectMemoryByPath, projects, query]);
 
   const effectiveProjectPath = activeProject || projectCards[0]?.project.path || null;
 
@@ -5596,6 +5848,11 @@ function App() {
           <div>
             <h2>项目</h2>
             <p>按项目查看历史、知识、记忆和工具。点开一个项目后，再看它做过什么、进度到哪、下次 Codex 应该调取哪些资料。</p>
+            {query.trim() ? (
+              <p className="search-result-note">
+                正在搜索“{clipText(query.trim(), 48)}”：命中 {projectCards.length} 个项目，{projectLeads.length} 条待整理线索。
+              </p>
+            ) : null}
           </div>
           <div className="maintenance-actions">
             <button className="ghost-button" onClick={generateProjectSummaries} disabled={busy || documents.length === 0}>
@@ -5611,8 +5868,12 @@ function App() {
           {projectCards.length === 0 ? (
             <div className="empty-state project-home-empty">
               <Database size={34} />
-              <strong>还没有识别项目</strong>
-              <span>点击“扫描并整理项目”后，知匣会优先显示真正可继续的项目；零散资料会先放到待整理线索。</span>
+              <strong>{query.trim() ? "没有搜到匹配项目" : "还没有识别项目"}</strong>
+              <span>
+                {query.trim()
+                  ? "可以换一个关键词，或去“智能优化”里搜索老线程；后续会继续把归档历史关联回项目。"
+                  : "点击“扫描并整理项目”后，知匣会优先显示真正可继续的项目；零散资料会先放到待整理线索。"}
+              </span>
             </div>
           ) : null}
           {projectCards.map(({ project, projectDocs, projectMemory, projectKnowledge }) => {
@@ -6279,6 +6540,42 @@ function App() {
     );
   }
 
+  function renderThreadRecoveryPacket(packet: ThreadRecoveryPacket | null) {
+    if (!packet) return null;
+    const packetText = JSON.stringify(packet, null, 2);
+    return (
+      <div className="history-context-card">
+        <div className="agent-log-detail-header">
+          <div>
+            <span className="section-kicker">旧线程接续包</span>
+            <h3>{clipText(packet.thread.title || packet.request.title || "未命名线程", 90)}</h3>
+            <p>{packet.thread.threadId || packet.request.threadId || "未提供 threadId"}</p>
+          </div>
+          {renderTonePill(packet.thread.confidence === "source_backed" ? "有来源" : "待复核", packet.thread.confidence === "source_backed" ? "teal" : "amber")}
+        </div>
+        <div className="inspector-note success-note">
+          这个接续包给新 CEO 线程启动用：先读推荐文档和 compact sourceRefs；raw/vault session 默认不读，也不会触发归档、瘦身或删除。
+        </div>
+        <dl className="detail-list">
+          <dt>推荐文档</dt>
+          <dd>{packet.recommendedReadOrder.slice(0, 5).map((item) => item.title || item.path).join("；") || "暂无"}</dd>
+          <dt>上下文条目</dt>
+          <dd>{packet.context.itemCount} 条 · sourceRefs {packet.sourceRefs.length} 条 · token 估算 {packet.tokenEstimate}</dd>
+          <dt>Vault</dt>
+          <dd>{packet.vault.hasVault ? "有历史保险库指针" : "暂无匹配 Vault manifest"} · {packet.vault.policy}</dd>
+          <dt>安全边界</dt>
+          <dd>raw session 默认读取={packet.safety.rawSessionDefaultRead ? "是" : "否"}；归档/瘦身/删除/移动/恢复={packet.safety.archiveCompactDeleteMoveRestore ? "会执行" : "不执行"}</dd>
+        </dl>
+        <div className="maintenance-actions">
+          <button className="primary-button" onClick={() => copyThreadRecoveryPacket(packet)}>
+            <Copy size={17} /> 复制接续包
+          </button>
+        </div>
+        <pre className="detail-code">{packetText}</pre>
+      </div>
+    );
+  }
+
   function renderThreadContinuationPacket(item: CodexGuardianHistoryItem | null) {
     if (!item) {
       return (
@@ -6367,6 +6664,9 @@ function App() {
           ) : null}
         </div>
         <div className="maintenance-actions">
+          <button className="ghost-button" onClick={() => generateThreadRecoveryPacket(item)} disabled={historyBusy}>
+            <Brain size={17} /> 生成接续包
+          </button>
           <button className="primary-button" onClick={() => copyThreadContinuationPacket(item)}>
             <Copy size={17} /> 复制优化摘要
           </button>
@@ -6416,7 +6716,7 @@ function App() {
           <div>
             <span className="section-kicker">释放历史压力</span>
             <h3>旧线程历史整理</h3>
-            <p>一次完成体检、完整历史入库、hash 校验、session 瘦身和归档队列生成；可安全归档的旧线程会交给 Codex 宿主桥接归档。</p>
+            <p>一次完成运行日志清理、体检、完整历史入库、hash 校验、session 瘦身和归档队列生成；请先关闭 Codex 再点击，避免日志库被占用。</p>
           </div>
           <div className="maintenance-actions">
             <button className="ghost-button" onClick={loadProjectOldThreads} disabled={historyBusy || !effectiveProjectPath}>
@@ -6428,6 +6728,10 @@ function App() {
           </div>
         </div>
         <div className="one-click-rules">
+          <div>
+            <strong>先关 Codex</strong>
+            <span>一键安全减负会先清理 Codex 巨型运行日志；如果 Codex、codex 或 node_repl 还在运行，知匣会停止并提醒关闭后重试。</span>
+          </div>
           <div>
             <strong>一键优化规则</strong>
             <span>CEO 创建的实现、审计、准备、回调线程 3 天未复用就会入库并进归档队列；CEO 主线程默认保留 30 天。</span>
@@ -6503,6 +6807,7 @@ function App() {
                     onClick={() => {
                       setSelectedHistoryThreadId(item.threadId);
                       setHistoryContextEnvelope(null);
+                      setThreadRecoveryPacket(null);
                   }}
                 >
                   <div className="agent-log-row-head">
@@ -6559,6 +6864,7 @@ function App() {
               </div>
             </details>
             {renderThreadContinuationPacket(selectedHistoryContextItem || selectedHistoryItem)}
+            {renderThreadRecoveryPacket(threadRecoveryPacket)}
           </div>
         </div>
       </section>
@@ -7394,10 +7700,21 @@ function App() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") handleGlobalSearchSubmit();
+              }}
               placeholder="搜索项目、个人库、工具和项目资料"
             />
           </div>
           <div className="toolbar-actions">
+            <button className="ghost-button" onClick={handleGlobalSearchSubmit} disabled={!query.trim()}>
+              <Search size={17} /> 搜索
+            </button>
+            {query.trim() ? (
+              <button className="ghost-button" onClick={clearGlobalSearch}>
+                清空
+              </button>
+            ) : null}
             <button className="ghost-button" onClick={scanCodexWorkspace} disabled={busy}>
               <RefreshCw size={17} /> 扫描并整理项目
             </button>

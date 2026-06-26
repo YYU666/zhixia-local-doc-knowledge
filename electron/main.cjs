@@ -13,18 +13,26 @@ const { PDFParse } = require("pdf-parse");
 const {
   THREAD_STORE_COMPATIBILITY_ERROR,
   attachVaultEvidenceToCompactReceipt,
+  buildImageProtectedCompactReceipt,
+  isImageProtectedCompactError,
   validateCompactSessionReceipt,
   validateVaultCopyHashes,
 } = require("./codexGuardianPolicy.cjs");
 const {
   autoIngestCodexSessions,
+  manifestNeedsMetadataRefresh,
+  refreshCodexThreadVaultManifestMetadata,
 } = require("./codexThreadHistoryAutoIngestPolicy.cjs");
 const {
   buildRuntimeContextPacket,
   buildRuntimePrecedentPacket,
   buildRuntimePrecedentRequest,
+  buildActivatedMemoryGraph,
+  buildMemoryRouterPlan,
+  buildThreadRecoveryPacket,
   listFlowSkillCandidateRecords,
   listWorkingMemoryRecords,
+  mergeMemoryGraphs,
   promoteMemoryCandidate,
   upsertWorkingMemoryRecord,
   writeEvidenceWriteback,
@@ -129,6 +137,7 @@ const DOCUMENT_LIST_DEFAULT_INCLUDE_CONTENT_TEXT = false;
 const STARTUP_AUTO_INGEST_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const STARTUP_AUTO_INGEST_DELAY_MS = 20000;
 const STARTUP_AUTO_INGEST_OPTIONS = { limit: 12, startupBounded: true, maxDirectoryReads: 12, maxFileStats: 20 };
+const STARTUP_VAULT_SEARCH_INDEX_OPTIONS = { limit: 120, maxPrefixBytes: 512 * 1024, maxPrefixLines: 600, forceMetadataRefresh: true, extractorVersion: 2 };
 const PERFORMANCE_SAFE_SETTINGS_VERSION = 1;
 const MAX_KNOWLEDGE_ITEMS_PER_RUN = 120;
 const MAX_KNOWLEDGE_ITEMS_PER_PROJECT_EXPORT = 80;
@@ -155,6 +164,11 @@ const STALE_UNKNOWN_THREAD_DAYS = 3;
 const MASKED_SETTING_VALUE = "••••••••";
 const CODEX_HISTORY_VAULT_SCHEMA_VERSION = "zhixia.codex_thread_vault.v1";
 const E2E_PROBE_ENABLED = process.env.ZHIXIA_E2E_PROBE === "1";
+
+app.setName("知匣 Local Doc Knowledge");
+if (process.platform === "win32") {
+  app.setAppUserModelId("local.doc.knowledge");
+}
 
 if (E2E_PROBE_ENABLED) {
   app.disableHardwareAcceleration();
@@ -638,6 +652,7 @@ async function writeCodexThreadHistoryVault(item) {
     manifestPath,
     latestManifestPath,
     vaultSessionPath,
+    sourceSessionPath: rawRef.path,
     originalSha256,
     copiedSha256,
     sizeBytes: stat.size,
@@ -710,6 +725,197 @@ function buildGuardianHistoryKnowledgeItem(item, vault = null) {
     status: "ready",
     errorMessage: null,
   };
+}
+
+function buildAutoIngestVaultKnowledgeItem(manifest) {
+  const threadId = String(manifest?.threadId || "").trim();
+  const title = cleanGuardianHistoryText(manifest?.title, `Codex 老线程 ${threadId.slice(0, 8)}`);
+  const projectPath = manifest?.projectPath || manifest?.inferredMetadata?.projectPath || null;
+  const searchTerms = uniqCompact([
+    ...safeArray(manifest?.searchTerms),
+    ...safeArray(manifest?.inferredMetadata?.searchTerms),
+    manifest?.inferredMetadata?.firstUserMessage,
+    title,
+    projectPath ? projectNameFromPath(projectPath) : "",
+  ], 18);
+  const summary = compactText(
+    manifest?.summary ||
+      manifest?.layers?.warm?.summary ||
+      manifest?.layers?.hot?.summary ||
+      `知匣已保存旧 Codex 线程 ${threadId} 的完整历史，默认通过热/温层摘要召回。`,
+    COMPACT_SUMMARY_CHARS,
+  );
+  const sourcePath = manifest?.vaultManifestPath || manifest?.layers?.cold?.vaultManifestPath || null;
+  const vaultSessionPath = manifest?.vaultSessionPath || manifest?.layers?.cold?.vaultSessionPath || null;
+  const body = [
+    "Codex 老线程历史入口。该条目来自自动安全入库的 Thread History Vault manifest，不包含 raw session 正文。",
+    "",
+    `ThreadId: ${threadId}`,
+    `Title: ${title}`,
+    `ProjectPath: ${projectPath || "unknown"}`,
+    `VaultManifest: ${sourcePath || "unknown"}`,
+    `VaultSession: ${vaultSessionPath || "explicit_only"}`,
+    `MemoryPointer: ${manifest?.memoryPointer || guardianHistoryKnowledgeId(threadId)}`,
+    `SearchTerms: ${searchTerms.join("、") || "none"}`,
+    "",
+    "Summary:",
+    summary,
+    "",
+    "First user goal:",
+    compactText(manifest?.inferredMetadata?.firstUserMessage || "", 240) || "unknown",
+    "",
+    "Policy:",
+    "- 完整历史保留在 Thread History Vault。",
+    "- 默认搜索和 CEO Flow 召回只读取该热/温入口。",
+    "- raw_session 默认不读取；只有明确恢复旧线程且摘要不足时才读取。",
+  ].join("\n");
+  return {
+    id: guardianHistoryKnowledgeId(threadId),
+    projectPath,
+    documentId: null,
+    sourcePath,
+    title: `老线程历史：${title}`,
+    summary,
+    body,
+    category: "process",
+    tags: uniqCompact(["codex-history", "old-thread", "thread-history-vault", "auto-ingest", ...searchTerms], 12),
+    sourceHash: manifest?.originalSha256 || manifest?.copiedSha256 || threadId || null,
+    provider: "codex_guardian",
+    model: "thread_history_vault",
+    status: "ready",
+    errorMessage: null,
+  };
+}
+
+function buildAutoIngestVaultLineageRecord(manifest) {
+  const threadId = String(manifest?.threadId || "").trim();
+  const projectPath = manifest?.projectPath || manifest?.inferredMetadata?.projectPath || null;
+  const title = cleanGuardianHistoryText(manifest?.title, `Codex 老线程 ${threadId.slice(0, 8)}`);
+  const memoryPointer = manifest?.memoryPointer || guardianHistoryKnowledgeId(threadId);
+  const sourceRefs = [
+    {
+      kind: "thread_history_vault",
+      path: manifest?.vaultManifestPath || manifest?.layers?.cold?.vaultManifestPath || null,
+      title,
+      threadId,
+      readByDefault: true,
+    },
+    {
+      kind: "raw_session",
+      path: manifest?.vaultSessionPath || manifest?.layers?.cold?.vaultSessionPath || null,
+      title: "Full preserved raw session",
+      threadId,
+      readByDefault: false,
+    },
+  ].filter((ref) => ref.path);
+  return buildThreadLineageIndexRecord({
+    ceoThreadId: threadId,
+    title,
+    scope: projectPath ? "project" : "thread",
+    projectIds: projectPath ? [projectNameFromPath(projectPath)] : [],
+    workspacePaths: projectPath ? [projectPath] : [],
+    childThreadIds: [],
+    hotThreadIds: [],
+    workerThreadIds: [],
+    reviewerThreadIds: [],
+    memoryThreadIds: [],
+    latestDecisionIds: [],
+    latestAcceptanceIds: [],
+    handoffIds: [],
+    resumePacketIds: [memoryPointer],
+    vaultPointers: [memoryPointer],
+    archiveState: manifest?.archiveState || manifest?.status || "warm",
+    lastActivityAt: manifest?.lastWriteTime || manifest?.updatedAt || manifest?.createdAt || null,
+    lastSummary: compactText(manifest?.summary || manifest?.layers?.warm?.summary || manifest?.layers?.hot?.summary || "", 360),
+    nextAction: "优先读取 Thread History Vault 热/温层；raw session 仅在明确恢复时读取。",
+    sourceRefs,
+  });
+}
+
+async function readAndRefreshVaultManifestForIndex(manifestPath, options = {}) {
+  let manifest = await readJsonFileOrDefault(manifestPath, null);
+  if (!manifest || typeof manifest !== "object" || !manifest.threadId) return null;
+  manifest = {
+    ...manifest,
+    vaultManifestPath: manifest.vaultManifestPath || manifest.layers?.cold?.vaultManifestPath || manifestPath,
+    vaultSessionPath: manifest.vaultSessionPath || manifest.layers?.cold?.vaultSessionPath || null,
+  };
+  if (options.forceMetadataRefresh === true || options.forceRefresh === true || manifestNeedsMetadataRefresh(manifest)) {
+    manifest = (await refreshCodexThreadVaultManifestMetadata(manifestPath, {
+      ...options,
+      write: true,
+      threadId: manifest.threadId,
+    }).catch(() => manifest)) || manifest;
+    manifest = {
+      ...manifest,
+      vaultManifestPath: manifest.vaultManifestPath || manifest.layers?.cold?.vaultManifestPath || manifestPath,
+      vaultSessionPath: manifest.vaultSessionPath || manifest.layers?.cold?.vaultSessionPath || null,
+    };
+  }
+  return manifest;
+}
+
+async function listVaultLatestManifestPaths(limit = 120) {
+  const root = codexHistoryVaultRoot();
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const latest = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const latestPath = path.join(root, entry.name, "latest.json");
+    const stat = await fs.stat(latestPath).catch(() => null);
+    if (!stat?.isFile?.()) continue;
+    latest.push({ path: latestPath, mtimeMs: stat.mtimeMs });
+  }
+  return latest
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, Math.max(1, Math.min(Number(limit || 120), 1000)))
+    .map((item) => item.path);
+}
+
+async function indexThreadHistoryVaultManifests(manifestPaths, options = {}) {
+  const max = Math.max(1, Math.min(Number(options.limit || 120), 1000));
+  const seenPaths = new Set();
+  const uniquePaths = [];
+  for (const manifestPath of manifestPaths.filter(Boolean)) {
+    const key = path.resolve(String(manifestPath));
+    if (seenPaths.has(key)) continue;
+    seenPaths.add(key);
+    uniquePaths.push(manifestPath);
+    if (uniquePaths.length >= max) break;
+  }
+  if (!uniquePaths.length) return { indexed: 0, refreshed: 0, skipped: 0, errors: [] };
+  await ensureDatabase();
+  const errors = [];
+  let indexed = 0;
+  let refreshed = 0;
+  let skipped = 0;
+  for (const manifestPath of uniquePaths) {
+    try {
+      const before = await readJsonFileOrDefault(manifestPath, null);
+      const manifest = await readAndRefreshVaultManifestForIndex(manifestPath, options);
+      if (!manifest?.threadId) {
+        skipped += 1;
+        continue;
+      }
+      if (JSON.stringify(before?.inferredMetadata || null) !== JSON.stringify(manifest.inferredMetadata || null)) refreshed += 1;
+      const knowledgeItem = buildAutoIngestVaultKnowledgeItem(manifest);
+      upsertKnowledgeItem(knowledgeItem);
+      upsertThreadLineageIndexRecord(buildAutoIngestVaultLineageRecord(manifest));
+      indexed += 1;
+    } catch (error) {
+      errors.push({
+        manifestPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  await saveDatabase();
+  return { indexed, refreshed, skipped, errors };
+}
+
+async function backfillThreadHistoryVaultSearchIndex(options = {}) {
+  const manifestPaths = await listVaultLatestManifestPaths(options.limit || 120);
+  return indexThreadHistoryVaultManifests(manifestPaths, options);
 }
 
 function normalizeGuardianHistorySidecarItem(item, reason = "sqlite_large_store_bypass") {
@@ -989,6 +1195,23 @@ async function compactCodexThread(options = {}) {
     }
   }
   const result = await runCodexGuardian("compact-session", { ...options, threadId });
+  if (!result.ok && options.dryRun !== true && vault && isImageProtectedCompactError(result.error)) {
+    let receipt = buildImageProtectedCompactReceipt({
+      threadId,
+      sourcePath: vault.sourceSessionPath,
+      vault,
+      error: result.error,
+    });
+    receipt = attachVaultEvidenceToCompactReceipt(receipt, vault);
+    receipt = await writeZhixiaCompactReceiptEvidence(threadId, receipt);
+    return {
+      ...result,
+      ok: true,
+      error: null,
+      result: receipt,
+      imageProtected: true,
+    };
+  }
   if (!result.ok || options.dryRun === true) return result;
   const compatibility = validateCompactSessionReceipt(result.result);
   if (!compatibility.ok) {
@@ -1022,12 +1245,28 @@ async function autoIngestCodexThreadHistory(options = {}) {
     maxDirectoryReads: startupBounded ? Math.max(1, Math.floor(Number(options.maxDirectoryReads) || 80)) : options.maxDirectoryReads,
     maxFileStats: startupBounded ? Math.max(1, Math.floor(Number(options.maxFileStats) || Math.max(1, Number(options.limit) || 100))) : options.maxFileStats,
   });
+  const resultManifestPaths = safeArray(result.results)
+    .map((item) => item.vaultManifestPath)
+    .filter(Boolean);
+  const backfillLimit = startupBounded ? Math.max(1, Math.min(Number(options.backfillVaultIndexLimit || 24), 80)) : Math.max(1, Math.min(Number(options.backfillVaultIndexLimit || 240), 1000));
+  const backfillManifestPaths = options.backfillVaultIndex === false ? [] : await listVaultLatestManifestPaths(backfillLimit);
+  const searchIndex = await indexThreadHistoryVaultManifests([...resultManifestPaths, ...backfillManifestPaths], {
+    limit: Math.max(resultManifestPaths.length + backfillManifestPaths.length, 1),
+    maxPrefixBytes: startupBounded ? 128 * 1024 : 512 * 1024,
+    maxPrefixLines: startupBounded ? 80 : 240,
+  }).catch((error) => ({
+    indexed: 0,
+    refreshed: 0,
+    skipped: 0,
+    errors: [{ error: error instanceof Error ? error.message : String(error) }],
+  }));
   return {
     ok: true,
     result: {
       ...result,
+      searchIndex,
       command: "auto-ingest-codex-history",
-      message: `自动历史入库完成：新增/刷新 ${result.preservedCount} 条，已存在 ${result.alreadyPreservedCount} 条，活跃保留但不归档 ${result.activePreservedCount} 条。`,
+      message: `自动历史入库完成：新增/刷新 ${result.preservedCount} 条，已存在 ${result.alreadyPreservedCount} 条，活跃保留但不归档 ${result.activePreservedCount} 条；搜索索引 ${searchIndex.indexed || 0} 条，刷新线索 ${searchIndex.refreshed || 0} 条。`,
     },
   };
 }
@@ -1316,6 +1555,9 @@ async function listLongCodexThreads(options = {}) {
   const incrementalCandidates = allCandidates.filter((file) => file.incrementalAction !== "already_processed");
   const alreadyProcessedCandidates = allCandidates.filter((file) => file.incrementalAction === "already_processed");
   const selected = incrementalCandidates.slice(0, limit);
+  const archiveQueueCandidates = alreadyProcessedCandidates
+    .slice(0, limit)
+    .map((file) => enrichHistoryItemWithThreadFileEvidence(buildReportOnlyLongThreadItem(file, { tokenBudget }), file));
 
   const items = [];
   const warnings = [];
@@ -1332,46 +1574,7 @@ async function listLongCodexThreads(options = {}) {
       }
       item = buildReportOnlyLongThreadItem(file, { tokenBudget });
     }
-    const archiveCandidateEvidence = normalizeArchiveCandidateEvidence({
-      ...item,
-      threadId: file.threadId,
-      archiveThreadRole: file.archiveThreadRole || item.archiveThreadRole,
-      status: file.status_guess || item.status,
-      projectStatus: item.provenance?.restoreState,
-      archiveState: item.status,
-      lastWriteTime: file.last_write_time,
-      sessionBytes: file.size_bytes,
-    });
-    const archiveCandidate = evaluateArchiveCandidate(archiveCandidateEvidence);
-    items.push({
-      ...item,
-      sessionBytes: file.size_bytes,
-      sessionLastWriteTime: file.last_write_time,
-      sessionAgeMinutes: file.ageMinutes,
-      hasZhixiaThreadHistoryVault: file.hasZhixiaThreadHistoryVault === true,
-      hasThreadHistoryVault: file.hasThreadHistoryVault === true,
-      hasMemoryPointer: file.hasMemoryPointer === true,
-      hasZhixiaHistoryPointer: file.hasZhixiaHistoryPointer === true,
-      zhixiaHistoryId: file.zhixiaHistoryId || guardianHistoryKnowledgeId(file.threadId),
-      vaultManifestPath: file.vaultManifestPath || null,
-      vaultSessionPath: file.vaultSessionPath || null,
-      vaultSha256: file.vaultSha256 || null,
-      vaultOriginalSha256: file.vaultOriginalSha256 || null,
-      vaultCopiedSha256: file.vaultCopiedSha256 || null,
-      vaultSourceLastWriteTime: file.vaultSourceLastWriteTime || null,
-      sourceChangedSinceVault: file.sourceChangedSinceVault === true,
-      hasCompactReceipt: file.hasCompactReceipt === true,
-      compactReceiptPath: file.compactReceiptPath || null,
-      compactReceiptSha256: file.compactReceiptSha256 || null,
-      compactReceiptCreatedAt: file.compactReceiptCreatedAt || null,
-      incrementalAction: file.incrementalAction || "needs_vault",
-      needsBodySlimming: file.needsBodySlimming === true,
-      archiveCandidate,
-      archiveThreadRole: file.archiveThreadRole || archiveCandidate.evidence.archiveThreadRole,
-      pressureReason: file.pressureReason || (file.size_bytes >= 50 * 1024 * 1024 ? "very_long_thread" : "long_thread"),
-      shouldStartFreshThread: false,
-      continuationAdvice: "Optimize this old thread into Zhixia's searchable history index. Starting a fresh thread is optional, not the primary flow.",
-    });
+    items.push(enrichHistoryItemWithThreadFileEvidence(item, file));
     for (const warning of context.result?.warnings || []) warnings.push(warning);
   }
 
@@ -1384,6 +1587,7 @@ async function listLongCodexThreads(options = {}) {
       query: `session_bytes>=${minBytes} OR stale_role_threads`,
       mode: "read_only",
       items,
+      archiveQueueItems: archiveQueueCandidates,
       warnings,
       thresholds: {
         minBytes,
@@ -1424,6 +1628,70 @@ async function listLongCodexThreads(options = {}) {
 
 function codexArchiveQueueRoot() {
   return path.join(codexHistoryVaultRoot(), "archive-queues");
+}
+
+function codexArchiveBridgeReceiptRoot() {
+  return path.join(codexHistoryVaultRoot(), "archive-bridge-receipts");
+}
+
+function normalizeArchiveBridgeEntries(value, fallbackStatus) {
+  return safeArray(value)
+    .map((entry) => {
+      if (typeof entry === "string") return { threadId: entry, status: fallbackStatus, reason: fallbackStatus };
+      return {
+        threadId: String(entry?.threadId || entry?.thread_id || entry?.id || "").trim(),
+        status: String(entry?.status || fallbackStatus || "").trim(),
+        reason: compactText(entry?.reason || entry?.error || entry?.message || fallbackStatus || "", 180),
+      };
+    })
+    .filter((entry) => entry.threadId);
+}
+
+function bridgeErrorStatus(entry) {
+  const text = `${entry?.reason || ""} ${entry?.error || ""} ${entry?.message || ""}`;
+  if (/Inactive thread archive did not persist/i.test(text)) return "host_archive_persist_failed";
+  return "host_archive_error";
+}
+
+async function readCodexArchiveBridgeState() {
+  const root = codexArchiveBridgeReceiptRoot();
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const files = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !/\.json$/i.test(entry.name)) continue;
+    const fullPath = path.join(root, entry.name);
+    const stat = await fs.stat(fullPath).catch(() => null);
+    if (stat) files.push({ fullPath, mtimeMs: stat.mtimeMs });
+  }
+  files.sort((a, b) => a.mtimeMs - b.mtimeMs);
+  const state = new Map();
+  for (const file of files.slice(-100)) {
+    let receipt = null;
+    try {
+      receipt = JSON.parse(await fs.readFile(file.fullPath, "utf8"));
+    } catch {
+      continue;
+    }
+    const seenAt = receipt.createdAt || receipt.generatedAt || new Date(file.mtimeMs).toISOString();
+    const categories = [
+      ...normalizeArchiveBridgeEntries(receipt.archived, "host_archive_completed"),
+      ...normalizeArchiveBridgeEntries(receipt.protected, "host_archive_protected"),
+      ...normalizeArchiveBridgeEntries(receipt.not_found || receipt.notFound, "host_thread_not_found"),
+      ...normalizeArchiveBridgeEntries(receipt.errors || receipt.error, "host_archive_error").map((entry) => ({
+        ...entry,
+        status: bridgeErrorStatus(entry),
+      })),
+    ];
+    for (const item of categories) {
+      state.set(item.threadId, {
+        status: item.status,
+        reason: item.reason || item.status,
+        receiptPath: file.fullPath,
+        seenAt,
+      });
+    }
+  }
+  return state;
 }
 
 function compactReceiptEvidence(receipt = {}) {
@@ -1476,6 +1744,7 @@ async function generateCodexArchiveQueue(options = {}) {
   const rawItems = safeArray(options.items).slice(0, 1000);
   const compactReceipts = options.compactReceipts && typeof options.compactReceipts === "object" ? options.compactReceipts : {};
   const skipThreadIds = new Set(safeArray(options.skipThreadIds).map((id) => String(id || "").trim()).filter(Boolean));
+  const bridgeState = await readCodexArchiveBridgeState();
   const generatedAt = new Date().toISOString();
   const queueId = `codex-archive-queue-${generatedAt.replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
   const ready = [];
@@ -1499,6 +1768,18 @@ async function generateCodexArchiveQueue(options = {}) {
         title: compactText(item.title || threadId, 120),
         blockers: ["explicit_skip_thread_id"],
         reason: "该线程在当前执行中被显式保护，不进入归档队列。",
+      });
+      continue;
+    }
+    const hostArchiveState = bridgeState.get(threadId);
+    if (hostArchiveState && hostArchiveState.status !== "host_archive_error") {
+      skipped.push({
+        threadId,
+        title: compactText(item.title || threadId, 120),
+        blockers: [hostArchiveState.status],
+        reasons: [],
+        reason: hostArchiveState.reason || hostArchiveState.status,
+        hostArchiveState,
       });
       continue;
     }
@@ -1642,6 +1923,60 @@ function buildReportOnlyLongThreadItem(file, options = {}) {
       projectRoot: file.project_root || "unknown",
       metadataOnlyFallback: true,
     },
+  };
+}
+
+function enrichHistoryItemWithThreadFileEvidence(item, file) {
+  const archiveCandidateEvidence = normalizeArchiveCandidateEvidence({
+    ...item,
+    threadId: file.threadId,
+    archiveThreadRole: file.archiveThreadRole || item.archiveThreadRole,
+    status: file.status_guess || item.status,
+    projectStatus: item.provenance?.restoreState,
+    archiveState: item.status,
+    lastWriteTime: file.last_write_time,
+    sessionBytes: file.size_bytes,
+    hasThreadHistoryVault: file.hasThreadHistoryVault,
+    hasZhixiaThreadHistoryVault: file.hasZhixiaThreadHistoryVault,
+    hasMemoryPointer: file.hasMemoryPointer,
+    hasZhixiaHistoryPointer: file.hasZhixiaHistoryPointer,
+    vaultManifestPath: file.vaultManifestPath,
+    vaultSessionPath: file.vaultSessionPath,
+    vaultSha256: file.vaultSha256,
+    vaultOriginalSha256: file.vaultOriginalSha256,
+    vaultCopiedSha256: file.vaultCopiedSha256,
+    compactReceiptPath: file.compactReceiptPath,
+    compactReceiptSha256: file.compactReceiptSha256,
+  });
+  const archiveCandidate = evaluateArchiveCandidate(archiveCandidateEvidence);
+  return {
+    ...item,
+    sessionBytes: file.size_bytes,
+    sessionLastWriteTime: file.last_write_time,
+    sessionAgeMinutes: file.ageMinutes,
+    hasZhixiaThreadHistoryVault: file.hasZhixiaThreadHistoryVault === true,
+    hasThreadHistoryVault: file.hasThreadHistoryVault === true,
+    hasMemoryPointer: file.hasMemoryPointer === true,
+    hasZhixiaHistoryPointer: file.hasZhixiaHistoryPointer === true,
+    zhixiaHistoryId: file.zhixiaHistoryId || guardianHistoryKnowledgeId(file.threadId),
+    vaultManifestPath: file.vaultManifestPath || null,
+    vaultSessionPath: file.vaultSessionPath || null,
+    vaultSha256: file.vaultSha256 || null,
+    vaultOriginalSha256: file.vaultOriginalSha256 || null,
+    vaultCopiedSha256: file.vaultCopiedSha256 || null,
+    vaultSourceLastWriteTime: file.vaultSourceLastWriteTime || null,
+    sourceChangedSinceVault: file.sourceChangedSinceVault === true,
+    hasCompactReceipt: file.hasCompactReceipt === true,
+    compactReceiptPath: file.compactReceiptPath || null,
+    compactReceiptSha256: file.compactReceiptSha256 || null,
+    compactReceiptCreatedAt: file.compactReceiptCreatedAt || null,
+    incrementalAction: file.incrementalAction || "needs_vault",
+    needsBodySlimming: file.needsBodySlimming === true,
+    archiveCandidate,
+    archiveThreadRole: file.archiveThreadRole || archiveCandidate.evidence.archiveThreadRole,
+    pressureReason: file.pressureReason || (file.size_bytes >= 50 * 1024 * 1024 ? "very_long_thread" : "long_thread"),
+    shouldStartFreshThread: false,
+    continuationAdvice: "Optimize this old thread into Zhixia's searchable history index. Starting a fresh thread is optional, not the primary flow.",
   };
 }
 
@@ -1885,6 +2220,47 @@ function migrateSchema() {
   db.run("CREATE INDEX IF NOT EXISTS idx_knowledge_document ON knowledge_items(documentId);");
   db.run("CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge_items(category);");
   db.run("CREATE INDEX IF NOT EXISTS idx_knowledge_status ON knowledge_items(status);");
+  db.run(`
+    CREATE TABLE IF NOT EXISTS memory_graph_nodes (
+      id TEXT PRIMARY KEY,
+      projectPath TEXT,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT NOT NULL DEFAULT '',
+      tagsJson TEXT NOT NULL DEFAULT '[]',
+      sourceTable TEXT NOT NULL,
+      sourceId TEXT NOT NULL,
+      threadId TEXT,
+      sourceRefsJson TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'ready',
+      freshness TEXT NOT NULL DEFAULT 'review',
+      sourceSignature TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+  `);
+  db.run("CREATE INDEX IF NOT EXISTS idx_memory_graph_project ON memory_graph_nodes(projectPath);");
+  db.run("CREATE INDEX IF NOT EXISTS idx_memory_graph_kind ON memory_graph_nodes(kind);");
+  db.run("CREATE INDEX IF NOT EXISTS idx_memory_graph_source ON memory_graph_nodes(sourceTable, sourceId);");
+  db.run("CREATE INDEX IF NOT EXISTS idx_memory_graph_updated ON memory_graph_nodes(updatedAt);");
+  db.run(`
+    CREATE TABLE IF NOT EXISTS memory_graph_edges (
+      id TEXT PRIMARY KEY,
+      projectPath TEXT,
+      fromNodeId TEXT NOT NULL,
+      toNodeId TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      weight REAL NOT NULL DEFAULT 1,
+      reason TEXT NOT NULL DEFAULT '',
+      sourceSignature TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+  `);
+  db.run("CREATE INDEX IF NOT EXISTS idx_memory_graph_edges_project ON memory_graph_edges(projectPath);");
+  db.run("CREATE INDEX IF NOT EXISTS idx_memory_graph_edges_from ON memory_graph_edges(fromNodeId);");
+  db.run("CREATE INDEX IF NOT EXISTS idx_memory_graph_edges_to ON memory_graph_edges(toNodeId);");
+  db.run("CREATE INDEX IF NOT EXISTS idx_memory_graph_edges_kind ON memory_graph_edges(kind);");
   db.run(`
     CREATE TABLE IF NOT EXISTS zhixia_skills (
       id TEXT PRIMARY KEY,
@@ -5298,6 +5674,14 @@ async function shouldRunStartupAutoIngest() {
   return !Number.isFinite(lastRunAt) || Date.now() - lastRunAt >= STARTUP_AUTO_INGEST_INTERVAL_MS;
 }
 
+async function shouldRunStartupVaultSearchIndex() {
+  const state = await readPerformanceState();
+  const lastRunAt = state.startupVaultSearchIndex?.lastRunAt ? Date.parse(state.startupVaultSearchIndex.lastRunAt) : 0;
+  const lastOptions = JSON.stringify(state.startupVaultSearchIndex?.options || {});
+  if (lastOptions !== JSON.stringify(STARTUP_VAULT_SEARCH_INDEX_OPTIONS)) return true;
+  return !Number.isFinite(lastRunAt) || Date.now() - lastRunAt >= STARTUP_AUTO_INGEST_INTERVAL_MS;
+}
+
 function scheduleStartupAutoIngest() {
   if (startupAutoIngestTimer) clearTimeout(startupAutoIngestTimer);
   startupAutoIngestTimer = setTimeout(() => {
@@ -5308,7 +5692,56 @@ function scheduleStartupAutoIngest() {
   }, STARTUP_AUTO_INGEST_DELAY_MS);
 }
 
+async function runStartupVaultSearchIndexIfDue() {
+  if (!(await shouldRunStartupVaultSearchIndex())) {
+    await writePerformanceState({
+      startupVaultSearchIndex: {
+        ...(await readPerformanceState()).startupVaultSearchIndex,
+        skippedAt: new Date().toISOString(),
+        skippedReason: "daily_cadence",
+        options: STARTUP_VAULT_SEARCH_INDEX_OPTIONS,
+      },
+    });
+    return { skipped: true, reason: "daily_cadence" };
+  }
+  await writePerformanceState({
+    startupVaultSearchIndex: {
+      startedAt: new Date().toISOString(),
+      status: "running",
+      options: STARTUP_VAULT_SEARCH_INDEX_OPTIONS,
+    },
+  });
+  try {
+    const result = await backfillThreadHistoryVaultSearchIndex(STARTUP_VAULT_SEARCH_INDEX_OPTIONS);
+    await writePerformanceState({
+      startupVaultSearchIndex: {
+        lastRunAt: new Date().toISOString(),
+        status: "ok",
+        options: STARTUP_VAULT_SEARCH_INDEX_OPTIONS,
+        summary: {
+          indexed: result.indexed || 0,
+          refreshed: result.refreshed || 0,
+          skipped: result.skipped || 0,
+          errors: Array.isArray(result.errors) ? result.errors.length : 0,
+        },
+      },
+    });
+    return result;
+  } catch (error) {
+    await writePerformanceState({
+      startupVaultSearchIndex: {
+        lastRunAt: new Date().toISOString(),
+        status: "failed",
+        options: STARTUP_VAULT_SEARCH_INDEX_OPTIONS,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    throw error;
+  }
+}
+
 async function runDeferredStartupAutoIngest() {
+  const startupVaultSearchIndex = await runStartupVaultSearchIndexIfDue();
   if (!(await shouldRunStartupAutoIngest())) {
     await writePerformanceState({
       startupAutoIngest: {
@@ -5318,7 +5751,7 @@ async function runDeferredStartupAutoIngest() {
         options: STARTUP_AUTO_INGEST_OPTIONS,
       },
     });
-    return { skipped: true, reason: "daily_cadence" };
+    return { skipped: true, reason: "daily_cadence", startupVaultSearchIndex };
   }
   await writePerformanceState({
     startupAutoIngest: {
@@ -5329,16 +5762,18 @@ async function runDeferredStartupAutoIngest() {
   });
   try {
     const result = await autoIngestCodexThreadHistory(STARTUP_AUTO_INGEST_OPTIONS);
+    const payload = result?.result || {};
     await writePerformanceState({
       startupAutoIngest: {
         lastRunAt: new Date().toISOString(),
         status: "ok",
         options: STARTUP_AUTO_INGEST_OPTIONS,
         summary: {
-          preserved: result?.preserved || 0,
-          alreadyPreserved: result?.alreadyPreserved || 0,
-          skippedActive: result?.skippedActive || 0,
-          errors: Array.isArray(result?.errors) ? result.errors.length : 0,
+          preserved: payload.preservedCount || 0,
+          alreadyPreserved: payload.alreadyPreservedCount || 0,
+          skippedActive: payload.activePreservedCount || 0,
+          errors: Array.isArray(payload.errors) ? payload.errors.length : 0,
+          searchIndex: payload.searchIndex || null,
         },
       },
     });
@@ -6875,7 +7310,7 @@ function listThreadLineageIndexRecords(options = {}) {
   );
   return (result[0]?.values || [])
     .map(rowToThreadLineageIndexRecord)
-    .filter((record) => !options.projectPath || safeArray(record.workspacePaths).includes(options.projectPath));
+    .filter((record) => !options.projectPath || threadLineageMatchesProjectAlias(record, options.projectPath));
 }
 
 function refreshThreadLineageIndex(projectRecords = buildProjectRecords()) {
@@ -6893,13 +7328,547 @@ function refreshThreadLineageIndex(projectRecords = buildProjectRecords()) {
     Array.from(activeIds).forEach((id, index) => {
       params[`$id${index}`] = id;
     });
-    db.run(`DELETE FROM thread_lineage_index WHERE id NOT IN (${placeholders.join(", ")})`, params);
+    db.run(
+      `DELETE FROM thread_lineage_index
+       WHERE id NOT IN (${placeholders.join(", ")})
+         AND sourceRefsJson NOT LIKE '%thread_history_vault%'
+         AND sourceRefsJson NOT LIKE '%codex-history-vault%'`,
+      params,
+    );
   }
   return upserted;
 }
 
 function buildThreadLineageIndexCacheState() {
   return db.exec("SELECT COUNT(*), MAX(updatedAt) FROM thread_lineage_index")[0]?.values?.[0] || [0, ""];
+}
+
+function memoryGraphNodeId(kind, sourceId) {
+  return stableShortId("memory-node", `${kind}:${sourceId}`);
+}
+
+function memoryGraphEdgeId(kind, fromNodeId, toNodeId) {
+  const ordered = [fromNodeId, toNodeId].sort();
+  return stableShortId("memory-edge", `${kind}:${ordered[0]}:${ordered[1]}`);
+}
+
+function sourceRefForPath(kind, sourcePath, title = "") {
+  return sourcePath ? [{ kind, path: sourcePath, title, readByDefault: true }] : [];
+}
+
+function sourceSignatureForMemoryGraph(payload) {
+  return hashText(JSON.stringify(payload));
+}
+
+function upsertMemoryGraphNode(node) {
+  const now = new Date().toISOString();
+  const normalized = {
+    ...node,
+    id: node.id || memoryGraphNodeId(node.kind, node.sourceId || node.title),
+    projectPath: node.projectPath || null,
+    kind: compactText(node.kind || "memory", 80),
+    title: compactText(node.title || node.id || "Memory node", 180),
+    summary: compactText(node.summary || "", 520),
+    tags: uniqCompact(node.tags || [], 16),
+    sourceTable: compactText(node.sourceTable || "derived", 80),
+    sourceId: compactText(node.sourceId || node.id || node.title, 220),
+    threadId: node.threadId || null,
+    sourceRefs: safeArray(node.sourceRefs).slice(0, 8),
+    status: compactText(node.status || "ready", 40),
+    freshness: compactText(node.freshness || "review", 40),
+    createdAt: node.createdAt || now,
+    updatedAt: node.updatedAt || now,
+  };
+  const signature = sourceSignatureForMemoryGraph({
+    projectPath: normalized.projectPath,
+    kind: normalized.kind,
+    title: normalized.title,
+    summary: normalized.summary,
+    tags: normalized.tags,
+    sourceTable: normalized.sourceTable,
+    sourceId: normalized.sourceId,
+    threadId: normalized.threadId,
+    sourceRefs: normalized.sourceRefs,
+    status: normalized.status,
+    freshness: normalized.freshness,
+  });
+  db.run(
+    `INSERT INTO memory_graph_nodes (
+      id, projectPath, kind, title, summary, tagsJson, sourceTable, sourceId, threadId,
+      sourceRefsJson, status, freshness, sourceSignature, createdAt, updatedAt
+    ) VALUES (
+      $id, $projectPath, $kind, $title, $summary, $tagsJson, $sourceTable, $sourceId, $threadId,
+      $sourceRefsJson, $status, $freshness, $sourceSignature, $createdAt, $updatedAt
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      projectPath = $projectPath,
+      kind = $kind,
+      title = $title,
+      summary = $summary,
+      tagsJson = $tagsJson,
+      sourceTable = $sourceTable,
+      sourceId = $sourceId,
+      threadId = $threadId,
+      sourceRefsJson = $sourceRefsJson,
+      status = $status,
+      freshness = $freshness,
+      sourceSignature = $sourceSignature,
+      updatedAt = $updatedAt`,
+    {
+      $id: normalized.id,
+      $projectPath: normalized.projectPath,
+      $kind: normalized.kind,
+      $title: normalized.title,
+      $summary: normalized.summary,
+      $tagsJson: JSON.stringify(normalized.tags),
+      $sourceTable: normalized.sourceTable,
+      $sourceId: normalized.sourceId,
+      $threadId: normalized.threadId,
+      $sourceRefsJson: JSON.stringify(normalized.sourceRefs),
+      $status: normalized.status,
+      $freshness: normalized.freshness,
+      $sourceSignature: signature,
+      $createdAt: normalized.createdAt,
+      $updatedAt: normalized.updatedAt,
+    },
+  );
+  return { ...normalized, sourceSignature: signature };
+}
+
+function upsertMemoryGraphEdge(edge) {
+  if (!edge?.fromNodeId || !edge?.toNodeId || edge.fromNodeId === edge.toNodeId) return null;
+  const now = new Date().toISOString();
+  const fromNodeId = String(edge.fromNodeId);
+  const toNodeId = String(edge.toNodeId);
+  const normalized = {
+    id: edge.id || memoryGraphEdgeId(edge.kind || "related", fromNodeId, toNodeId),
+    projectPath: edge.projectPath || null,
+    fromNodeId,
+    toNodeId,
+    kind: compactText(edge.kind || "related", 80),
+    weight: Math.max(0.05, Math.min(Number(edge.weight || 1), 10)),
+    reason: compactText(edge.reason || "", 180),
+    createdAt: edge.createdAt || now,
+    updatedAt: edge.updatedAt || now,
+  };
+  const signature = sourceSignatureForMemoryGraph({
+    projectPath: normalized.projectPath,
+    fromNodeId: normalized.fromNodeId,
+    toNodeId: normalized.toNodeId,
+    kind: normalized.kind,
+    weight: normalized.weight,
+    reason: normalized.reason,
+  });
+  db.run(
+    `INSERT INTO memory_graph_edges (
+      id, projectPath, fromNodeId, toNodeId, kind, weight, reason, sourceSignature, createdAt, updatedAt
+    ) VALUES (
+      $id, $projectPath, $fromNodeId, $toNodeId, $kind, $weight, $reason, $sourceSignature, $createdAt, $updatedAt
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      projectPath = $projectPath,
+      fromNodeId = $fromNodeId,
+      toNodeId = $toNodeId,
+      kind = $kind,
+      weight = $weight,
+      reason = $reason,
+      sourceSignature = $sourceSignature,
+      updatedAt = $updatedAt`,
+    {
+      $id: normalized.id,
+      $projectPath: normalized.projectPath,
+      $fromNodeId: normalized.fromNodeId,
+      $toNodeId: normalized.toNodeId,
+      $kind: normalized.kind,
+      $weight: normalized.weight,
+      $reason: normalized.reason,
+      $sourceSignature: signature,
+      $createdAt: normalized.createdAt,
+      $updatedAt: normalized.updatedAt,
+    },
+  );
+  return { ...normalized, sourceSignature: signature };
+}
+
+function projectMemoryGraphNode(projectPath) {
+  if (!projectPath) return null;
+  return upsertMemoryGraphNode({
+    id: memoryGraphNodeId("project", projectPath),
+    projectPath,
+    kind: "project",
+    title: projectNameFromPath(projectPath),
+    summary: `项目记忆根节点：${projectPath}`,
+    tags: ["project"],
+    sourceTable: "derived",
+    sourceId: projectPath,
+    status: "ready",
+    freshness: "fresh",
+    sourceRefs: sourceRefForPath("project_path", projectPath, projectNameFromPath(projectPath)),
+  });
+}
+
+function threadMemoryGraphNode(threadId, projectPath, title = "") {
+  if (!threadId) return null;
+  return upsertMemoryGraphNode({
+    id: memoryGraphNodeId("thread", threadId),
+    projectPath,
+    kind: "thread",
+    title: title || `Thread ${String(threadId).slice(0, 8)}`,
+    summary: `线程记忆根节点：${threadId}`,
+    tags: ["thread", "ceo-flow"],
+    sourceTable: "derived",
+    sourceId: threadId,
+    threadId,
+    status: "ready",
+    freshness: "review",
+  });
+}
+
+function knowledgeItemToMemoryGraphNode(item) {
+  const threadId = String(item.id || "").startsWith("codex-history:") ? String(item.id).replace(/^codex-history:/, "") : null;
+  return upsertMemoryGraphNode({
+    id: memoryGraphNodeId("knowledge_item", item.id),
+    projectPath: item.projectPath || null,
+    kind: "knowledge_item",
+    title: item.title,
+    summary: item.summary || item.body,
+    tags: item.tags,
+    sourceTable: "knowledge_items",
+    sourceId: item.id,
+    threadId,
+    sourceRefs: sourceRefForPath(item.provider === "codex_guardian" ? "thread_history_vault" : "knowledge_item", item.sourcePath, item.title),
+    status: item.status,
+    freshness: item.status === "ready" ? "fresh" : "review",
+    updatedAt: item.updatedAt,
+  });
+}
+
+function experienceCardToMemoryGraphNode(card) {
+  return upsertMemoryGraphNode({
+    id: memoryGraphNodeId("experience_card", card.id),
+    projectPath: card.projectPath || null,
+    kind: "experience_card",
+    title: card.title,
+    summary: card.summary || card.body,
+    tags: card.tags,
+    sourceTable: "experience_cards",
+    sourceId: card.id,
+    sourceRefs: sourceRefForPath(card.sourceType || "experience_card", card.sourcePath, card.title),
+    status: card.status,
+    freshness: card.status === "accepted" || card.status === "curated" ? "fresh" : "review",
+    updatedAt: card.updatedAt,
+  });
+}
+
+function lineageRecordToMemoryGraphNode(record) {
+  return upsertMemoryGraphNode({
+    id: memoryGraphNodeId("thread_lineage_index", record.id),
+    projectPath: safeArray(record.workspacePaths)[0] || null,
+    kind: "thread_lineage_index",
+    title: record.title,
+    summary: record.lastSummary || record.nextAction,
+    tags: ["thread-lineage", "ceo-flow", ...(safeArray(record.projectIds))],
+    sourceTable: "thread_lineage_index",
+    sourceId: record.id,
+    threadId: record.ceoThreadId,
+    sourceRefs: record.sourceRefs,
+    status: record.archiveState || "review",
+    freshness: record.archiveState === "hot" ? "fresh" : "review",
+    updatedAt: record.updatedAt || record.lastActivityAt,
+  });
+}
+
+function syncMemoryGraphFromSources(options = {}) {
+  const projectPath = options.projectPath || null;
+  const threadId = options.threadId ? compactText(options.threadId, 140) : "";
+  const limit = Math.max(12, Math.min(Number(options.limit || 160), 500));
+  const upsertedNodeIds = new Set();
+  const upsertedEdgeIds = new Set();
+  const projects = new Map();
+  function connectToProject(node) {
+    if (!node?.projectPath) return;
+    const projectNode = projects.get(node.projectPath) || projectMemoryGraphNode(node.projectPath);
+    if (projectNode) {
+      projects.set(node.projectPath, projectNode);
+      const edge = upsertMemoryGraphEdge({
+        projectPath: node.projectPath,
+        fromNodeId: projectNode.id,
+        toNodeId: node.id,
+        kind: "project_contains",
+        weight: 2,
+        reason: "same_project",
+      });
+      if (edge) upsertedEdgeIds.add(edge.id);
+    }
+  }
+  function connectToThread(node) {
+    if (!node?.threadId) return;
+    const threadNode = threadMemoryGraphNode(node.threadId, node.projectPath, node.title);
+    if (threadNode) {
+      upsertedNodeIds.add(threadNode.id);
+      const edge = upsertMemoryGraphEdge({
+        projectPath: node.projectPath || null,
+        fromNodeId: threadNode.id,
+        toNodeId: node.id,
+        kind: "thread_evidence",
+        weight: 2.5,
+        reason: "same_thread",
+      });
+      if (edge) upsertedEdgeIds.add(edge.id);
+    }
+  }
+
+  for (const item of listKnowledgeItemsForMemoryGraph(projectPath, { limit, threadId })) {
+    const node = knowledgeItemToMemoryGraphNode(item);
+    upsertedNodeIds.add(node.id);
+    connectToProject(node);
+    connectToThread(node);
+  }
+  for (const card of listExperienceCardsForMemoryGraph(projectPath, { limit: Math.min(limit, 200), includeGlobal: true })) {
+    const node = experienceCardToMemoryGraphNode(card);
+    upsertedNodeIds.add(node.id);
+    connectToProject(node);
+  }
+  const lineageRecordsById = new Map();
+  for (const record of listThreadLineageIndexRecords({ projectPath: projectPath || undefined, limit: Math.min(limit, 240) })) {
+    lineageRecordsById.set(record.id, record);
+  }
+  if (threadId) {
+    for (const record of listThreadLineageIndexRecords({ parentCeoThreadId: threadId, limit: 3 })) {
+      lineageRecordsById.set(record.id, record);
+    }
+  }
+  for (const record of lineageRecordsById.values()) {
+    const node = lineageRecordToMemoryGraphNode(record);
+    upsertedNodeIds.add(node.id);
+    connectToProject(node);
+    connectToThread(node);
+    for (const childId of safeArray(record.relationships?.childThreadIds).slice(0, 20)) {
+      const childNode = threadMemoryGraphNode(childId, node.projectPath, `Child thread ${String(childId).slice(0, 8)}`);
+      if (!childNode) continue;
+      upsertedNodeIds.add(childNode.id);
+      const edge = upsertMemoryGraphEdge({
+        projectPath: node.projectPath || null,
+        fromNodeId: node.id,
+        toNodeId: childNode.id,
+        kind: "lineage_child",
+        weight: 1.8,
+        reason: "thread_lineage_child",
+      });
+      if (edge) upsertedEdgeIds.add(edge.id);
+    }
+    for (const workerId of safeArray(record.relationships?.workerThreadIds).slice(0, 20)) {
+      const workerNode = threadMemoryGraphNode(workerId, node.projectPath, `Worker thread ${String(workerId).slice(0, 8)}`);
+      if (!workerNode) continue;
+      upsertedNodeIds.add(workerNode.id);
+      const edge = upsertMemoryGraphEdge({
+        projectPath: node.projectPath || null,
+        fromNodeId: node.id,
+        toNodeId: workerNode.id,
+        kind: "lineage_worker",
+        weight: 1.6,
+        reason: "thread_lineage_worker",
+      });
+      if (edge) upsertedEdgeIds.add(edge.id);
+    }
+  }
+  return {
+    nodes: upsertedNodeIds.size,
+    edges: upsertedEdgeIds.size,
+    projectCount: projects.size,
+    projectPath,
+    limit,
+  };
+}
+
+function projectAliasLike(projectPath) {
+  const base = projectPath ? projectNameFromPath(projectPath) : "";
+  return base ? `%${base}%` : null;
+}
+
+function threadLineageMatchesProjectAlias(record, projectPath) {
+  if (!projectPath) return true;
+  const normalizedProjectPath = String(projectPath).toLowerCase();
+  const projectAlias = projectNameFromPath(projectPath).toLowerCase();
+  return safeArray(record.workspacePaths).some((workspacePath) => {
+    const normalizedWorkspacePath = String(workspacePath || "").toLowerCase();
+    if (normalizedWorkspacePath === normalizedProjectPath) return true;
+    return Boolean(projectAlias && projectNameFromPath(workspacePath).toLowerCase() === projectAlias);
+  });
+}
+
+function listKnowledgeItemsForMemoryGraph(projectPath = null, options = {}) {
+  if (!projectPath && !options.threadId) return listKnowledgeItems(null, options);
+  const limit = Math.max(1, Math.min(Number(options.limit || 240), 600));
+  const threadId = options.threadId ? compactText(options.threadId, 140) : "";
+  const filters = [];
+  const params = {
+    $projectPath: projectPath,
+    $projectLike: projectAliasLike(projectPath),
+  };
+  if (projectPath) filters.push("(projectPath = $projectPath OR projectPath LIKE $projectLike)");
+  if (threadId) {
+    params.$threadHistoryId = `codex-history:${threadId}`;
+    filters.push("id = $threadHistoryId");
+  }
+  const orderPrefix = threadId ? "CASE WHEN id = $threadHistoryId THEN 0 ELSE 1 END, " : "";
+  const result = db.exec(
+    `SELECT id, projectPath, documentId, sourcePath, title, summary, body, category, tagsJson, sourceHash, provider, model, status, errorMessage, createdAt, updatedAt
+     FROM knowledge_items
+     ${filters.length ? `WHERE ${filters.join(" OR ")}` : ""}
+     ORDER BY ${orderPrefix}updatedAt DESC
+     LIMIT ${limit}`,
+    params,
+  );
+  return (result[0]?.values || []).map(rowToKnowledgeItem);
+}
+
+function listExperienceCardsForMemoryGraph(projectPath = null, options = {}) {
+  if (!projectPath) return listExperienceCards(null, options);
+  const limit = Math.max(1, Math.min(Number(options.limit || 120), 500));
+  const includeGlobal = options.includeGlobal !== false;
+  const params = {
+    $projectPath: projectPath,
+    $projectLike: projectAliasLike(projectPath),
+  };
+  const where = includeGlobal
+    ? "WHERE projectPath = $projectPath OR projectPath LIKE $projectLike OR projectPath IS NULL OR projectPath = ''"
+    : "WHERE projectPath = $projectPath OR projectPath LIKE $projectLike";
+  const result = db.exec(
+    `SELECT id, projectPath, scope, sourceType, title, summary, body, tagsJson, sourcePath, sourceHash, retrievalMetaJson, status, createdAt, updatedAt
+     FROM experience_cards
+     ${where}
+     ORDER BY updatedAt DESC
+     LIMIT ${limit}`,
+    params,
+  );
+  const cards = (result[0]?.values || []).map(rowToExperienceCard);
+  const groups = new Map();
+  for (const card of cards) {
+    const key = card.duplicateGroupKey || buildExperienceCardDuplicateKey(card);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(card);
+  }
+  return cards.map((card) => enrichExperienceCardGovernance(card, groups.get(card.duplicateGroupKey) || [card]));
+}
+
+function rowToMemoryGraphNode(row) {
+  return {
+    id: row[0],
+    projectPath: row[1] || null,
+    kind: row[2],
+    title: row[3],
+    label: row[3],
+    summary: row[4] || "",
+    tags: safeJsonParseValue(row[5], []),
+    sourceTable: row[6],
+    sourceId: row[7],
+    threadId: row[8] || null,
+    sourceRefs: safeJsonParseValue(row[9], []),
+    status: row[10],
+    freshness: row[11],
+    sourceSignature: row[12],
+    createdAt: row[13],
+    updatedAt: row[14],
+  };
+}
+
+function rowToMemoryGraphEdge(row) {
+  return {
+    id: row[0],
+    projectPath: row[1] || null,
+    from: row[2],
+    fromNodeId: row[2],
+    to: row[3],
+    toNodeId: row[3],
+    kind: row[4],
+    weight: Number(row[5] || 1),
+    reason: row[6] || "",
+    sourceSignature: row[7],
+    createdAt: row[8],
+    updatedAt: row[9],
+  };
+}
+
+function tokenizeMemoryGraphSqlQuery(value) {
+  const text = cleanText(String(value || "")).toLowerCase();
+  return [
+    ...(text.match(/[a-z0-9][a-z0-9._-]{1,}/g) || []),
+    ...(text.match(/[\u4e00-\u9fff]{2,12}/g) || []),
+  ].filter((token, index, array) => token && array.indexOf(token) === index).slice(0, 12);
+}
+
+function listMemoryGraphSeed(options = {}) {
+  const projectPath = options.projectPath || null;
+  const limit = Math.max(20, Math.min(Number(options.limit || 180), 500));
+  const tokens = tokenizeMemoryGraphSqlQuery([options.taskGoal || options.query || "", projectPath || "", options.threadId || ""].join(" "));
+  const params = {};
+  const filters = [];
+  if (projectPath) {
+    params.$projectPath = projectPath;
+    params.$projectLike = projectAliasLike(projectPath);
+    filters.push("(projectPath = $projectPath OR projectPath LIKE $projectLike OR projectPath IS NULL OR projectPath = '')");
+  }
+  tokens.slice(0, 8).forEach((token, index) => {
+    params[`$token${index}`] = `%${token}%`;
+  });
+  const tokenFilters = tokens.slice(0, 8).map((_, index) =>
+    `(title LIKE $token${index} OR summary LIKE $token${index} OR tagsJson LIKE $token${index} OR threadId LIKE $token${index} OR projectPath LIKE $token${index})`,
+  );
+  const where = [...filters, ...(tokenFilters.length ? [`(${tokenFilters.join(" OR ")})`] : [])].join(" AND ");
+  const nodeRows = db.exec(
+    `SELECT id, projectPath, kind, title, summary, tagsJson, sourceTable, sourceId, threadId,
+            sourceRefsJson, status, freshness, sourceSignature, createdAt, updatedAt
+     FROM memory_graph_nodes
+     ${where ? `WHERE ${where}` : ""}
+     ORDER BY updatedAt DESC
+     LIMIT ${limit}`,
+    params,
+  );
+  const nodes = (nodeRows[0]?.values || []).map(rowToMemoryGraphNode);
+  const nodeIds = nodes.map((node) => node.id);
+  if (!nodeIds.length) return { nodes: [], edges: [] };
+  const placeholders = nodeIds.map((_, index) => `$node${index}`);
+  const edgeParams = {};
+  nodeIds.forEach((id, index) => {
+    edgeParams[`$node${index}`] = id;
+  });
+  const edgeRows = db.exec(
+    `SELECT id, projectPath, fromNodeId, toNodeId, kind, weight, reason, sourceSignature, createdAt, updatedAt
+     FROM memory_graph_edges
+     WHERE fromNodeId IN (${placeholders.join(", ")}) OR toNodeId IN (${placeholders.join(", ")})
+     ORDER BY weight DESC, updatedAt DESC
+     LIMIT ${Math.max(40, Math.min(limit * 3, 800))}`,
+    edgeParams,
+  );
+  return { nodes, edges: (edgeRows[0]?.values || []).map(rowToMemoryGraphEdge) };
+}
+
+function activateMemoryRuntimeGraph(options = {}) {
+  const sync = syncMemoryGraphFromSources({
+    projectPath: options.projectPath || null,
+    threadId: options.threadId || null,
+    limit: options.seedLimit || 220,
+  });
+  const seed = listMemoryGraphSeed({
+    ...options,
+    limit: options.seedLimit || 220,
+  });
+  const graph = buildActivatedMemoryGraph(seed, {
+    ...options,
+    taskGoal: options.taskGoal || options.query || "",
+    maxNodes: options.maxNodes || options.maxResults || 32,
+  });
+  return {
+    ...graph,
+    sync,
+  };
+}
+
+function buildMemoryGraphCacheState() {
+  const nodeState = db.exec("SELECT COUNT(*), MAX(updatedAt) FROM memory_graph_nodes")[0]?.values?.[0] || [0, ""];
+  const edgeState = db.exec("SELECT COUNT(*), MAX(updatedAt) FROM memory_graph_edges")[0]?.values?.[0] || [0, ""];
+  return { nodes: nodeState, edges: edgeState };
 }
 
 function makeAgentRetrieveThreadLineageIndex(record, options) {
@@ -7416,25 +8385,397 @@ function retrieveAgentContext(options = {}) {
 
 function retrieveMemoryRuntimeContext(options = {}) {
   const taskGoal = options.taskGoal || options.task_goal || options.query || "";
+  const routerPlan = buildMemoryRouterPlan({
+    ...options,
+    taskGoal,
+  });
+  if (routerPlan.retrieval.includeKinds.length === 0) {
+    return buildRuntimeContextPacket({
+      query: taskGoal,
+      queryType: routerPlan.queryType || options.queryType || "task_dispatch",
+      projectPath: options.projectPath || null,
+      parentCeoThreadId: options.parentCeoThreadId || options.ceoThreadId || null,
+      tokenBudget: routerPlan.budgets.tokenBudget,
+      tokenEstimate: 0,
+      generatedAt: new Date().toISOString(),
+      warnings: ["memory_router_no_allowed_runtime_kinds_no_retrieval"],
+      items: [],
+    }, {
+      ...options,
+      taskGoal,
+      routerPlan,
+      allowedKinds: routerPlan.retrieval.includeKinds,
+      retrievalDurationMs: 0,
+    });
+  }
+  const retrievalStartedAt = Date.now();
   const retrieval = retrieveAgentContext({
     ...options,
     query: taskGoal,
-    queryType: options.queryType || "task_dispatch",
-    includeKinds: options.allowedKinds || options.includeKinds,
+    queryType: routerPlan.queryType || options.queryType || "task_dispatch",
+    includeKinds: routerPlan.retrieval.includeKinds,
+    maxResults: routerPlan.budgets.topK,
+    tokenBudget: routerPlan.budgets.tokenBudget,
   });
-  return buildRuntimeContextPacket(retrieval, {
+  const retrievalDurationMs = Date.now() - retrievalStartedAt;
+  const packet = buildRuntimeContextPacket(retrieval, {
     ...options,
     taskGoal,
-    allowedKinds: options.allowedKinds || options.includeKinds,
+    routerPlan,
+    allowedKinds: routerPlan.retrieval.includeKinds,
+    retrievalDurationMs,
   });
+  const activatedGraph = activateMemoryRuntimeGraph({
+    ...options,
+    taskGoal,
+    projectPath: options.projectPath || retrieval.projectPath || null,
+    threadId: options.threadId || null,
+    maxNodes: Math.max(12, Math.min(Number(options.memoryGraphMaxNodes || options.maxResults || 32), 64)),
+  });
+  return {
+    ...packet,
+    memoryGraph: mergeMemoryGraphs(packet.memoryGraph, activatedGraph),
+    activatedMemory: {
+      nodeCount: safeArray(activatedGraph.nodes).length,
+      edgeCount: safeArray(activatedGraph.edges).length,
+      topNodes: safeArray(activatedGraph.nodes).slice(0, 8).map((node) => ({
+        id: node.id,
+        kind: node.kind,
+        title: node.title || node.label,
+        activation: node.activation || 0,
+        whyActivated: safeArray(node.whyActivated).slice(0, 6),
+      })),
+      sync: activatedGraph.sync || null,
+    },
+    performance: {
+      ...packet.performance,
+      memoryGraphMetadataOnly: true,
+      memoryGraphRawSessionBodyRead: false,
+      memoryGraphVaultScan: false,
+      memoryGraphSeedNodes: activatedGraph.performance?.boundedSeedNodes || 0,
+      memoryGraphSeedEdges: activatedGraph.performance?.boundedSeedEdges || 0,
+    },
+    warnings: [
+      ...safeArray(packet.warnings),
+      "memory_graph_activation_metadata_only",
+      ...safeArray(activatedGraph.warnings),
+    ].filter((warning, index, array) => array.indexOf(warning) === index),
+  };
 }
 
 function retrieveMemoryRuntimePrecedent(options = {}) {
   const retrievalRequest = buildRuntimePrecedentRequest(options);
+  if (retrievalRequest.includeKinds.length === 0) {
+    return buildRuntimePrecedentPacket({
+      query: retrievalRequest.query,
+      queryType: retrievalRequest.queryType,
+      projectPath: retrievalRequest.projectPath,
+      parentCeoThreadId: retrievalRequest.parentCeoThreadId,
+      tokenBudget: retrievalRequest.tokenBudget,
+      tokenEstimate: 0,
+      generatedAt: new Date().toISOString(),
+      warnings: ["memory_router_no_allowed_runtime_kinds_no_retrieval"],
+      items: [],
+    }, {
+      ...options,
+      routerPlan: retrievalRequest.routerPlan,
+      allowedKinds: retrievalRequest.includeKinds,
+      retrievalDurationMs: 0,
+    });
+  }
+  const retrievalStartedAt = Date.now();
   const retrieval = retrieveAgentContext(retrievalRequest);
+  const retrievalDurationMs = Date.now() - retrievalStartedAt;
   return buildRuntimePrecedentPacket(retrieval, {
     ...options,
+    routerPlan: retrievalRequest.routerPlan,
     allowedKinds: retrievalRequest.includeKinds,
+    retrievalDurationMs,
+  });
+}
+
+function scoreThreadRecoveryText(tokens, fields = []) {
+  if (!tokens.length) return 0;
+  const text = fields.map((field) => cleanText(String(field || "")).toLowerCase()).join(" ");
+  if (!text) return 0;
+  return tokens.reduce((score, token) => score + (text.includes(token) ? 1 : 0), 0);
+}
+
+function normalizeThreadRecoveryQuery(options = {}) {
+  const threadId = String(options.threadId || options.ceoThreadId || "").trim();
+  const title = compactText(options.title || options.threadTitle || "", 180);
+  const query = compactText(options.query || options.taskGoal || title || threadId || "", 240);
+  const tokens = tokenizeAgentQuery([query, title, threadId].filter(Boolean).join(" "));
+  return { threadId, title, query, tokens };
+}
+
+async function readThreadVaultManifestByThreadId(threadId) {
+  if (!threadId) return null;
+  const threadDir = path.join(codexHistoryVaultRoot(), safeVaultName(threadId));
+  const latestPath = path.join(threadDir, "latest.json");
+  const latest = await readJsonFileOrDefault(latestPath, null);
+  if (!latest || typeof latest !== "object") return null;
+  return {
+    ...latest,
+    threadId: latest.threadId || threadId,
+    vaultManifestPath: latest.layers?.cold?.vaultManifestPath || latest.vaultManifestPath || latestPath,
+    vaultSessionPath: latest.layers?.cold?.vaultSessionPath || latest.vaultSessionPath || null,
+    memoryPointer: latest.memoryPointer || guardianHistoryKnowledgeId(threadId),
+    sizeBytes: latest.sizeBytes || latest.size_bytes || null,
+    updatedAt: latest.lastWriteTime || latest.createdAt || null,
+  };
+}
+
+async function searchThreadVaultManifests(options = {}) {
+  const { threadId, tokens } = normalizeThreadRecoveryQuery(options);
+  const exact = await readThreadVaultManifestByThreadId(threadId);
+  if (exact) return [exact];
+  if (!tokens.length) return [];
+  const root = codexHistoryVaultRoot();
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const matches = [];
+  let readCount = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (readCount >= Math.max(20, Math.min(Number(options.maxVaultManifestReads || 300), 1000))) break;
+    readCount += 1;
+    const latestPath = path.join(root, entry.name, "latest.json");
+    const latest = await readJsonFileOrDefault(latestPath, null);
+    if (!latest || typeof latest !== "object") continue;
+    const score = scoreThreadRecoveryText(tokens, [
+      latest.threadId,
+      latest.title,
+      latest.projectPath,
+      safeArray(latest.searchTerms).join(" "),
+      latest.summary,
+      latest.inferredMetadata?.firstUserMessage,
+      latest.inferredMetadata?.cwd,
+      latest.inferredMetadata?.projectPath,
+      safeArray(latest.inferredMetadata?.searchTerms).join(" "),
+      latest.layers?.hot?.summary,
+      latest.layers?.warm?.summary,
+    ]);
+    if (score <= 0) continue;
+    matches.push({
+      ...latest,
+      threadId: latest.threadId || entry.name,
+      vaultManifestPath: latest.layers?.cold?.vaultManifestPath || latest.vaultManifestPath || latestPath,
+      vaultSessionPath: latest.layers?.cold?.vaultSessionPath || latest.vaultSessionPath || null,
+      memoryPointer: latest.memoryPointer || guardianHistoryKnowledgeId(latest.threadId || entry.name),
+      sizeBytes: latest.sizeBytes || latest.size_bytes || null,
+      updatedAt: latest.lastWriteTime || latest.createdAt || null,
+      _score: score,
+    });
+  }
+  return matches.sort((a, b) => b._score - a._score).slice(0, Math.max(1, Math.min(Number(options.limit || 8), 20)));
+}
+
+async function findGuardianThreadRecoveryRecords(options = {}) {
+  const { threadId, tokens } = normalizeThreadRecoveryQuery(options);
+  const inventory = await readGuardianInventory();
+  const records = [];
+  for (const item of inventory.items) {
+    const itemThreadId = String(item.thread_id || "").trim();
+    const exact = threadId && itemThreadId === threadId;
+    const score = exact
+      ? 100
+      : scoreThreadRecoveryText(tokens, [
+        itemThreadId,
+        item.title_guess,
+        item.user_goal_guess,
+        item.project_root,
+        item.file_name,
+        item.source_path,
+        safeArray(item.labels).join(" "),
+      ]);
+    if (score <= 0) continue;
+    records.push({
+      threadId: itemThreadId,
+      title: item.title_guess || item.user_goal_guess || itemThreadId,
+      projectPath: item.project_root || null,
+      status: item.status_guess || null,
+      sourceBucket: item.source_bucket || "guardian_inventory",
+      sourcePath: item.source_path || null,
+      fileName: item.file_name || null,
+      sizeBytes: item.size_bytes || null,
+      updatedAt: item.last_write_time || null,
+      labels: safeArray(item.labels),
+      score,
+    });
+  }
+  return records.sort((a, b) => b.score - a.score).slice(0, Math.max(1, Math.min(Number(options.limit || 12), 40)));
+}
+
+async function findSessionPointersByThreadId(threadId, inventoryRecords = [], options = {}) {
+  const pointers = [];
+  const seen = new Set();
+  function pushPointer(pointer) {
+    if (!pointer.path) return;
+    const key = `${pointer.kind}|${pointer.path}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    pointers.push(pointer);
+  }
+  for (const record of inventoryRecords) {
+    if (threadId && record.threadId !== threadId) continue;
+    if (!/\.jsonl$/i.test(String(record.sourcePath || ""))) continue;
+    pushPointer({
+      kind: record.sourceBucket === "archived_sessions" ? "archived_raw_session" : "raw_session",
+      path: record.sourcePath,
+      title: record.title,
+      threadId: record.threadId,
+      sizeBytes: record.sizeBytes,
+      updatedAt: record.updatedAt,
+      readByDefault: false,
+    });
+  }
+  if (!threadId) return pointers.slice(0, 12);
+  const roots = [
+    path.join(codexHomePath(), "sessions"),
+    path.join(codexHomePath(), "archived_sessions"),
+  ];
+  const maxDirectoryReads = Math.max(20, Math.min(Number(options.maxDirectoryReads || 240), 1000));
+  let directoryReads = 0;
+  for (const root of roots) {
+    const queue = [root];
+    while (queue.length && directoryReads < maxDirectoryReads && pointers.length < 12) {
+      const dir = queue.shift();
+      const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+      directoryReads += 1;
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          queue.push(fullPath);
+          continue;
+        }
+        if (!entry.isFile() || !entry.name.includes(threadId) || !/\.jsonl$/i.test(entry.name)) continue;
+        const stat = await fs.stat(fullPath).catch(() => null);
+        pushPointer({
+          kind: fullPath.includes(`${path.sep}archived_sessions${path.sep}`) ? "archived_raw_session" : "raw_session",
+          path: fullPath,
+          title: entry.name,
+          threadId,
+          sizeBytes: stat?.size || null,
+          updatedAt: stat?.mtime?.toISOString?.() || null,
+          readByDefault: false,
+        });
+      }
+    }
+  }
+  return pointers.slice(0, 12);
+}
+
+async function buildRecoveryProjectDocs(projectPath) {
+  if (!projectPath) return [];
+  const docs = [
+    "docs/PROGRAM_GOAL_BRIEF.md",
+    "docs/PRD.md",
+    "docs/TECHNICAL_DESIGN.md",
+    "docs/TEST_PLAN.md",
+    "docs/RELEASE_NOTES.md",
+    "docs/CEO_FLOW_MEMORY_RUNTIME.md",
+    "docs/REFMUSE_GAME_STUDIO_CEO_RECOVERY_PACKET.md",
+    "docs/REFMUSE_GAME_STUDIO_PRD.md",
+    "docs/REFMUSE_GAME_STUDIO_PLATFORM_STRATEGY.md",
+    "docs/PLUGIN_API_CONTRACT.md",
+    ".codex-knowledge/project-resume.md",
+    ".codex-knowledge/retrieval-packet.md",
+    ".codex-knowledge/project-index.md",
+  ];
+  const found = [];
+  for (const rel of docs) {
+    const fullPath = path.join(projectPath, rel);
+    const stat = await fs.stat(fullPath).catch(() => null);
+    if (!stat?.isFile?.()) continue;
+    found.push({
+      kind: "project_artifact",
+      path: fullPath,
+      title: rel,
+      lastWriteTime: stat.mtime.toISOString(),
+      sizeBytes: stat.size,
+    });
+  }
+  return found.slice(0, 16);
+}
+
+async function recoverMemoryRuntimeThread(options = {}) {
+  const normalized = normalizeThreadRecoveryQuery(options);
+  const projectPath = options.projectPath || null;
+  const contextPacket = retrieveMemoryRuntimeContext({
+    ...options,
+    taskGoal: normalized.query || `恢复旧线程 ${normalized.threadId || normalized.title}`,
+    queryType: "thread_recovery",
+    threadId: normalized.threadId || null,
+    parentCeoThreadId: options.parentCeoThreadId || normalized.threadId || null,
+    projectPath,
+    allowedKinds: ["thread_lineage_index", "ceo_flow_record", "project_record", "project_resume_packet", "project_artifact", "knowledge_item", "experience_card"],
+    tokenBudget: options.tokenBudget || 1400,
+    maxResults: options.maxResults || 10,
+  });
+  const lineageRecords = listThreadLineageIndexRecords({
+    parentCeoThreadId: normalized.threadId || undefined,
+    projectPath: projectPath || undefined,
+    limit: 40,
+  });
+  const fallbackLineageRecords = normalized.threadId
+    ? []
+    : listThreadLineageIndexRecords({ projectPath: projectPath || undefined, limit: 120 })
+      .filter((record) => scoreThreadRecoveryText(normalized.tokens, [
+        record.ceoThreadId,
+        record.title,
+        record.lastSummary,
+        safeArray(record.workspacePaths).join(" "),
+        safeArray(record.relationships?.childThreadIds).join(" "),
+        safeArray(record.relationships?.workerThreadIds).join(" "),
+      ]) > 0)
+      .slice(0, 12);
+  const guardianRecords = await findGuardianThreadRecoveryRecords({
+    ...options,
+    threadId: normalized.threadId,
+    query: normalized.query,
+    title: normalized.title,
+    limit: 20,
+  });
+  const vaultManifests = await searchThreadVaultManifests({
+    ...options,
+    threadId: normalized.threadId || guardianRecords[0]?.threadId || "",
+    query: normalized.query,
+    title: normalized.title,
+    limit: 8,
+  });
+  const resolvedProjectPath = projectPath || vaultManifests[0]?.projectPath || guardianRecords.find((record) => record.projectPath)?.projectPath || contextPacket.project?.path || null;
+  const projectDocs = await buildRecoveryProjectDocs(resolvedProjectPath);
+  const sessionPointers = await findSessionPointersByThreadId(
+    normalized.threadId || guardianRecords[0]?.threadId || vaultManifests[0]?.threadId || "",
+    guardianRecords,
+    options,
+  );
+  return buildThreadRecoveryPacket({
+    ...options,
+    threadId: normalized.threadId || guardianRecords[0]?.threadId || vaultManifests[0]?.threadId || null,
+    title: normalized.title || guardianRecords[0]?.title || vaultManifests[0]?.title || normalized.query,
+    query: normalized.query,
+    projectPath: resolvedProjectPath,
+    contextPacket,
+    lineageRecords: [...lineageRecords, ...fallbackLineageRecords],
+    vaultManifests,
+    projectDocs,
+    coldHistorySources: [
+      ...sessionPointers,
+      ...guardianRecords.map((record) => ({
+        kind: "guardian_inventory",
+        path: record.sourcePath,
+        title: record.title,
+        threadId: record.threadId,
+        sizeBytes: record.sizeBytes,
+        updatedAt: record.updatedAt,
+      })),
+    ],
+    warnings: [
+      ...(guardianRecords.length === 0 ? ["no_guardian_inventory_match"] : []),
+      ...(sessionPointers.length === 0 ? ["no_session_file_pointer_matched"] : []),
+      ...(projectDocs.length === 0 ? ["no_project_recovery_docs_found"] : []),
+    ],
   });
 }
 
@@ -8259,9 +9600,21 @@ ipcMain.handle("memoryRuntime:retrieveContext", async (_event, options = {}) => 
   return retrieveMemoryRuntimeContext(options);
 });
 
+ipcMain.handle("memoryRuntime:activateMemory", async (_event, options = {}) => {
+  await ensureDatabase();
+  const graph = activateMemoryRuntimeGraph(options);
+  await saveDatabase();
+  return graph;
+});
+
 ipcMain.handle("memoryRuntime:retrievePrecedent", async (_event, options = {}) => {
   await ensureDatabase();
   return retrieveMemoryRuntimePrecedent(options);
+});
+
+ipcMain.handle("memoryRuntime:recoverThread", async (_event, options = {}) => {
+  await ensureDatabase();
+  return recoverMemoryRuntimeThread(options);
 });
 
 ipcMain.handle("memoryRuntime:writebackEvidence", async (_event, packet = {}) => writebackMemoryRuntimeEvidence(packet));

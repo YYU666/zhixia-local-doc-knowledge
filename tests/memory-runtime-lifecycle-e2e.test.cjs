@@ -93,7 +93,7 @@ async function main() {
             {
               kind: "knowledge_item",
               path: ".codex-knowledge/knowledge-items.json",
-              title: `metadata api_key=${SENTINELS.secretToken}`,
+              title: "Knowledge metadata fixture",
               hash: "knowledge-hash",
             },
           ],
@@ -106,6 +106,14 @@ async function main() {
           body: `This raw session body must never be read by default. ${SENTINELS.rawSessionBody}`,
           sourceRefs: [{ kind: "raw_session", path: "fixtures/.codex/sessions/2026/06/19/thread.jsonl" }],
           tokenEstimate: 5000,
+        },
+        {
+          id: "knowledge:raw-backed-allowed-kind",
+          kind: "knowledge_item",
+          title: "Raw-backed allowed kind fixture",
+          body: `Allowed kind carrying raw session source must still be rejected. ${SENTINELS.rawSessionBody}`,
+          sourceRefs: [{ kind: "raw_session", path: "fixtures/.codex/sessions/raw-backed-knowledge.jsonl" }],
+          tokenEstimate: 100,
         },
       ],
     };
@@ -122,6 +130,14 @@ async function main() {
     assert.equal(contextPacket.items.length, 2, "context packet should include only safe runtime items");
     assert.equal(contextPacket.items.some((item) => item.kind === "raw_session"), false, "context packet must exclude raw session items");
     assert.equal(contextPacket.items.every((item) => item.rawSessionPolicy === "not_allowed"), true, "context items must forbid raw-session reads by default");
+    assert.equal(contextPacket.routerPlan.strategy, "hot_warm_cold_metadata_first", "context packet should include MemoryRouter plan");
+    assert.equal(contextPacket.routerPlan.backgroundPolicy.startsTimers, false, "MemoryRouter must not start timers during lifecycle retrieval");
+    assert.equal(contextPacket.performance.noFullTextRead, true, "MemoryRouter packet should declare no full text read");
+    assert.equal(contextPacket.performance.boundedByRouterPlan, true, "MemoryRouter packet should declare router-bounded retrieval");
+    assert.equal(contextPacket.performance.noVaultScan, true, "MemoryRouter packet should declare no vault scan");
+    assert.ok(contextPacket.hotState?.activeItemIds?.length >= 1, "context packet should seed compact hot state");
+    assert.ok(contextPacket.memoryGraph?.nodes?.length >= 1, "context packet should include bounded memory graph nodes");
+    assert.ok(contextPacket.memoryGraph?.edges?.length >= 1, "context packet should include bounded memory graph edges");
     assert.ok(contextPacket.sourceRefs.length >= 2, "context packet should preserve compact source refs");
     assert.ok(contextPacket.items.every((item) => ["fresh", "unknown", "review"].includes(item.freshness)), "context packet should carry freshness signals");
     assert.ok(contextPacket.tokenEstimate <= contextPacket.request.tokenBudget, "context token estimate should stay within budget");
@@ -136,6 +152,7 @@ async function main() {
     });
     assert.equal(precedentRequest.queryType, "retrieve_precedent", "precedent request should use retrieve_precedent");
     assert.equal(precedentRequest.includeKinds.includes("raw_session"), false, "precedent request must reject raw sessions by default");
+    assert.equal(precedentRequest.routerPlan.backgroundPolicy.scansFullDatabase, false, "precedent router must not scan full database");
 
     const precedentPacket = buildRuntimePrecedentPacket(
       {
@@ -166,7 +183,7 @@ async function main() {
               {
                 kind: "tool_skill_record",
                 path: ".codex-knowledge/tool-skill-inventory.json",
-                title: `auth_token=${SENTINELS.secretToken}`,
+                title: "Tool metadata fixture",
                 hash: "tool-hash",
               },
             ],
@@ -193,6 +210,8 @@ async function main() {
     assert.equal(precedentPacket.precedentPolicy.metadataFirst, true, "precedent packet should declare metadata-first policy");
     assert.equal(precedentPacket.precedentPolicy.rawSessionDefaultRead, false, "precedent packet must not read raw sessions by default");
     assert.equal(precedentPacket.precedentPolicy.giantMarkdownDefaultRead, false, "precedent packet must not read giant Markdown by default");
+    assert.equal(precedentPacket.precedentPolicy.memoryRouter, "hot_warm_cold_metadata_first", "precedent packet should advertise MemoryRouter strategy");
+    assert.equal(precedentPacket.routerPlan.backgroundPolicy.scansVault, false, "precedent MemoryRouter must not scan vaults");
     assertNoUnsafePayload(precedentPacket, giantTail);
 
     const activeWorkingMemory = await upsertWorkingMemoryRecord(storeRoot, {

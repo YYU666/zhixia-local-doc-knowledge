@@ -1,6 +1,6 @@
 # Public Staging Manifest
 
-Generated at: 2026-06-20T01:14:55.376Z
+Generated at: 2026-06-26T09:08:52.428Z
 
 Source app root: canonical app source directory
 Staging path: public-staging/zhixia-local-doc-knowledge
@@ -68,27 +68,27 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - assets/icon.svg sha256=8c0af5d51c379b71
 - codex-skills/zhixia-local-docs/agents/openai.yaml sha256=90c5530730f02678
 - codex-skills/zhixia-local-docs/references/context-bundle.md sha256=7592ba2662be8024
-- codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=29f39bfdf3bbe12d
-- codex-skills/zhixia-local-docs/SKILL.md sha256=957f9c13773b9538
+- codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=0fbc73cc409156ea
+- codex-skills/zhixia-local-docs/SKILL.md sha256=d5aa145271565de2
 - CONTRIBUTING.md sha256=c7022f052c7acffa
-- docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=047716b947af0ec8
+- docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=69a3d1ccd9364d3a
 - docs/CODEX_OPTIMIZATION_MONITOR.md sha256=db629fe4cfc579f7
-- docs/PRD.md sha256=1599d7f70ad52298
+- docs/PRD.md sha256=e4e3126836101d16
 - docs/PROJECT_EVALUATION.md sha256=25d3536c61324a27
 - docs/PUBLIC_REPO_LAYOUT.md sha256=01a01bda9337271a
 - docs/PUBLICATION_CHECKLIST.md sha256=009c50093528e264
-- docs/RELEASE_NOTES.md sha256=2301cbaf712e8bf7
-- docs/TECHNICAL_DESIGN.md sha256=dc987b09b9344fb4
-- docs/TEST_PLAN.md sha256=aa2f91647f2322ce
+- docs/RELEASE_NOTES.md sha256=1d39e98758bf57ae
+- docs/TECHNICAL_DESIGN.md sha256=916ead1d5ec1cf20
+- docs/TEST_PLAN.md sha256=0191aeeb0af50819
 - electron/agentRetrievePolicy.cjs sha256=bac38d0e5697d8fe
 - electron/agentRuntimeMonitorPolicy.cjs sha256=0a7051c8e3745c5e
 - electron/archiveCandidatePolicy.cjs sha256=14f2eef707fac6df
-- electron/codexGuardianPolicy.cjs sha256=a5c39f5abf7808b8
-- electron/codexThreadHistoryAutoIngestPolicy.cjs sha256=99764915ee4b526f
+- electron/codexGuardianPolicy.cjs sha256=3bd63511b4c23853
+- electron/codexThreadHistoryAutoIngestPolicy.cjs sha256=3c00e0b4d70e5308
 - electron/documentMetadataPolicy.cjs sha256=7be0330b6d7d3f0c
-- electron/main.cjs sha256=8e6e750fb19c70db
-- electron/memoryRuntimePolicy.cjs sha256=0668ae151249bceb
-- electron/preload.cjs sha256=a0aad5cbdd89e685
+- electron/main.cjs sha256=fd711c3e541cf1c1
+- electron/memoryRuntimePolicy.cjs sha256=58267ecc8946eab3
+- electron/preload.cjs sha256=c6101b0ec77478e8
 - electron/projectArtifactPolicy.cjs sha256=a40a16e6c8259ddd
 - electron/projectMemoryBackfillPolicy.cjs sha256=e25fbc89abf8b889
 - electron/projectResumePolicy.cjs sha256=e28ac4a7d2083e98

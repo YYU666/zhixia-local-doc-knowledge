@@ -99,11 +99,18 @@ Evidence writeback dry-run after accept/revise/block:
 node scripts/read-project-knowledge.cjs <workspace-path> --writeback-dry-run --evidence-json .codex-knowledge/evidence-input.json --json
 ```
 
+Old-thread recovery packet for a broken, archived, or slimmed CEO/worker thread:
+
+```powershell
+node scripts/read-project-knowledge.cjs <workspace-path> --recover-thread --thread-id "<thread id>" --thread-title "<thread title>" --query "<project or task keywords>" --json
+```
+
 The lifecycle JSON modes are compact and source-backed:
 
 - `--runtime-context` returns a RuntimeContextPacket-shaped object with `request`, `project`, `items`, `sourceRefs`, `warnings`, `tokenEstimate`, and `generatedAt`.
 - `--precedent` returns a RuntimePrecedentPacket-shaped object over bounded metadata kinds: knowledge, experience, project artifacts, tool inventory, and skill candidates.
 - `--writeback-dry-run` returns an EvidenceWritebackPacket-like preview only. It may write a preview file with `--evidence-out <workspace-relative-path>`, but the output must stay inside the requested workspace.
+- `--recover-thread` returns a ThreadRecoveryPacket-shaped object for CEO Flow bootstrap. The helper version is workspace-metadata-only: it recommends project docs and compact `.codex-knowledge` sourceRefs, but does not walk Thread History Vault or read raw/vault session bodies.
 
 Lifecycle no-go rules:
 

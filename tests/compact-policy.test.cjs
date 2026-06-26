@@ -2,6 +2,8 @@ const assert = require("node:assert/strict");
 
 const {
   attachVaultEvidenceToCompactReceipt,
+  buildImageProtectedCompactReceipt,
+  isImageProtectedCompactError,
   validateCompactSessionReceipt,
   validateVaultCopyHashes,
 } = require("../electron/codexGuardianPolicy.cjs");
@@ -42,6 +44,31 @@ const receipt = attachVaultEvidenceToCompactReceipt(
 assert.equal(receipt.vault_manifest_path, "C:\\vault\\latest.json", "successful compact receipts must include vault manifest evidence");
 assert.equal(receipt.vault_session_path, "C:\\vault\\session.jsonl", "successful compact receipts must include vault session evidence");
 assert.equal(receipt.vault_sha256, "abc123", "successful compact receipts must include vault hash evidence");
+
+assert.equal(
+  isImageProtectedCompactError("Session contains image attachment references; refusing compact-session to avoid corrupting image_url/local image payloads."),
+  true,
+  "image-bearing compact refusals should be recognized as protected-skip candidates",
+);
+
+const protectedReceipt = buildImageProtectedCompactReceipt({
+  threadId: "thread-with-image",
+  sourcePath: "C:\\codex\\sessions\\thread-with-image.jsonl",
+  vault: {
+    manifestPath: "C:\\vault\\latest.json",
+    vaultSessionPath: "C:\\vault\\session.jsonl",
+    sourceSessionPath: "C:\\codex\\sessions\\thread-with-image.jsonl",
+    originalSha256: "image-hash",
+    copiedSha256: "image-hash",
+    sizeBytes: 2048,
+  },
+  error: "image_url detected",
+});
+assert.equal(protectedReceipt.protected_skip, true, "image-protected receipts must mark that no body slimming occurred");
+assert.equal(protectedReceipt.thread_store_compatible, true, "image-protected receipts may act as archive evidence because the session is left untouched");
+assert.equal(protectedReceipt.before_bytes, protectedReceipt.after_bytes, "image-protected receipts must not claim space savings");
+assert.equal(protectedReceipt.bytes_saved, 0, "image-protected receipts must report zero bytes saved");
+assert.deepEqual(validateCompactSessionReceipt(protectedReceipt), { ok: true }, "image-protected receipts should pass compact receipt validation");
 
 assert.deepEqual(
   validateVaultCopyHashes("abc123", "abc123"),

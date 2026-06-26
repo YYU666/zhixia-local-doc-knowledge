@@ -4,9 +4,12 @@ const os = require("node:os");
 const path = require("node:path");
 
 const {
+  buildMemoryRouterPlan,
+  buildActivatedMemoryGraph,
   buildRuntimeContextPacket,
   buildRuntimePrecedentPacket,
   buildRuntimePrecedentRequest,
+  buildThreadRecoveryPacket,
   evaluatePromotionCandidate,
   evaluateWritebackEvidence,
   listFlowSkillCandidateRecords,
@@ -17,6 +20,143 @@ const {
 } = require("../electron/memoryRuntimePolicy.cjs");
 
 async function main() {
+  const defaultRouterPlan = buildMemoryRouterPlan({
+    taskGoal: "修复知匣卡顿和 CPU 内存占用过高",
+    tokenBudget: 99999,
+    maxResults: 999,
+  });
+  assert.equal(defaultRouterPlan.taskType, "runtime_diagnosis", "performance/cpu task goals should route to runtime_diagnosis");
+  assert.equal(defaultRouterPlan.budgets.tokenBudget, 3000, "MemoryRouter should clamp excessive token budgets");
+  assert.equal(defaultRouterPlan.budgets.topK, 12, "MemoryRouter should clamp excessive topK/maxResults");
+  assert.equal(defaultRouterPlan.layers.hot.enabled, true, "MemoryRouter should always enable hot state");
+  assert.equal(defaultRouterPlan.layers.warm.enabled, true, "MemoryRouter should always enable warm summaries");
+  assert.equal(defaultRouterPlan.layers.cold.enabled, false, "MemoryRouter should keep cold history disabled by default");
+  assert.equal(defaultRouterPlan.rawSessionGate.defaultRead, false, "MemoryRouter must never read raw sessions by default");
+  assert.equal(defaultRouterPlan.backgroundPolicy.startsTimers, false, "MemoryRouter must not start background timers");
+  assert.equal(defaultRouterPlan.backgroundPolicy.scansFullDatabase, false, "MemoryRouter must not scan the full database");
+  assert.equal(defaultRouterPlan.backgroundPolicy.scansVault, false, "MemoryRouter must not scan the vault");
+
+  const recoveryRouterPlan = buildMemoryRouterPlan({
+    taskGoal: "恢复被瘦身老线程里的历史",
+    threadId: "public-thread-id",
+    tokenBudget: 1200,
+    rawSessionHardGate: true,
+    explicitRawSessionRequest: true,
+    sourceRange: "guardian pointer only",
+  });
+  assert.equal(recoveryRouterPlan.taskType, "thread_recovery", "threadId/old-thread goals should route to thread_recovery");
+  assert.equal(recoveryRouterPlan.layers.cold.enabled, true, "thread recovery may enable cold pointer retrieval");
+  assert.equal(recoveryRouterPlan.layers.cold.rawSessionDefaultRead, false, "cold layer must remain pointer-only by default");
+  assert.equal(recoveryRouterPlan.rawSessionGate.defaultRead, false, "explicit recovery gate still must not default-read raw bodies");
+
+  const threadRecoveryPacket = buildThreadRecoveryPacket({
+    threadId: "public-thread-id",
+    title: "Refmuse game Studio CEO",
+    projectPath: "C:/Users/example/Documents/2D游戏项目",
+    tokenBudget: 1600,
+    contextPacket: {
+      cacheKey: "context-cache",
+      items: [
+        {
+          id: "lineage:refmuse",
+          kind: "thread_lineage_index",
+          title: "ThreadLineageIndex: Refmuse game Studio CEO",
+          summary: "Metadata-only lineage for the replacement CEO thread.",
+          freshness: "review",
+          memoryLayer: "cold",
+          whyMatched: ["threadId:exact"],
+          sourceRefs: [{ kind: "thread_lineage_index", path: "sqlite://thread_lineage_index/refmuse" }],
+        },
+      ],
+    },
+    lineageRecords: [
+      {
+        id: "lineage:refmuse",
+        ceoThreadId: "public-thread-id",
+        title: "ThreadLineageIndex: Refmuse game Studio CEO",
+        workspacePaths: ["C:/Users/example/Documents/2D游戏项目"],
+        relationships: {
+          childThreadIds: ["public-thread-id"],
+          workerThreadIds: ["public-thread-id"],
+          reviewerThreadIds: ["public-thread-id"],
+          vaultPointers: ["codex-history:public-thread-id"],
+        },
+        governance: {
+          status: "metadata_only",
+          rawSessionPolicy: "metadata_only_no_raw_body",
+          mutationPolicy: "read_only_no_archive_compact_restore_delete",
+        },
+        sourceRefs: [{ kind: "thread_lineage_index", path: "sqlite://thread_lineage_index/refmuse" }],
+      },
+    ],
+    vaultManifests: [
+      {
+        threadId: "public-thread-id",
+        title: "Refmuse game Studio CEO",
+        projectPath: "C:/Users/example/Documents/2D游戏项目",
+        vaultManifestPath: "C:/Users/example/local app data/Roaming/Zhixia/codex-history-vault/019eff6e/latest.json",
+        vaultSessionPath: "C:/Users/example/local app data/Roaming/Zhixia/codex-history-vault/019eff6e/session.jsonl",
+        originalSha256: "hash-a",
+        copiedSha256: "hash-a",
+      },
+    ],
+    projectDocs: [
+      { kind: "project_artifact", path: "C:/Users/example/Documents/2D游戏项目/docs/PROGRAM_GOAL_BRIEF.md", title: "Program Goal", sizeBytes: 12000 },
+      { kind: "project_artifact", path: "C:/Users/example/Documents/2D游戏项目/docs/REFMUSE_GAME_STUDIO_CEO_TRANSCRIPT_EXTRACT.md", title: "Transcript Extract", sizeBytes: 2 * 1024 * 1024 },
+    ],
+    coldHistorySources: [
+      {
+        kind: "raw_session",
+        path: "C:/Users/example/.codex/sessions/2026/06/25/rollout-019eff6e.jsonl",
+        title: "raw source pointer only",
+        threadId: "public-thread-id",
+      },
+    ],
+  });
+  assert.equal(threadRecoveryPacket.schemaVersion, "zhixia.thread_recovery_packet.v1", "recovery packet should have a stable schema");
+  assert.equal(threadRecoveryPacket.thread.confidence, "source_backed", "lineage/vault evidence should make recovery source-backed");
+  assert.equal(threadRecoveryPacket.vault.hasVault, true, "recovery packet should expose vault manifest evidence");
+  assert.equal(threadRecoveryPacket.vault.policy, "pointer_only_no_default_raw_body_read", "vault recovery must stay pointer-only");
+  assert.equal(threadRecoveryPacket.safety.rawSessionDefaultRead, false, "recovery packet must not default-read raw sessions");
+  assert.equal(threadRecoveryPacket.safety.archiveCompactDeleteMoveRestore, false, "recovery packet must not authorize archive/compact/delete/move/restore");
+  assert.ok(threadRecoveryPacket.prompt.includes("不要直接加载原始"), "recovery prompt should warn new CEO threads not to load giant raw sessions");
+  assert.equal(
+    threadRecoveryPacket.coldHistorySources.some((source) => source.kind === "raw_session" && source.readByDefault === false),
+    true,
+    "raw session sources should be pointers with readByDefault=false",
+  );
+  assert.equal(
+    threadRecoveryPacket.recommendedReadOrder.some((source) => /TRANSCRIPT_EXTRACT\.md$/.test(String(source.path || ""))),
+    false,
+    "giant transcript docs should not be recommended for default reading",
+  );
+  assert.equal(
+    threadRecoveryPacket.coldHistorySources.some((source) => source.kind === "large_project_artifact_pointer" && /TRANSCRIPT_EXTRACT\.md$/.test(String(source.path || ""))),
+    true,
+    "giant transcript docs should remain available as cold pointers",
+  );
+  assert.ok(threadRecoveryPacket.warnings.includes("large_recovery_docs_pointer_only"), "giant recovery docs should warn as pointer-only");
+  assert.equal(JSON.stringify(threadRecoveryPacket).includes("raw source pointer only"), true, "safe raw pointer titles may appear");
+  assert.equal(JSON.stringify(threadRecoveryPacket).includes("raw session body"), false, "recovery packet must not include raw session body text");
+
+  const noVaultRecoveryPacket = buildThreadRecoveryPacket({
+    threadId: "missing-vault-thread",
+    title: "Missing vault thread",
+    projectDocs: [],
+    lineageRecords: [],
+    vaultManifests: [],
+  });
+  assert.equal(noVaultRecoveryPacket.vault.hasVault, false, "missing vault should be explicit");
+  assert.ok(noVaultRecoveryPacket.warnings.includes("no_thread_history_vault_manifest_matched"), "missing vault should warn");
+  assert.ok(noVaultRecoveryPacket.warnings.includes("no_thread_lineage_record_matched"), "missing lineage should warn");
+
+  const invalidKindRouterPlan = buildMemoryRouterPlan({
+    taskGoal: "Only raw session should not fall back to broad retrieval",
+    allowedKinds: ["raw_session"],
+  });
+  assert.deepEqual(invalidKindRouterPlan.retrieval.includeKinds, [], "invalid-only allowedKinds should not fall back to profile defaults");
+  assert.ok(invalidKindRouterPlan.warnings.includes("no_allowed_runtime_kinds_after_filter"), "invalid-only allowedKinds should carry a warning");
+
   const retrieveResult = {
     queryType: "task_dispatch",
     query: "implement memory runtime",
@@ -44,6 +184,16 @@ async function main() {
         excerpt: "raw body",
         sourceRefs: [{ kind: "raw_session", path: "C:/Users/example/.codex/sessions/raw.jsonl" }],
       },
+      {
+        id: "experience:raw-backed",
+        kind: "experience_card",
+        title: "Raw-backed allowed kind must not surface",
+        excerpt: "ZHIXIA_RAW_BACKED_ALLOWED_KIND_BODY_SHOULD_NOT_LEAK",
+        status: "accepted",
+        freshness: "fresh",
+        sourceRefs: [{ kind: "raw_session", path: "C:/Users/example/.codex/sessions/raw-backed.jsonl" }],
+        tokenEstimate: 70,
+      },
     ],
   };
 
@@ -56,10 +206,115 @@ async function main() {
   assert.equal(packet.schemaVersion, 1, "RuntimeContextPacket schema should be v1");
   assert.equal(packet.request.taskGoal, "Implement app-side Memory Runtime contract");
   assert.deepEqual(packet.request.allowedKinds, ["project_record", "knowledge_item"], "runtime context must reject raw-session allowed kinds");
+  assert.equal(packet.routerPlan.strategy, "hot_warm_cold_metadata_first", "runtime context should include MemoryRouter strategy");
+  assert.equal(packet.routerPlan.backgroundPolicy.scansFullDatabase, false, "router plan should not request a full database scan");
+  assert.equal(packet.performance.noBackgroundTimer, true, "runtime packet should declare no background timer");
+  assert.equal(packet.performance.noFullTextRead, true, "runtime packet should declare no full text reads");
+  assert.equal(packet.performance.boundedByRouterPlan, true, "runtime packet should declare router-bounded retrieval");
+  assert.equal(packet.memoryLayers.hot.count, 1, "project record should seed hot state");
+  assert.equal(packet.hotState.project.name, "Zhixia Memory Runtime", "hot state should capture compact project identity");
+  assert.ok(packet.memoryGraph.nodes.length > 0, "runtime context should include bounded association graph nodes");
+  assert.ok(packet.memoryGraph.edges.length > 0, "runtime context should include bounded source-ref graph edges");
+  assert.ok(packet.cacheKey, "runtime context should include stable cache key");
+  assert.ok(packet.expiresAt, "runtime context should include expiration hint");
+  assert.ok(packet.warnings.includes("memory_router_no_background_scan"), "runtime context should declare no background scan");
   assert.equal(packet.items.length, 1, "runtime context must not surface raw session items");
+  assert.equal(JSON.stringify(packet).includes("ZHIXIA_RAW_BACKED_ALLOWED_KIND_BODY_SHOULD_NOT_LEAK"), false, "runtime context must fail closed on raw-backed allowed-kind bodies");
+
+  const refmuseActivatedGraph = buildActivatedMemoryGraph({
+    nodes: [
+      {
+        id: "project:rgs",
+        kind: "project",
+        title: "Refmuse Game Studio / 2D游戏项目",
+        summary: "边做2D游戏边长出轻量游戏引擎。",
+        projectPath: "C:/Users/example/Documents/2D游戏项目",
+        tags: ["Refmuse Game Studio", "RGS", "2D游戏项目"],
+        status: "ready",
+        freshness: "fresh",
+      },
+      {
+        id: "thread:ceo",
+        kind: "thread_lineage_index",
+        title: "Refmuse Game Studio CEO",
+        summary: "旧CEO主线程，包含RGS阶段任务、worker/reviewer分支和恢复入口。",
+        projectPath: "C:/Users/example/Documents/2D游戏项目",
+        threadId: "public-thread-id",
+        tags: ["CEO", "RGS"],
+        status: "ready",
+        freshness: "review",
+      },
+      {
+        id: "vault:old-thread",
+        kind: "knowledge_item",
+        title: "老线程历史：2D游戏项目",
+        summary: "知匣已保存旧 Codex 线程完整历史到 Thread History Vault。",
+        projectPath: "C:/Users/example/Documents/2D游戏项目",
+        threadId: "public-thread-id",
+        tags: ["codex-history", "thread-history-vault"],
+        sourceRefs: [{ kind: "thread_history_vault", path: "vault/latest.json", readByDefault: true }],
+      },
+      {
+        id: "experience:scope",
+        kind: "experience_card",
+        title: "避免先做通用2D引擎",
+        summary: "最佳策略是让游戏长出引擎，避免引擎项目无限膨胀。",
+        projectPath: "C:/Users/example/Documents/2D游戏项目",
+        tags: ["2D游戏", "引擎", "风险"],
+        status: "accepted",
+        freshness: "fresh",
+      },
+    ],
+    edges: [
+      { from: "project:rgs", to: "thread:ceo", kind: "project_contains", weight: 3 },
+      { from: "thread:ceo", to: "vault:old-thread", kind: "thread_evidence", weight: 2.5 },
+      { from: "project:rgs", to: "experience:scope", kind: "project_contains", weight: 2 },
+    ],
+  }, {
+    taskGoal: "继续 Refmuse Game Studio CEO，恢复 RGS 旧线程记忆",
+    projectPath: "C:/Users/example/Documents/2D游戏项目",
+    threadId: "public-thread-id",
+    maxNodes: 8,
+  });
+  assert.equal(refmuseActivatedGraph.mode, "persisted_activation_graph", "activated graph should use the persisted activation mode");
+  assert.equal(refmuseActivatedGraph.performance.metadataOnly, true, "activated graph should be metadata-only");
+  assert.equal(refmuseActivatedGraph.performance.rawSessionBodyRead, false, "activated graph must not read raw session bodies");
+  assert.equal(refmuseActivatedGraph.nodes.some((node) => node.id === "thread:ceo"), true, "Refmuse CEO thread should activate");
+  assert.equal(refmuseActivatedGraph.nodes[0].threadId, "public-thread-id", "exact threadId should outrank broad project keyword matches");
+  assert.equal(refmuseActivatedGraph.nodes.some((node) => node.id === "vault:old-thread"), true, "vault pointer should be pulled in by graph neighbors");
+  assert.equal(refmuseActivatedGraph.nodes.some((node) => node.id === "experience:scope"), true, "project experience should activate through project relationship");
+  assert.ok(refmuseActivatedGraph.nodes[0].activation > 0, "activated nodes should carry activation scores");
+  assert.ok(refmuseActivatedGraph.nodes[0].whyActivated.length > 0, "activated nodes should explain why they were recalled");
+  assert.equal(JSON.stringify(packet).includes(".codex/sessions/raw-backed.jsonl"), false, "runtime context must fail closed on raw-backed allowed-kind source refs");
   assert.equal(packet.items[0].rawSessionPolicy, "not_allowed", "runtime items should default to no raw-session reads");
+  assert.equal(packet.items[0].memoryLayer, "hot", "project items should be tagged as hot memory");
   assert.equal(packet.sourceRefs.length, 1, "runtime context should collect compact source refs");
   assert.ok(packet.warnings.includes("metadata_first_no_raw_session_body"), "runtime context should declare metadata-first boundary");
+
+  const invalidTimePacket = buildRuntimeContextPacket({ ...retrieveResult, generatedAt: "not-a-date" }, {
+    taskGoal: "Invalid generatedAt should not break recall",
+    tokenBudget: 900,
+  });
+  assert.doesNotThrow(() => new Date(invalidTimePacket.expiresAt).toISOString(), "runtime context should tolerate invalid generatedAt values");
+
+  const noAllowedKindsPacket = buildRuntimeContextPacket(retrieveResult, {
+    taskGoal: "Only raw session should not retrieve broad defaults",
+    allowedKinds: ["raw_session"],
+  });
+  assert.deepEqual(noAllowedKindsPacket.request.allowedKinds, [], "RuntimeContextPacket should preserve empty allowedKinds after filtering");
+  assert.equal(noAllowedKindsPacket.items.length, 0, "RuntimeContextPacket should not return fallback items when allowedKinds are invalid-only");
+  assert.equal(noAllowedKindsPacket.partial, true, "empty allowedKinds packet should be marked partial");
+  assert.ok(noAllowedKindsPacket.warnings.includes("no_allowed_runtime_kinds_after_filter"), "empty allowedKinds packet should warn");
+
+  const timeBudgetPacket = buildRuntimeContextPacket(retrieveResult, {
+    taskGoal: "Time budget exceeded should be visible",
+    tokenBudget: 900,
+    timeBudgetMs: 50,
+    retrievalDurationMs: 75,
+  });
+  assert.equal(timeBudgetPacket.performance.timeBudgetExceeded, true, "runtime packet should flag time budget exceedance");
+  assert.equal(timeBudgetPacket.partial, true, "time budget exceedance should mark the packet partial");
+  assert.ok(timeBudgetPacket.warnings.includes("memory_router_time_budget_exceeded_partial"), "time budget exceedance should produce a warning");
 
   const precedentRequest = buildRuntimePrecedentRequest({
     taskType: "bug repair",
@@ -68,6 +323,33 @@ async function main() {
   });
   assert.equal(precedentRequest.queryType, "retrieve_precedent");
   assert.deepEqual(precedentRequest.includeKinds, ["experience_card", "tool_skill_record"], "precedent retrieval should reject raw-session reads by default");
+  assert.equal(precedentRequest.routerPlan.queryType, "retrieve_precedent", "precedent request should include router plan");
+  assert.equal(precedentRequest.routerPlan.rawSessionGate.defaultRead, false, "precedent router must not read raw session bodies");
+
+  const invalidPrecedentRequest = buildRuntimePrecedentRequest({
+    taskType: "raw only precedent must not broaden",
+    includeKinds: ["raw_session"],
+  });
+  assert.deepEqual(invalidPrecedentRequest.includeKinds, [], "precedent invalid-only includeKinds should not fall back to defaults");
+  assert.ok(invalidPrecedentRequest.routerPlan.warnings.includes("no_allowed_runtime_kinds_after_filter"), "precedent invalid-only includeKinds should warn");
+  const invalidPrecedentPacket = buildRuntimePrecedentPacket(
+    {
+      query: invalidPrecedentRequest.query,
+      queryType: invalidPrecedentRequest.queryType,
+      tokenBudget: invalidPrecedentRequest.tokenBudget,
+      tokenEstimate: 0,
+      items: [],
+      warnings: ["memory_router_no_allowed_runtime_kinds_no_retrieval"],
+    },
+    {
+      taskType: "raw only precedent must not broaden",
+      routerPlan: invalidPrecedentRequest.routerPlan,
+      allowedKinds: invalidPrecedentRequest.includeKinds,
+    },
+  );
+  assert.deepEqual(invalidPrecedentPacket.request.allowedKinds, [], "precedent no-retrieval packet must not display broad fallback allowedKinds");
+  assert.equal(invalidPrecedentPacket.partial, true, "precedent no-retrieval packet should be partial");
+  assert.ok(invalidPrecedentPacket.warnings.includes("no_allowed_runtime_kinds_after_filter"), "precedent no-retrieval packet should preserve router warning");
 
   const precedent = buildRuntimePrecedentPacket(
     {
@@ -91,6 +373,21 @@ async function main() {
   );
   assert.equal(precedent.precedentPolicy.rawSessionDefaultRead, false, "precedent packet must declare no raw-session default read");
   assert.equal(precedent.precedentPolicy.giantMarkdownDefaultRead, false, "precedent packet must declare no giant Markdown default read");
+  assert.equal(precedent.precedentPolicy.memoryRouter, "hot_warm_cold_metadata_first", "precedent packet should expose MemoryRouter strategy");
+
+  const slowPrecedent = buildRuntimePrecedentPacket(
+    { ...retrieveResult, queryType: "retrieve_precedent", items: [] },
+    {
+      taskType: "slow precedent",
+      tokenBudget: 800,
+      timeBudgetMs: 50,
+      retrievalDurationMs: 75,
+      allowedKinds: ["experience_card"],
+    },
+  );
+  assert.equal(slowPrecedent.performance.timeBudgetExceeded, true, "precedent packet should flag time budget exceedance");
+  assert.equal(slowPrecedent.partial, true, "precedent time budget exceedance should mark packet partial");
+  assert.ok(slowPrecedent.warnings.includes("memory_router_time_budget_exceeded_partial"), "precedent time budget exceedance should warn");
 
   const safeWriteback = {
     decision: "accept",

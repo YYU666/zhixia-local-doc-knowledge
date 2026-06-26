@@ -30,7 +30,24 @@ function runHelperFailure(workspace, args) {
 
 function writeFixture(workspace) {
   const bundleDir = path.join(workspace, ".codex-knowledge");
+  const docsDir = path.join(workspace, "docs");
   fs.mkdirSync(bundleDir, { recursive: true });
+  fs.mkdirSync(docsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(docsDir, "REFMUSE_GAME_STUDIO_CEO_RECOVERY_PACKET.md"),
+    "# Refmuse Game Studio CEO Recovery\n\n中文恢复摘要：旧 CEO 线程坏掉后，新线程先读这里继续项目。",
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(docsDir, "REFMUSE_GAME_STUDIO_CEO_TRANSCRIPT_EXTRACT.md"),
+    `# Giant Transcript Pointer\n\n${"transcript filler\n".repeat(60000)}DO_NOT_READ_TRANSCRIPT_TAIL`,
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(docsDir, "PRD.md"),
+    "# PRD\n\nRefmuse game studio 是一个 2D 游戏与插件平台项目。",
+    "utf8",
+  );
   fs.writeFileSync(
     path.join(bundleDir, "retrieval-packet.md"),
     [
@@ -105,6 +122,44 @@ function main() {
     assert.ok(context.items.length > 0, "runtime context should return compact items");
     assert.ok(context.items.every((item) => item.rawSessionPolicy === "not_allowed"), "runtime context must forbid raw-session defaults");
     assert.ok(context.sourceRefs.length > 0, "runtime context should preserve sourceRefs");
+
+    const recovery = runHelper(workspace, [
+      "--recover-thread",
+      "--thread-id",
+      "public-thread-id",
+      "--thread-title",
+      "Refmuse game Studio CEO",
+      "--query",
+      "alpha refmuse recovery",
+      "--limit",
+      "5",
+      "--json",
+    ]);
+    assert.equal(recovery.schemaVersion, "zhixia.thread_recovery_packet.v1", "helper should expose ThreadRecoveryPacket schema");
+    assert.equal(recovery.mode, "thread_recovery_packet", "helper recovery mode should be explicit");
+    assert.equal(recovery.thread.threadId, "public-thread-id", "recovery packet should preserve target threadId");
+    assert.equal(recovery.vault.policy, "helper_metadata_only_no_vault_walk", "helper recovery must not walk Thread History Vault");
+    assert.equal(recovery.performance.rawSessionBodyRead, false, "helper recovery must not read raw session bodies");
+    assert.equal(recovery.performance.startsTimers, false, "helper recovery must not start background timers");
+    assert.equal(recovery.safety.archiveCompactDeleteMoveRestore, false, "helper recovery must not archive/compact/delete/move/restore");
+    assert.ok(recovery.recommendedReadOrder.some((item) => /REFMUSE_GAME_STUDIO_CEO_RECOVERY_PACKET\.md$/.test(item.path)), "recovery should recommend local recovery docs");
+    assert.equal(
+      recovery.recommendedReadOrder.some((item) => /REFMUSE_GAME_STUDIO_CEO_TRANSCRIPT_EXTRACT\.md$/.test(item.path)),
+      false,
+      "giant transcript documents must not be recommended for default reading",
+    );
+    assert.ok(
+      recovery.coldHistorySources.some((item) => /REFMUSE_GAME_STUDIO_CEO_TRANSCRIPT_EXTRACT\.md$/.test(item.path) && item.kind === "large_project_artifact_pointer"),
+      "giant transcript documents should remain as cold pointers",
+    );
+    assert.ok(recovery.warnings.includes("large_recovery_docs_pointer_only"), "giant recovery docs should produce pointer-only warning");
+    assert.ok(recovery.context.items.length > 0, "recovery should include compact runtime context items");
+    assert.ok(recovery.prompt.includes("不要直接加载原始"), "recovery prompt should warn against loading raw sessions");
+    const recoveryText = JSON.stringify(recovery);
+    assert.doesNotMatch(recoveryText, /\.codex[\\/]sessions/i, "recovery helper must not leak raw session paths from knowledge excerpts");
+    assert.doesNotMatch(recoveryText, /A{120}/, "recovery helper must not leak base64-like payloads");
+    assert.doesNotMatch(recoveryText, /DO_NOT_READ_GIANT_TAIL/, "recovery helper must not read giant Markdown tail content");
+    assert.doesNotMatch(recoveryText, /DO_NOT_READ_TRANSCRIPT_TAIL/, "recovery helper must not read giant transcript content");
 
     const precedent = runHelper(workspace, ["--precedent", "alpha", "--limit", "5", "--json"]);
     assert.equal(precedent.mode, "runtime_precedent_packet", "precedent mode should be explicit");
