@@ -449,6 +449,7 @@ assert.match(main, /listAgentRetrieveLogs/, "main process should include retriev
 assert.match(main, /memoryRuntime:retrieveContext/, "main process must expose Memory Runtime retrieve_context IPC");
 assert.match(main, /memoryRuntime:retrievePrecedent/, "main process must expose Memory Runtime retrieve_precedent IPC");
 assert.match(main, /memoryRuntime:writebackEvidence/, "main process must expose Memory Runtime writeback_evidence IPC");
+assert.match(main, /memoryRuntime:observeEvent/, "main process must expose event-triggered runtime memory IPC");
 assert.match(main, /memoryRuntime:upsertWorkingMemory/, "main process must expose WorkingMemoryRecord upsert IPC");
 assert.match(main, /memoryRuntime:listFlowSkillCandidates/, "main process must expose read-only FlowSkill candidate list IPC");
 assert.match(main, /memoryRuntime:promoteMemory/, "main process must expose fail-closed promote_memory IPC");
@@ -471,6 +472,10 @@ assert.match(memoryRuntimePolicy, /buildRuntimePrecedentRequest[\s\S]*DEFAULT_PR
 assert.match(memoryRuntimePolicy, /metadata_first_no_raw_session_body/, "Memory Runtime context must declare metadata-first no raw-session policy");
 assert.match(memoryRuntimePolicy, /buildHotStateCacheSeed/, "Memory Runtime should seed compact hot state without reading raw history");
 assert.match(memoryRuntimePolicy, /buildMemoryGraph/, "Memory Runtime should build a bounded association graph from compact refs");
+assert.match(memoryRuntimePolicy, /RUNTIME_EVENT_TYPES[\s\S]*broken_thread[\s\S]*heartbeat_fuse[\s\S]*thread_takeover[\s\S]*stale_lane_reference/, "Memory Runtime must support broken-thread and heartbeat runtime event types");
+assert.match(memoryRuntimePolicy, /normalizeRuntimeEventMemory[\s\S]*metadataOnly:\s*true[\s\S]*archiveCompactDeleteMoveRestore:\s*false/, "runtime event memory writes must stay metadata-only and non-mutating");
+assert.match(memoryRuntimePolicy, /runtimeEventToWorkingMemoryRecord/, "runtime events must feed short-term WorkingMemoryRecord state");
+assert.match(memoryRuntimePolicy, /filterDefaultSafeSourceRefs/, "runtime event default context must filter unsafe source refs");
 assert.match(memoryRuntimePolicy, /buildFlowSkillReadyCandidate/, "Memory Runtime policy must build private FlowSkill-ready candidate packets");
 assert.match(memoryRuntimePolicy, /runtimeSubdir\(storeRoot,\s*"flowskill-candidates"\)/, "FlowSkill candidates must be stored in app-owned Memory Runtime storage");
 assert.match(memoryRuntimePolicy, /writeEvidenceWriteback[\s\S]*archiveCompactDeleteMoveRestore:\s*false/, "Memory Runtime writeback receipts must preserve no archive/compact/delete boundary");
@@ -666,6 +671,10 @@ assert.match(preload, /retrieveMemoryRuntimeContext/, "preload must expose Memor
 assert.match(preload, /retrieveMemoryRuntimePrecedent/, "preload must expose Memory Runtime retrieve_precedent IPC");
 assert.match(preload, /recoverMemoryRuntimeThread/, "preload must expose Memory Runtime thread recovery packet IPC");
 assert.match(preload, /writebackMemoryRuntimeEvidence/, "preload must expose Memory Runtime writeback_evidence IPC");
+assert.match(preload, /observeMemoryRuntimeEvent/, "preload must expose event-triggered runtime memory IPC");
+assert.match(viteEnv, /RuntimeEventMemoryInput/, "renderer types must define runtime event memory input");
+assert.match(viteEnv, /RuntimeEventMemoryReceipt/, "renderer types must define runtime event memory receipt");
+assert.match(viteEnv, /observeMemoryRuntimeEvent/, "renderer types must expose event-triggered runtime memory API");
 assert.match(preload, /upsertWorkingMemory/, "preload must expose WorkingMemoryRecord IPC");
 assert.match(preload, /listFlowSkillCandidates/, "preload must expose read-only FlowSkill candidate list IPC");
 assert.match(preload, /promoteMemory/, "preload must expose promote_memory IPC");
@@ -678,6 +687,7 @@ assert.match(preload, /listRetrieveLogs/, "preload must expose retrieval log IPC
 assert.match(main, /buildThreadRecoveryPacket/, "main process must import the ThreadRecoveryPacket builder");
 assert.match(main, /function recoverMemoryRuntimeThread/, "main process must build ThreadRecoveryPacket from lineage/vault pointers");
 assert.match(main, /memoryRuntime:recoverThread/, "main process must expose thread recovery packet IPC");
+assert.match(main, /recoverMemoryRuntimeThread[\s\S]*observeMemoryRuntimeEvent\(\{[\s\S]*thread_takeover[\s\S]*runtimeEventWriteback/, "thread recovery must write a short-term runtime event receipt");
 assert.match(main, /readThreadVaultManifestByThreadId/, "thread recovery must read targeted vault manifests by threadId");
 assert.match(main, /findGuardianThreadRecoveryRecords/, "thread recovery must use Guardian inventory metadata pointers");
 assert.match(main, /findSessionPointersByThreadId/, "thread recovery must expose raw sessions only as bounded pointers");
@@ -748,6 +758,8 @@ assert.match(viteEnv, /AgentRuntimePlatformSupport/, "renderer types must expose
 assert.match(viteEnv, /vaultManifestPath\?: string \| null/, "renderer runtime session types must expose vault manifest evidence");
 assert.match(viteEnv, /memoryPointers\?: string\[\]/, "renderer runtime session types must expose memory pointer evidence");
 assert.match(viteEnv, /compactReceiptPath\?: string \| null/, "renderer runtime session types must expose compact receipt evidence");
+assert.match(viteEnv, /RuntimeEventWritebackSummary/, "renderer types must expose runtime event writeback receipts");
+assert.match(viteEnv, /observeRuntimeEvents\?: boolean/, "runtime monitor options must allow disabling event writeback for dry-run tests");
 assert.match(viteEnv, /getRuntimeMonitorSnapshot:/, "renderer API must type runtime monitor snapshots");
 assert.match(viteEnv, /updateExperienceCardStatus:/, "renderer API must type experience status updates");
 assert.match(viteEnv, /options\?: ExperienceCardGovernanceOptions/, "renderer API must type optional experience governance options");
@@ -874,6 +886,7 @@ assert.match(readme, /source-only[\s\S]*\.codex-knowledge\/[\s\S]*release\//, "R
 assert.match(securityDoc, /Raw session bodies[\s\S]*FlowSkill candidates[\s\S]*Archive, compact, restore, delete, move/, "SECURITY.md must document local-first Memory Runtime safety boundaries");
 assert.match(contributingDoc, /Privacy Guardrails[\s\S]*\.codex-knowledge\/[\s\S]*Raw Codex session JSONL/, "CONTRIBUTING.md must forbid committing private/generated memory artifacts");
 assert.match(ceoFlowMemoryRuntimeDoc, /retrieve_context\(task_goal\)[\s\S]*retrieve_precedent\(task_type\)[\s\S]*writeback_evidence\(result\)[\s\S]*promote_memory\(candidate\)/, "CEO Flow integration doc must define the Memory Runtime lifecycle hooks");
+assert.match(ceoFlowMemoryRuntimeDoc, /observe_event\(event\)[\s\S]*broken_thread[\s\S]*heartbeat_fuse[\s\S]*thread_takeover/, "CEO Flow integration doc must define event-triggered short-term memory hooks");
 assert.match(ceoFlowMemoryRuntimeDoc, /none[\s\S]*project-memory[\s\S]*zhixia-local-docs[\s\S]*guardian-history[\s\S]*hybrid/, "CEO Flow integration doc must define provider modes");
 assert.match(ceoFlowMemoryRuntimeDoc, /No raw sessions by default[\s\S]*No giant Markdown by default[\s\S]*Promotion is fail-closed/, "CEO Flow integration doc must keep hard safety boundaries explicit");
 assert.match(publicationChecklist, /Must Not Publish[\s\S]*\.codex-knowledge\/[\s\S]*Real Codex session JSONL[\s\S]*Release installers/, "Publication checklist must list private/generated artifacts to exclude");
@@ -1056,6 +1069,9 @@ assert.match(preload, /generateCodexArchiveQueue/, "Preload must expose archive 
 assert.match(viteEnv, /CodexThreadArchiveQueue/, "Renderer types must expose Codex thread archive queue results");
 assert.match(main, /runtimeMonitor:getSnapshot/, "main process must expose a read-only runtime monitor snapshot IPC");
 assert.match(main, /collectRuntimeMonitorSnapshot/, "main process must collect runtime monitor snapshots through the adapter");
+assert.match(main, /function persistRuntimeMonitorEvents/, "runtime monitor snapshots must persist observed runtime events for Memory Runtime recall");
+assert.match(main, /getRuntimeMonitorSnapshot[\s\S]*persistRuntimeMonitorEvents\(snapshot,\s*options\)/, "runtime monitor snapshot must close the loop into RuntimeEventMemory");
+assert.match(main, /observeRuntimeEvents === false[\s\S]*runtime_event_writeback_disabled_by_request/, "runtime monitor event writeback must be explicitly disableable for tests or dry runs");
 assert.doesNotMatch(appTsx, /renderAgentWorkspace[\s\S]*renderRuntimeMonitorPanel\(/, "Smart Optimization default UI must not render the runtime monitor panel");
 assert.doesNotMatch(appTsx, /实时压力监控/, "Smart Optimization visible copy should not expose realtime pressure monitoring as a default feature");
 assert.match(appTsx, /getRuntimeMonitorSnapshot\(\{[\s\S]*sessionLimit:\s*12[\s\S]*includeLongThreadMetadata:\s*false/, "Agent runtime monitor UI must request a lightweight manual snapshot without long-thread triage");

@@ -30,11 +30,14 @@ const {
   buildActivatedMemoryGraph,
   buildMemoryRouterPlan,
   buildThreadRecoveryPacket,
+  buildRuntimeItemsFromVolatileMemory,
   listFlowSkillCandidateRecords,
+  listRuntimeEventRecords,
   listWorkingMemoryRecords,
   mergeMemoryGraphs,
   promoteMemoryCandidate,
   upsertWorkingMemoryRecord,
+  writeRuntimeEventMemory,
   writeEvidenceWriteback,
 } = require("./memoryRuntimePolicy.cjs");
 const {
@@ -1993,7 +1996,7 @@ async function getRuntimeMonitorSnapshot(options = {}) {
   const includeLongThreadMetadata = options.includeLongThreadMetadata === true;
   const longThreadLimit = Math.max(1, Math.min(8, Math.floor(Number(options.longThreadLimit) || 6)));
   const minBytes = Math.max(1024 * 1024, Math.floor(Number(options.minBytes) || LONG_CODEX_THREAD_BYTES));
-  return collectRuntimeMonitorSnapshot({
+  const snapshot = await collectRuntimeMonitorSnapshot({
     ...options,
     sessionLimit,
     guardianReportProvider: () => runCodexGuardian("report"),
@@ -2006,6 +2009,149 @@ async function getRuntimeMonitorSnapshot(options = {}) {
         })
       : null,
   });
+  if (options.observeRuntimeEvents === false) {
+    return {
+      ...snapshot,
+      runtimeEventWriteback: {
+        enabled: false,
+        attempted: 0,
+        recorded: 0,
+        skipped: 0,
+        receipts: [],
+        warnings: ["runtime_event_writeback_disabled_by_request"],
+      },
+    };
+  }
+  const runtimeEventWriteback = await persistRuntimeMonitorEvents(snapshot, options);
+  return {
+    ...snapshot,
+    runtimeEventWriteback,
+  };
+}
+
+function runtimeEventForMonitorRecommendation(recommendation = {}, snapshot = {}) {
+  const sampledAt = snapshot.sampledAt || new Date().toISOString();
+  if (recommendation.scope === "session") {
+    const session = safeArray(snapshot.sessions).find((item) => (
+      (recommendation.threadId && item.threadId === recommendation.threadId) ||
+      (recommendation.sessionId && item.id === recommendation.sessionId)
+    )) || {};
+    const action = recommendation.recommendedAction || "none";
+    const eventType = action === "review_error_state"
+      ? "broken_thread"
+      : action === "inspect_thread_metadata"
+        ? "stale_lane_reference"
+        : "runtime_diagnosis";
+    const severity = action === "review_error_state"
+      ? "error"
+      : recommendation.pressureScore >= 70
+        ? "warning"
+        : "info";
+    return {
+      eventType,
+      severity,
+      projectPath: session.projectPath || null,
+      threadId: recommendation.threadId || session.threadId || null,
+      title: `运行诊断：${session.title || recommendation.threadId || recommendation.sessionId || action}`,
+      summary: [
+        `runtime monitor action=${action}`,
+        `status=${session.status || "unknown"}`,
+        `pressure=${recommendation.pressureScore ?? session.pressureScore ?? "unknown"}`,
+        session.sessionBytes ? `historyBytes=${session.sessionBytes}` : "",
+      ].filter(Boolean).join("; "),
+      observedSignals: [
+        action,
+        `attribution=${recommendation.attributionConfidence || session.attributionConfidence || "unknown"}`,
+        ...safeArray(recommendation.evidence).slice(0, 8),
+        ...safeArray(session.evidence).slice(0, 4),
+      ],
+      decisions: ["写入短期运行记忆，后续 retrieve_context 可召回该诊断。"],
+      openRisks: safeArray(recommendation.uncertainty?.reasons).slice(0, 6),
+      nextAction: action === "review_error_state"
+        ? "生成 ThreadRecoveryPacket，必要时从干净线程接管。"
+        : action === "review_history_metadata"
+          ? "检查是否已有入库/瘦身/归档队列证据，避免重复扫描。"
+          : "复查运行诊断并继续按元数据证据定位。",
+      sourceRefs: [
+        {
+          kind: "runtime_monitor_snapshot",
+          path: `memory-runtime://runtime-monitor/${sampledAt}`,
+          title: "Agent runtime monitor snapshot",
+          updatedAt: sampledAt,
+        },
+      ],
+      status: ["broken_thread", "stale_lane_reference"].includes(eventType) ? "blocked" : "active",
+      updatedAt: sampledAt,
+    };
+  }
+  if (recommendation.scope === "process") {
+    return {
+      eventType: "runtime_diagnosis",
+      severity: "warning",
+      projectPath: null,
+      title: `运行诊断：agent process ${recommendation.processId || "unknown"}`,
+      summary: recommendation.reason || "High agent process pressure was observed without exact thread attribution.",
+      observedSignals: [
+        recommendation.recommendedAction || "inspect_process_metadata",
+        `attribution=${recommendation.attributionConfidence || "low"}`,
+        recommendation.processId ? `process=${recommendation.processId}` : "",
+      ].filter(Boolean),
+      decisions: ["仅记录进程级诊断，不声称已确定具体线程。"],
+      openRisks: ["process_to_thread_mapping_is_inferred_from_metadata"],
+      nextAction: "需要结合线程元数据或用户当前工作线程再定位。",
+      sourceRefs: [
+        {
+          kind: "runtime_monitor_snapshot",
+          path: `memory-runtime://runtime-monitor/${sampledAt}`,
+          title: "Agent runtime monitor snapshot",
+          updatedAt: sampledAt,
+        },
+      ],
+      status: "active",
+      updatedAt: sampledAt,
+    };
+  }
+  return null;
+}
+
+async function persistRuntimeMonitorEvents(snapshot = {}, options = {}) {
+  const recommendations = safeArray(snapshot.recommendations).slice(0, Math.max(1, Math.min(Number(options.runtimeEventLimit || 5), 12)));
+  const receipts = [];
+  const warnings = [];
+  let skipped = 0;
+  for (const recommendation of recommendations) {
+    const event = runtimeEventForMonitorRecommendation(recommendation, snapshot);
+    if (!event) {
+      skipped += 1;
+      continue;
+    }
+    try {
+      await ensureDatabase();
+      const receipt = await observeMemoryRuntimeEvent(event);
+      receipts.push({
+        id: receipt.id,
+        eventType: receipt.eventType,
+        severity: receipt.severity,
+        taskId: receipt.taskId,
+        projectPath: receipt.projectPath || null,
+        threadId: receipt.threadId || null,
+        status: receipt.status,
+        warnings: receipt.warnings,
+        safety: receipt.safety,
+      });
+    } catch (error) {
+      warnings.push(`runtime_event_write_failed:${compactText(error.message || error, 180)}`);
+    }
+  }
+  if (receipts.length > 0) await saveDatabase();
+  return {
+    enabled: true,
+    attempted: recommendations.length,
+    recorded: receipts.length,
+    skipped,
+    receipts,
+    warnings,
+  };
 }
 
 function isPathInside(parentPath, childPath) {
@@ -8383,11 +8529,26 @@ function retrieveAgentContext(options = {}) {
   return result;
 }
 
-function retrieveMemoryRuntimeContext(options = {}) {
+async function retrieveMemoryRuntimeContext(options = {}) {
   const taskGoal = options.taskGoal || options.task_goal || options.query || "";
   const routerPlan = buildMemoryRouterPlan({
     ...options,
     taskGoal,
+  });
+  const [runtimeEvents, workingMemory] = await Promise.all([
+    listRuntimeEventRecords(memoryRuntimeRoot(), {
+      projectPath: options.projectPath || null,
+      threadId: options.threadId || options.parentCeoThreadId || options.ceoThreadId || null,
+      limit: 12,
+    }),
+    listWorkingMemoryRecords(memoryRuntimeRoot(), {
+      projectPath: options.projectPath || null,
+      limit: 24,
+    }),
+  ]);
+  const volatileItems = buildRuntimeItemsFromVolatileMemory({
+    events: runtimeEvents,
+    workingMemory,
   });
   if (routerPlan.retrieval.includeKinds.length === 0) {
     return buildRuntimeContextPacket({
@@ -8399,7 +8560,7 @@ function retrieveMemoryRuntimeContext(options = {}) {
       tokenEstimate: 0,
       generatedAt: new Date().toISOString(),
       warnings: ["memory_router_no_allowed_runtime_kinds_no_retrieval"],
-      items: [],
+      items: volatileItems,
     }, {
       ...options,
       taskGoal,
@@ -8413,12 +8574,23 @@ function retrieveMemoryRuntimeContext(options = {}) {
     ...options,
     query: taskGoal,
     queryType: routerPlan.queryType || options.queryType || "task_dispatch",
-    includeKinds: routerPlan.retrieval.includeKinds,
-    maxResults: routerPlan.budgets.topK,
-    tokenBudget: routerPlan.budgets.tokenBudget,
+      includeKinds: routerPlan.retrieval.includeKinds,
+      maxResults: routerPlan.budgets.topK,
+      tokenBudget: routerPlan.budgets.tokenBudget,
   });
   const retrievalDurationMs = Date.now() - retrievalStartedAt;
-  const packet = buildRuntimeContextPacket(retrieval, {
+  const packet = buildRuntimeContextPacket({
+    ...retrieval,
+    items: [
+      ...volatileItems,
+      ...safeArray(retrieval.items),
+    ].filter((item, index, array) => array.findIndex((candidate) => candidate.id === item.id) === index),
+    tokenEstimate: Number(retrieval.tokenEstimate || 0) + volatileItems.reduce((sum, item) => sum + Number(item.tokenEstimate || 0), 0),
+    warnings: [
+      ...safeArray(retrieval.warnings),
+      ...(volatileItems.length > 0 ? ["runtime_event_working_memory_hot_state_included"] : []),
+    ],
+  }, {
     ...options,
     taskGoal,
     routerPlan,
@@ -8701,7 +8873,7 @@ async function buildRecoveryProjectDocs(projectPath) {
 async function recoverMemoryRuntimeThread(options = {}) {
   const normalized = normalizeThreadRecoveryQuery(options);
   const projectPath = options.projectPath || null;
-  const contextPacket = retrieveMemoryRuntimeContext({
+  const contextPacket = await retrieveMemoryRuntimeContext({
     ...options,
     taskGoal: normalized.query || `恢复旧线程 ${normalized.threadId || normalized.title}`,
     queryType: "thread_recovery",
@@ -8750,7 +8922,7 @@ async function recoverMemoryRuntimeThread(options = {}) {
     guardianRecords,
     options,
   );
-  return buildThreadRecoveryPacket({
+  const packet = buildThreadRecoveryPacket({
     ...options,
     threadId: normalized.threadId || guardianRecords[0]?.threadId || vaultManifests[0]?.threadId || null,
     title: normalized.title || guardianRecords[0]?.title || vaultManifests[0]?.title || normalized.query,
@@ -8777,10 +8949,158 @@ async function recoverMemoryRuntimeThread(options = {}) {
       ...(projectDocs.length === 0 ? ["no_project_recovery_docs_found"] : []),
     ],
   });
+  if (options.observeRuntimeEvent === false) {
+    return {
+      ...packet,
+      runtimeEventWriteback: {
+        enabled: false,
+        recorded: 0,
+        receipts: [],
+        warnings: ["runtime_event_writeback_disabled_by_request"],
+      },
+    };
+  }
+  await ensureDatabase();
+  const receipt = await observeMemoryRuntimeEvent({
+    eventType: options.replacementThreadId || options.takeoverThreadId ? "thread_takeover" : "stale_lane_reference",
+    severity: packet.thread?.confidence === "source_backed" ? "info" : "warning",
+    projectPath: packet.thread?.projectPath || resolvedProjectPath || null,
+    threadId: packet.thread?.threadId || normalized.threadId || null,
+    replacementThreadId: options.replacementThreadId || options.takeoverThreadId || null,
+    title: `线程恢复包：${packet.thread?.title || packet.thread?.threadId || normalized.query || "旧线程"}`,
+    summary: "已生成 compact ThreadRecoveryPacket；后续 CEO Flow 应优先读取恢复包、项目文档和 hot runtime memory，而不是 fork 或粘贴完整旧聊天。",
+    observedSignals: [
+      "recover_thread_called",
+      `lineage=${packet.lineage?.length || 0}`,
+      `vault=${packet.vault?.manifests?.length || 0}`,
+      `projectDocs=${packet.recommendedReadOrder?.length || 0}`,
+    ],
+    decisions: ["旧线程恢复事实写入短期运行记忆。"],
+    openRisks: safeArray(packet.warnings).slice(0, 8),
+    nextAction: "新线程启动后调用 retrieve_context(thread_recovery) 召回该恢复事件和 WorkingMemory。",
+    sourceRefs: [
+      {
+        kind: "thread_recovery_packet",
+        path: `memory-runtime://thread-recovery/${packet.thread?.threadId || normalized.threadId || "unknown"}`,
+        title: "ThreadRecoveryPacket",
+        updatedAt: packet.generatedAt,
+      },
+    ],
+  });
+  await saveDatabase();
+  return {
+    ...packet,
+    runtimeEventWriteback: {
+      enabled: true,
+      recorded: 1,
+      receipts: [{
+        id: receipt.id,
+        eventType: receipt.eventType,
+        severity: receipt.severity,
+        taskId: receipt.taskId,
+        projectPath: receipt.projectPath || null,
+        threadId: receipt.threadId || null,
+        status: receipt.status,
+        warnings: receipt.warnings,
+        safety: receipt.safety,
+      }],
+      warnings: receipt.warnings,
+    },
+  };
 }
 
 async function writebackMemoryRuntimeEvidence(packet = {}) {
   return writeEvidenceWriteback(memoryRuntimeRoot(), packet);
+}
+
+async function observeMemoryRuntimeEvent(event = {}) {
+  const receipt = await writeRuntimeEventMemory(memoryRuntimeRoot(), event);
+  const record = await fs.readFile(receipt.storagePath, "utf8")
+    .then((raw) => JSON.parse(raw))
+    .catch(() => null);
+  if (record) {
+    const nodeId = `runtime-event:${record.id}`;
+    upsertMemoryGraphNode({
+      id: nodeId,
+      projectPath: record.projectPath || null,
+      kind: "runtime_event",
+      title: record.title || record.eventType || record.id,
+      summary: [
+        record.summary,
+        record.nextAction ? `Next: ${record.nextAction}` : "",
+        record.threadId ? `Thread: ${record.threadId}` : "",
+        record.automationId ? `Automation: ${record.automationId}` : "",
+      ].filter(Boolean).join(" | "),
+      tags: [
+        record.eventType,
+        record.severity,
+        record.status,
+        record.threadId,
+        record.automationId,
+        record.replacementThreadId,
+      ].filter(Boolean),
+      sourceTable: "memory_runtime_events",
+      sourceId: record.id,
+      threadId: record.replacementThreadId || record.threadId || null,
+      sourceRefs: record.defaultSourceRefs || [],
+      status: record.status === "blocked" ? "blocked" : "ready",
+      freshness: "fresh",
+      updatedAt: record.updatedAt,
+    });
+    if (record.threadId) {
+      upsertMemoryGraphNode({
+        id: `thread:${record.threadId}`,
+        projectPath: record.projectPath || null,
+        kind: "thread_lineage_index",
+        title: record.threadId,
+        summary: record.summary || record.title || "Runtime event thread pointer.",
+        tags: [record.eventType, "runtime-event"].filter(Boolean),
+        sourceTable: "memory_runtime_events",
+        sourceId: `${record.id}:thread`,
+        threadId: record.threadId,
+        sourceRefs: record.defaultSourceRefs || [],
+        status: record.status === "blocked" ? "blocked" : "ready",
+        freshness: "fresh",
+        updatedAt: record.updatedAt,
+      });
+      upsertMemoryGraphEdge({
+        projectPath: record.projectPath || null,
+        fromNodeId: nodeId,
+        toNodeId: `thread:${record.threadId}`,
+        kind: "observed_thread",
+        weight: 3,
+        reason: record.eventType,
+        updatedAt: record.updatedAt,
+      });
+    }
+    if (record.replacementThreadId) {
+      upsertMemoryGraphNode({
+        id: `thread:${record.replacementThreadId}`,
+        projectPath: record.projectPath || null,
+        kind: "thread_lineage_index",
+        title: record.replacementThreadId,
+        summary: "Replacement/takeover thread pointer from runtime event memory.",
+        tags: [record.eventType, "takeover"].filter(Boolean),
+        sourceTable: "memory_runtime_events",
+        sourceId: `${record.id}:replacement`,
+        threadId: record.replacementThreadId,
+        sourceRefs: record.defaultSourceRefs || [],
+        status: "ready",
+        freshness: "fresh",
+        updatedAt: record.updatedAt,
+      });
+      upsertMemoryGraphEdge({
+        projectPath: record.projectPath || null,
+        fromNodeId: nodeId,
+        toNodeId: `thread:${record.replacementThreadId}`,
+        kind: "takeover_thread",
+        weight: 4,
+        reason: record.eventType,
+        updatedAt: record.updatedAt,
+      });
+    }
+  }
+  return receipt;
 }
 
 async function upsertMemoryRuntimeWorkingMemory(record = {}) {
@@ -9618,6 +9938,13 @@ ipcMain.handle("memoryRuntime:recoverThread", async (_event, options = {}) => {
 });
 
 ipcMain.handle("memoryRuntime:writebackEvidence", async (_event, packet = {}) => writebackMemoryRuntimeEvidence(packet));
+
+ipcMain.handle("memoryRuntime:observeEvent", async (_event, event = {}) => {
+  await ensureDatabase();
+  const receipt = await observeMemoryRuntimeEvent(event);
+  await saveDatabase();
+  return receipt;
+});
 
 ipcMain.handle("memoryRuntime:upsertWorkingMemory", async (_event, record = {}) => upsertMemoryRuntimeWorkingMemory(record));
 

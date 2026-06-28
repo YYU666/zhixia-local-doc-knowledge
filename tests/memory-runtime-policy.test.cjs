@@ -6,6 +6,7 @@ const path = require("node:path");
 const {
   buildMemoryRouterPlan,
   buildActivatedMemoryGraph,
+  buildRuntimeItemsFromVolatileMemory,
   buildRuntimeContextPacket,
   buildRuntimePrecedentPacket,
   buildRuntimePrecedentRequest,
@@ -13,9 +14,12 @@ const {
   evaluatePromotionCandidate,
   evaluateWritebackEvidence,
   listFlowSkillCandidateRecords,
+  listRuntimeEventRecords,
   listWorkingMemoryRecords,
+  normalizeRuntimeEventMemory,
   promoteMemoryCandidate,
   upsertWorkingMemoryRecord,
+  writeRuntimeEventMemory,
   writeEvidenceWriteback,
 } = require("../electron/memoryRuntimePolicy.cjs");
 
@@ -139,6 +143,53 @@ async function main() {
   assert.equal(JSON.stringify(threadRecoveryPacket).includes("raw source pointer only"), true, "safe raw pointer titles may appear");
   assert.equal(JSON.stringify(threadRecoveryPacket).includes("raw session body"), false, "recovery packet must not include raw session body text");
 
+  const runtimeEvent = normalizeRuntimeEventMemory({
+    eventType: "broken_thread",
+    severity: "error",
+    projectPath: "C:/Users/example/Documents/2D游戏项目",
+    threadId: "public-thread-id",
+    automationId: "rgs-ceo-harvest-post-43-wave",
+    title: "RGS CEO 线程断流空转",
+    summary: "RGS CEO 主线程连续 heartbeat 空完成，已暂停心跳，应由干净接管线程恢复。",
+    observedSignals: ["systemError", "last_agent_message=null", "15min heartbeat loop", "236k token turn"],
+    decisions: ["暂停旧 heartbeat，不再向旧 CEO 主线程派工。"],
+    openRisks: ["旧线程仍可能有最后一轮 inProgress 残留。"],
+    nextAction: "新建 RGS CEO Takeover 线程并读取项目短记忆包。",
+    sourceRefs: [
+      { kind: "automation", path: "C:/Users/example/.codex/automations/rgs-ceo-harvest-post-43-wave/automation.toml" },
+      { kind: "raw_session", path: "C:/Users/example/.codex/sessions/2026/06/25/rollout.jsonl" },
+      { kind: "secret", path: "C:/Users/example/Documents/project/.env" },
+    ],
+  });
+  assert.equal(runtimeEvent.status, "blocked", "broken thread events should become blocked working memory");
+  assert.equal(runtimeEvent.defaultSourceRefs.length, 1, "runtime events should filter raw/secret refs out of default context");
+  assert.equal(runtimeEvent.sourceRefs.length, 1, "runtime events should not retain unsafe refs in stored sourceRefs");
+  assert.equal(runtimeEvent.unsafeSourceRefCount, 2, "runtime events should keep only an unsafe ref count");
+  assert.ok(runtimeEvent.warnings.includes("unsafe_source_refs_pointer_omitted_from_runtime_event_storage"), "filtered refs should leave a storage warning");
+  assert.equal(runtimeEvent.safety.rawSessionBodyRead, false, "runtime event memory must not read raw session bodies");
+  assert.equal(runtimeEvent.safety.startsTimers, false, "runtime event memory must not start timers");
+
+  const maxOutputDisconnectedEvent = normalizeRuntimeEventMemory({
+    severity: "error",
+    projectPath: "C:/Users/example/Documents/2D游戏项目",
+    title: "RGS callback stream disconnected",
+    summary: "stream disconnected before completion: Incomplete response returned, reason: max_output_tokens. 正在自动压缩上下文，正在重新连接 5/5。",
+    observedSignals: ["max_output_tokens", "reconnecting 5/5"],
+  });
+  assert.equal(maxOutputDisconnectedEvent.eventType, "broken_thread", "max_output_tokens reconnect loops should infer broken_thread");
+  assert.equal(maxOutputDisconnectedEvent.status, "blocked", "inferred broken_thread should become blocked working memory");
+
+  const modelDriftRuleEvent = normalizeRuntimeEventMemory({
+    severity: "warning",
+    projectPath: "C:/Users/example/Documents/2D游戏项目",
+    title: "CEO Flow model policy drift",
+    summary: "有线程把 CEO 线程改成 5.3 导致断流；其他 CEO 线程不得修改当前 CEO 推理强度或模型。",
+    observedSignals: ["model changed to 5.3", "reasoning strength drift"],
+    nextAction: "恢复线程时读取该规则，不要让工作线程修改 CEO 模型或推理强度。",
+  });
+  assert.equal(modelDriftRuleEvent.eventType, "user_rule_update", "model/reasoning drift should become a user rule memory event");
+  assert.equal(modelDriftRuleEvent.status, "active", "user rule updates should stay active hot memory");
+
   const noVaultRecoveryPacket = buildThreadRecoveryPacket({
     threadId: "missing-vault-thread",
     title: "Missing vault thread",
@@ -220,6 +271,43 @@ async function main() {
   assert.ok(packet.warnings.includes("memory_router_no_background_scan"), "runtime context should declare no background scan");
   assert.equal(packet.items.length, 1, "runtime context must not surface raw session items");
   assert.equal(JSON.stringify(packet).includes("ZHIXIA_RAW_BACKED_ALLOWED_KIND_BODY_SHOULD_NOT_LEAK"), false, "runtime context must fail closed on raw-backed allowed-kind bodies");
+
+  const runtimeEventStore = await fs.mkdtemp(path.join(os.tmpdir(), "zhixia-runtime-event-memory-"));
+  const eventReceipt = await writeRuntimeEventMemory(runtimeEventStore, runtimeEvent);
+  assert.equal(eventReceipt.status, "recorded", "runtime event should be recorded");
+  assert.equal(eventReceipt.workingMemory.status, "blocked", "runtime event should write blocked working memory");
+  assert.equal(eventReceipt.safety.archiveCompactDeleteMoveRestore, false, "runtime event write must not authorize archive/compact/delete");
+  const storedRuntimeEvent = JSON.parse(await fs.readFile(eventReceipt.storagePath, "utf8"));
+  assert.equal(JSON.stringify(storedRuntimeEvent).includes(".codex/sessions"), false, "stored runtime event must not retain raw session paths");
+  assert.equal(JSON.stringify(storedRuntimeEvent).includes(".env"), false, "stored runtime event must not retain secret paths");
+  assert.equal(JSON.stringify(storedRuntimeEvent).includes("raw_session"), false, "stored runtime event must not retain raw session sourceRef kind");
+  assert.equal(storedRuntimeEvent.unsafeSourceRefCount, 2, "stored runtime event should keep unsafe ref count only");
+  const listedEvents = await listRuntimeEventRecords(runtimeEventStore, {
+    projectPath: "C:/Users/example/Documents/2D游戏项目",
+    threadId: "public-thread-id",
+  });
+  assert.equal(listedEvents.length, 1, "runtime event should be listable by project/thread");
+  const listedWorking = await listWorkingMemoryRecords(runtimeEventStore, { status: "blocked" });
+  assert.equal(listedWorking.length, 1, "runtime event should create a blocked WorkingMemoryRecord");
+  const volatileItems = buildRuntimeItemsFromVolatileMemory({
+    events: listedEvents,
+    workingMemory: listedWorking,
+  });
+  const volatilePacket = buildRuntimeContextPacket({
+    queryType: "thread_recovery",
+    query: "RGS CEO takeover",
+    projectPath: "C:/Users/example/Documents/2D游戏项目",
+    items: volatileItems,
+  }, {
+    taskGoal: "接管 RGS CEO 坏线程",
+    queryType: "thread_recovery",
+    projectPath: "C:/Users/example/Documents/2D游戏项目",
+    allowedKinds: ["runtime_event", "project_record"],
+  });
+  assert.equal(volatilePacket.items.some((item) => item.kind === "runtime_event"), true, "runtime events should enter RuntimeContextPacket");
+  assert.equal(volatilePacket.memoryLayers.hot.count >= 1, true, "runtime events should be hot memory");
+  assert.equal(JSON.stringify(volatilePacket).includes(".codex/sessions"), false, "runtime event context must not leak raw session paths");
+  assert.equal(JSON.stringify(volatilePacket).includes(".env"), false, "runtime event context must not leak secret paths");
 
   const refmuseActivatedGraph = buildActivatedMemoryGraph({
     nodes: [

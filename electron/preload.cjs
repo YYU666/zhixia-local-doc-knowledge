@@ -47,6 +47,7 @@ const docKnowledgeApi = {
   retrieveMemoryRuntimePrecedent: (options) => ipcRenderer.invoke("memoryRuntime:retrievePrecedent", options),
   recoverMemoryRuntimeThread: (options) => ipcRenderer.invoke("memoryRuntime:recoverThread", options),
   writebackMemoryRuntimeEvidence: (packet) => ipcRenderer.invoke("memoryRuntime:writebackEvidence", packet),
+  observeMemoryRuntimeEvent: (event) => ipcRenderer.invoke("memoryRuntime:observeEvent", event),
   upsertWorkingMemory: (record) => ipcRenderer.invoke("memoryRuntime:upsertWorkingMemory", record),
   listWorkingMemory: (options) => ipcRenderer.invoke("memoryRuntime:listWorkingMemory", options),
   listFlowSkillCandidates: (options) => ipcRenderer.invoke("memoryRuntime:listFlowSkillCandidates", options),

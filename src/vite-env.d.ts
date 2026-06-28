@@ -1149,6 +1149,85 @@ export type WorkingMemoryRecord = {
   storagePath?: string;
 };
 
+export type RuntimeEventMemoryType =
+  | "broken_thread"
+  | "heartbeat_fuse"
+  | "thread_takeover"
+  | "stale_lane_reference"
+  | "task_checkpoint"
+  | "user_rule_update"
+  | "runtime_diagnosis";
+
+export type RuntimeEventMemoryInput = {
+  id?: string;
+  eventType?: RuntimeEventMemoryType | string;
+  type?: RuntimeEventMemoryType | string;
+  severity?: "info" | "warning" | "error" | "critical" | string;
+  projectPath?: string | null;
+  threadId?: string | null;
+  parentCeoThreadId?: string | null;
+  replacementThreadId?: string | null;
+  automationId?: string | null;
+  heartbeatId?: string | null;
+  taskId?: string;
+  title?: string;
+  summary?: string;
+  message?: string;
+  observedSignals?: string[];
+  decisions?: string[];
+  openRisks?: string[];
+  nextAction?: string;
+  sourceRefs?: SourceRef[];
+  status?: WorkingMemoryRecord["status"];
+  ttlDays?: number;
+};
+
+export type RuntimeEventMemoryReceipt = {
+  schemaVersion: "zhixia.memory_runtime_store.v1" | string;
+  id: string;
+  status: "recorded" | string;
+  eventType: RuntimeEventMemoryType | string;
+  severity: string;
+  taskId: string;
+  projectPath?: string | null;
+  threadId?: string | null;
+  automationId?: string | null;
+  replacementThreadId?: string | null;
+  warnings: string[];
+  storagePath: string;
+  workingMemory: WorkingMemoryRecord;
+  safety: {
+    metadataOnly: true;
+    rawSessionBodyRead: false;
+    scansVault: false;
+    startsTimers: false;
+    archiveCompactDeleteMoveRestore: false;
+    mutatesRawSession: false;
+    installsOrExecutes: false;
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RuntimeEventWritebackSummary = {
+  enabled: boolean;
+  attempted?: number;
+  recorded: number;
+  skipped?: number;
+  receipts: Array<{
+    id: string;
+    eventType: RuntimeEventMemoryType | string;
+    severity: string;
+    taskId: string;
+    projectPath?: string | null;
+    threadId?: string | null;
+    status: string;
+    warnings: string[];
+    safety: RuntimeEventMemoryReceipt["safety"];
+  }>;
+  warnings: string[];
+};
+
 export type ThreadRecoveryPacket = {
   schemaVersion: "zhixia.thread_recovery_packet.v1";
   generatedAt: string;
@@ -1233,6 +1312,7 @@ export type ThreadRecoveryPacket = {
     rawSessionDefaultRead: false;
   };
   warnings: string[];
+  runtimeEventWriteback?: RuntimeEventWritebackSummary;
   tokenEstimate: number;
 };
 
@@ -1512,6 +1592,7 @@ export type AgentRuntimeMonitorSnapshot = {
   inferredAttribution: AgentRuntimeAttributionInference[];
   warnings: string[];
   recommendations: AgentRuntimeRecommendation[];
+  runtimeEventWriteback?: RuntimeEventWritebackSummary;
   sensitiveFieldPolicy?: {
     commandLine: string;
     executablePath: string;
@@ -1538,6 +1619,8 @@ export type AgentRuntimeMonitorOptions = {
   minBytes?: number;
   highCpuPercent?: number;
   highMemoryBytes?: number;
+  observeRuntimeEvents?: boolean;
+  runtimeEventLimit?: number;
 };
 
 declare global {
@@ -1675,8 +1758,9 @@ declare global {
       retrieveMemoryRuntimeContext: (options?: AgentRetrieveOptions & { taskGoal?: string; threadId?: string | null; allowedKinds?: AgentRetrieveKind[] }) => Promise<RuntimeContextPacket>;
       activateMemoryRuntimeGraph: (options?: AgentRetrieveOptions & { taskGoal?: string; threadId?: string | null; maxNodes?: number; seedLimit?: number }) => Promise<MemoryGraph & { sync?: { nodes: number; edges: number; projectCount: number; projectPath?: string | null; limit: number } }>;
       retrieveMemoryRuntimePrecedent: (options?: { taskType?: string; task_type?: string; query?: string; projectPath?: string | null; parentCeoThreadId?: string | null; tokenBudget?: number; maxResults?: number; allowedKinds?: AgentRetrieveKind[] }) => Promise<RuntimeContextPacket>;
-      recoverMemoryRuntimeThread: (options?: { threadId?: string | null; ceoThreadId?: string | null; title?: string; threadTitle?: string; query?: string; taskGoal?: string; projectPath?: string | null; tokenBudget?: number; maxResults?: number }) => Promise<ThreadRecoveryPacket>;
+      recoverMemoryRuntimeThread: (options?: { threadId?: string | null; ceoThreadId?: string | null; title?: string; threadTitle?: string; query?: string; taskGoal?: string; projectPath?: string | null; tokenBudget?: number; maxResults?: number; replacementThreadId?: string | null; takeoverThreadId?: string | null; observeRuntimeEvent?: boolean }) => Promise<ThreadRecoveryPacket>;
       writebackMemoryRuntimeEvidence: (packet: EvidenceWritebackPacket) => Promise<EvidenceWritebackReceipt>;
+      observeMemoryRuntimeEvent: (event: RuntimeEventMemoryInput) => Promise<RuntimeEventMemoryReceipt>;
       upsertWorkingMemory: (record: Partial<WorkingMemoryRecord> & { taskId: string }) => Promise<WorkingMemoryRecord>;
       listWorkingMemory: (options?: { status?: WorkingMemoryRecord["status"]; projectPath?: string | null; limit?: number }) => Promise<{ records: WorkingMemoryRecord[] }>;
       listFlowSkillCandidates: (options?: { status?: FlowSkillCandidateRecord["status"]; projectPath?: string | null; limit?: number }) => Promise<{ candidates: FlowSkillCandidateRecord[] }>;

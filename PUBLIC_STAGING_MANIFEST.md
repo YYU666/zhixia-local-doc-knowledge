@@ -1,6 +1,6 @@
 # Public Staging Manifest
 
-Generated at: 2026-06-26T09:08:52.428Z
+Generated at: 2026-06-28T01:22:22.001Z
 
 Source app root: canonical app source directory
 Staging path: public-staging/zhixia-local-doc-knowledge
@@ -71,24 +71,24 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=0fbc73cc409156ea
 - codex-skills/zhixia-local-docs/SKILL.md sha256=d5aa145271565de2
 - CONTRIBUTING.md sha256=c7022f052c7acffa
-- docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=69a3d1ccd9364d3a
+- docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=cd0fef42c57db931
 - docs/CODEX_OPTIMIZATION_MONITOR.md sha256=db629fe4cfc579f7
-- docs/PRD.md sha256=e4e3126836101d16
+- docs/PRD.md sha256=ef23cfddda077116
 - docs/PROJECT_EVALUATION.md sha256=25d3536c61324a27
 - docs/PUBLIC_REPO_LAYOUT.md sha256=01a01bda9337271a
 - docs/PUBLICATION_CHECKLIST.md sha256=009c50093528e264
 - docs/RELEASE_NOTES.md sha256=1d39e98758bf57ae
-- docs/TECHNICAL_DESIGN.md sha256=916ead1d5ec1cf20
-- docs/TEST_PLAN.md sha256=0191aeeb0af50819
+- docs/TECHNICAL_DESIGN.md sha256=2430c53c195fb3da
+- docs/TEST_PLAN.md sha256=f36b35070312c377
 - electron/agentRetrievePolicy.cjs sha256=bac38d0e5697d8fe
 - electron/agentRuntimeMonitorPolicy.cjs sha256=0a7051c8e3745c5e
 - electron/archiveCandidatePolicy.cjs sha256=14f2eef707fac6df
 - electron/codexGuardianPolicy.cjs sha256=3bd63511b4c23853
 - electron/codexThreadHistoryAutoIngestPolicy.cjs sha256=3c00e0b4d70e5308
 - electron/documentMetadataPolicy.cjs sha256=7be0330b6d7d3f0c
-- electron/main.cjs sha256=fd711c3e541cf1c1
-- electron/memoryRuntimePolicy.cjs sha256=58267ecc8946eab3
-- electron/preload.cjs sha256=c6101b0ec77478e8
+- electron/main.cjs sha256=083794cd294c4eb8
+- electron/memoryRuntimePolicy.cjs sha256=d3522add59050b75
+- electron/preload.cjs sha256=08c94e78ce872f5b
 - electron/projectArtifactPolicy.cjs sha256=a40a16e6c8259ddd
 - electron/projectMemoryBackfillPolicy.cjs sha256=e25fbc89abf8b889
 - electron/projectResumePolicy.cjs sha256=e28ac4a7d2083e98

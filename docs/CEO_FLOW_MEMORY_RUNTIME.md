@@ -10,6 +10,7 @@ Zhixia is the official local-first Memory Runtime for CEO Flow. It gives CEO Flo
 | Dispatch / task assignment | `retrieve_context(task_goal)` with provider mode | Give worker lanes relevant context without full transcripts. |
 | Precedent lookup | `retrieve_precedent(task_type)` | Find similar accepted lessons, reviewable experience cards, project artifacts, tool/skill records, and hot/warm history pointers. |
 | Review gate | `retrieve_precedent("review_gate")` | Surface prior blockers, safety rules, and acceptance patterns. |
+| Runtime event observation | `observe_event(event)` | Record broken threads, heartbeat fuse events, thread takeover, stale lane references, checkpoints, and user rule updates as short-term hot memory. |
 | Harvest / writeback | `writeback_evidence(result)` | Store compact accepted/revised/blocked evidence receipt in app-owned storage. |
 | Promotion review | `promote_memory(candidate)` | Queue safe, source-backed memory or FlowSkill-ready candidate metadata for private review. |
 | Handoff | `retrieve_context("handoff")` | Build a compact continuation packet for the next CEO Flow turn. |
@@ -22,6 +23,54 @@ Zhixia is the official local-first Memory Runtime for CEO Flow. It gives CEO Flo
 - `zhixia-local-docs`: Use the packaged Codex helper under `codex-skills/zhixia-local-docs` for compact local files, old-thread recovery packets, and dry-run evidence packets.
 - `guardian-history`: Use history/vault/pointer metadata for old-thread recovery; raw session body remains excluded by default.
 - `hybrid`: Combine project-memory, helper packets, and safe history metadata under token and sourceRef bounds.
+
+## Hook: observe_event(event)
+
+Use this hook when CEO Flow observes a runtime fact that future threads must not forget but that should not require scanning the whole history library.
+
+Supported event types:
+
+- `broken_thread`: a CEO/project-main/worker thread is unreadable, stream-broken, repeatedly empty, context-exhausted, stuck in reconnect/auto-compact loops, or fails with `max_output_tokens` / incomplete response.
+- `heartbeat_fuse`: a heartbeat, monitor, or wakeup loop was paused because it repeatedly targeted a broken or wasteful thread.
+- `thread_takeover`: a clean replacement thread was designated for an old or broken thread.
+- `stale_lane_reference`: a roster, heartbeat, task card, or recovery packet points to a thread id that cannot be read or no longer resolves.
+- `task_checkpoint`, `user_rule_update`, `runtime_diagnosis`: compact operational facts that should appear in the next hot context packet. Model/reasoning drift, such as another lane changing CEO model or reasoning strength, should be recorded as `user_rule_update` and treated as a rule to preserve.
+
+Request shape:
+
+```json
+{
+  "eventType": "heartbeat_fuse",
+  "severity": "warning",
+  "projectPath": "C:/Users/example/Documents/2D游戏项目",
+  "threadId": "public-thread-id",
+  "replacementThreadId": "optional-clean-takeover-thread-id",
+  "automationId": "rgs-ceo-harvest-post-43-wave",
+  "title": "RGS CEO heartbeat paused",
+  "summary": "The heartbeat was waking a broken large CEO thread and should not be retried until a takeover packet is used.",
+  "observedSignals": ["last_agent_message=null", "stream_disconnect", "high_token_empty_turn"],
+  "decisions": ["Pause the heartbeat target."],
+  "openRisks": ["Do not treat the old thread as active owner."],
+  "nextAction": "Start from the ThreadRecoveryPacket and retrieve_context(thread_recovery).",
+  "sourceRefs": [
+    { "kind": "automation_receipt", "path": "app-owned-receipt.json", "title": "Heartbeat fuse receipt" }
+  ]
+}
+```
+
+Response behavior:
+
+- Writes a compact app-owned `runtime-events` record.
+- Upserts a `WorkingMemoryRecord`; `broken_thread`, `heartbeat_fuse`, and `stale_lane_reference` default to `blocked`.
+- Adds hot `runtime_event` items to the next `retrieve_context` packet for matching project/thread.
+- Omits raw-session and secret sourceRefs from runtime-event storage and default context; only an unsafe ref count and warning are kept.
+- Does not start timers, scan Vault, read raw session bodies, mutate sessions, archive, compact, delete, move, restore, install, execute, or export FlowSkill material.
+
+Closed-loop producers:
+
+- `recover_thread(...)` automatically writes a recovery/takeover runtime event after generating a ThreadRecoveryPacket, unless `observeRuntimeEvent=false`.
+- `runtimeMonitor:getSnapshot` automatically writes bounded runtime diagnosis events from its already-computed recommendations, unless `observeRuntimeEvents=false`.
+- The next `retrieve_context(...)` call includes those events as hot memory for matching project/thread.
 
 ## Hook: retrieve_context(task_goal)
 

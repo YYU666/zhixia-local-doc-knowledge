@@ -9,6 +9,7 @@ const DEFAULT_RUNTIME_ALLOWED_KINDS = [
   "project_resume_packet",
   "ceo_flow_record",
   "thread_lineage_index",
+  "runtime_event",
   "project_artifact",
   "knowledge_item",
   "experience_card",
@@ -40,26 +41,37 @@ const MEMORY_ROUTER_TASK_TYPES = [
   "retrieve_precedent",
 ];
 const MEMORY_ROUTER_KIND_PROFILES = {
-  project_resume: ["project_record", "project_resume_packet", "ceo_flow_record", "thread_lineage_index", "project_artifact", "knowledge_item", "experience_card"],
-  task_dispatch: ["project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "knowledge_item", "experience_card", "tool_skill_record", "skill_candidate"],
+  project_resume: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "thread_lineage_index", "project_artifact", "knowledge_item", "experience_card"],
+  task_dispatch: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "knowledge_item", "experience_card", "tool_skill_record", "skill_candidate"],
   review_gate: ["project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "knowledge_item", "experience_card", "tool_skill_record"],
   bug_repair: ["experience_card", "knowledge_item", "project_artifact", "tool_skill_record", "project_record"],
   architecture: ["project_record", "project_resume_packet", "project_artifact", "knowledge_item", "experience_card", "tool_skill_record"],
   release: ["project_record", "project_resume_packet", "project_artifact", "experience_card", "tool_skill_record", "knowledge_item"],
-  thread_recovery: ["thread_lineage_index", "ceo_flow_record", "project_record", "project_resume_packet", "experience_card", "knowledge_item", "project_artifact"],
+  thread_recovery: ["runtime_event", "thread_lineage_index", "ceo_flow_record", "project_record", "project_resume_packet", "experience_card", "knowledge_item", "project_artifact"],
   archive_candidate: ["thread_lineage_index", "ceo_flow_record", "experience_card", "knowledge_item", "project_artifact", "project_record"],
-  runtime_diagnosis: ["experience_card", "tool_skill_record", "project_artifact", "knowledge_item", "project_record"],
+  runtime_diagnosis: ["runtime_event", "experience_card", "tool_skill_record", "project_artifact", "knowledge_item", "project_record"],
   tool_skill_lookup: ["tool_skill_record", "skill_candidate", "experience_card", "knowledge_item", "project_artifact"],
   workflow_reuse: ["experience_card", "skill_candidate", "tool_skill_record", "knowledge_item", "project_artifact"],
-  handoff: ["project_record", "project_resume_packet", "ceo_flow_record", "thread_lineage_index", "experience_card", "knowledge_item"],
-  memory_writeback: ["project_record", "experience_card", "knowledge_item", "project_artifact", "thread_lineage_index"],
+  handoff: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "thread_lineage_index", "experience_card", "knowledge_item"],
+  memory_writeback: ["runtime_event", "project_record", "experience_card", "knowledge_item", "project_artifact", "thread_lineage_index"],
   retrieve_precedent: DEFAULT_PRECEDENT_ALLOWED_KINDS,
 };
 const MEMORY_ROUTER_DEFAULT_TTL_MS = 90 * 1000;
 const MEMORY_ROUTER_DEFAULT_TIME_BUDGET_MS = 250;
 const THREAD_RECOVERY_PACKET_SCHEMA = "zhixia.thread_recovery_packet.v1";
+const RUNTIME_EVENT_SCHEMA = "zhixia.runtime_event_memory.v1";
 const MAX_RECOVERY_RECOMMENDED_DOC_BYTES = 768 * 1024;
 const WORKING_MEMORY_STATUSES = ["active", "waiting_review", "blocked", "accepted", "superseded"];
+const RUNTIME_EVENT_TYPES = [
+  "broken_thread",
+  "heartbeat_fuse",
+  "thread_takeover",
+  "stale_lane_reference",
+  "task_checkpoint",
+  "user_rule_update",
+  "runtime_diagnosis",
+];
+const RUNTIME_EVENT_SEVERITIES = ["info", "warning", "error", "critical"];
 const WRITEBACK_DECISIONS = ["accept", "revise", "block", "supersede"];
 const SAFE_MEMORY_TARGETS = ["knowledge_item", "experience_card", "memory_card", "project_update", "lineage_update", "flowskill_candidate"];
 const DANGEROUS_ACTION_RE = /\b(archive|compact|delete|move|restore|install|enable|execute|publish|export_public|host_archive|set_thread_archived)\b/i;
@@ -105,7 +117,7 @@ function addMillisecondsToIso(value, milliseconds) {
 }
 
 function safeIdPart(value) {
-  return String(value || "unknown").replace(/[^a-zA-Z0-9._:-]+/g, "_").slice(0, 120) || "unknown";
+  return String(value || "unknown").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || "unknown";
 }
 
 function normalizeFreshness(value) {
@@ -259,6 +271,7 @@ function buildMemoryRouterPlan(options = {}) {
 }
 
 function memoryLayerForRuntimeItem(item = {}, routerPlan = {}) {
+  if (item.kind === "runtime_event") return "hot";
   if (["project_record", "project_resume_packet", "ceo_flow_record"].includes(item.kind)) return "hot";
   if (item.kind === "thread_lineage_index") return routerPlan.layers?.cold?.enabled ? "cold" : "warm";
   if (item.freshness === "fresh" && ["active", "ready", "curated"].includes(item.status)) return "hot";
@@ -1155,6 +1168,242 @@ function runtimeSubdir(storeRoot, name) {
   return path.join(storeRoot, name);
 }
 
+function normalizeRuntimeEventType(value) {
+  return RUNTIME_EVENT_TYPES.includes(value) ? value : "runtime_diagnosis";
+}
+
+function inferRuntimeEventType(event = {}) {
+  const explicit = normalizeRuntimeEventType(event.eventType || event.type || event.kind);
+  if (explicit !== "runtime_diagnosis") return explicit;
+  const signalText = compactText([
+    event.title,
+    event.name,
+    event.summary,
+    event.message,
+    event.error,
+    event.reason,
+    ...safeArray(event.observedSignals || event.signals),
+  ].filter(Boolean).join(" "), 1600).toLowerCase();
+  if (/(stream disconnected before completion|incomplete response returned|max_output_tokens|reconnect(?:ing)?\s+\d+\/\d+|自动压缩上下文|重新连接)/i.test(signalText)) {
+    return "broken_thread";
+  }
+  if (/(heartbeat|心跳|wake|wakeup).*(fuse|pause|loop|熔断|暂停|空转)/i.test(signalText)) {
+    return "heartbeat_fuse";
+  }
+  if (/(model|模型|reasoning|推理强度|降模型|改模型|5\.3|gpt-5\.3)/i.test(signalText)) {
+    return "user_rule_update";
+  }
+  return explicit;
+}
+
+function normalizeRuntimeEventSeverity(value) {
+  return RUNTIME_EVENT_SEVERITIES.includes(value) ? value : "warning";
+}
+
+function defaultWorkingMemoryStatusForRuntimeEvent(eventType) {
+  if (["broken_thread", "heartbeat_fuse", "stale_lane_reference"].includes(eventType)) return "blocked";
+  if (eventType === "thread_takeover") return "active";
+  return "active";
+}
+
+function filterDefaultSafeSourceRefs(sourceRefs = []) {
+  return safeArray(sourceRefs).filter((ref) => !sourceRefsContainRawSession([ref]) && !sourceRefsContainSecrets([ref]));
+}
+
+function runtimeEventTaskId(event) {
+  const stableKey = [
+    event.eventType,
+    event.projectPath || "",
+    event.threadId || "",
+    event.automationId || "",
+    event.replacementThreadId || "",
+  ].filter(Boolean).join(":");
+  return compactText(event.taskId || `runtime-event:${stableKey || hashJson(event).slice(0, 16)}`, 160);
+}
+
+function normalizeRuntimeEventMemory(event = {}) {
+  const now = new Date().toISOString();
+  const eventType = inferRuntimeEventType(event);
+  const inputSourceRefs = normalizeSourceRefs(event.sourceRefs || event.evidence?.sourceRefs, 20);
+  const defaultSourceRefs = filterDefaultSafeSourceRefs(inputSourceRefs).slice(0, 12);
+  const unsafeSourceRefCount = Math.max(
+    0,
+    inputSourceRefs.length - defaultSourceRefs.length,
+    clampNumber(event.unsafeSourceRefCount, 0, 0, 1000),
+  );
+  const warnings = [
+    ...(unsafeSourceRefCount > 0 ? ["unsafe_source_refs_pointer_omitted_from_runtime_event_storage"] : []),
+    ...safeArray(event.warnings).map((warning) => compactText(warning, 180)).filter(Boolean),
+  ].filter((warning, index, array) => array.indexOf(warning) === index);
+  const normalized = {
+    schemaVersion: RUNTIME_EVENT_SCHEMA,
+    eventType,
+    severity: normalizeRuntimeEventSeverity(event.severity),
+    projectPath: event.projectPath || event.project?.path || null,
+    threadId: event.threadId || event.thread?.id || null,
+    parentCeoThreadId: event.parentCeoThreadId || event.ceoThreadId || null,
+    replacementThreadId: event.replacementThreadId || event.takeoverThreadId || null,
+    automationId: event.automationId || event.heartbeatId || null,
+    taskId: compactText(event.taskId || "", 160),
+    title: compactText(event.title || event.name || eventType, 180),
+    summary: compactText(event.summary || event.message || "", 900),
+    observedSignals: safeArray(event.observedSignals || event.signals).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 24),
+    decisions: safeArray(event.decisions).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 24),
+    openRisks: safeArray(event.openRisks || event.risks).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 24),
+    nextAction: compactText(event.nextAction || "", 360),
+    sourceRefs: defaultSourceRefs,
+    defaultSourceRefs,
+    unsafeSourceRefCount,
+    status: WORKING_MEMORY_STATUSES.includes(event.status) ? event.status : defaultWorkingMemoryStatusForRuntimeEvent(eventType),
+    ttlDays: clampNumber(event.ttlDays, ["broken_thread", "heartbeat_fuse", "thread_takeover"].includes(eventType) ? 14 : 7, 1, 90),
+    warnings,
+    createdAt: event.createdAt || now,
+    updatedAt: event.updatedAt || now,
+  };
+  const idHash = hashJson({
+    eventType: normalized.eventType,
+    projectPath: normalized.projectPath,
+    threadId: normalized.threadId,
+    automationId: normalized.automationId,
+    replacementThreadId: normalized.replacementThreadId,
+    title: normalized.title,
+  }).slice(0, 16);
+  return {
+    ...normalized,
+    id: compactText(event.id || `runtime-event-${safeIdPart(normalized.eventType)}-${idHash}`, 180),
+    taskId: runtimeEventTaskId({ ...normalized, taskId: normalized.taskId }),
+    expiresAt: addMillisecondsToIso(normalized.updatedAt, normalized.ttlDays * 86_400_000),
+    safety: {
+      metadataOnly: true,
+      rawSessionBodyRead: false,
+      scansVault: false,
+      startsTimers: false,
+      archiveCompactDeleteMoveRestore: false,
+      mutatesRawSession: false,
+      installsOrExecutes: false,
+    },
+  };
+}
+
+function runtimeEventToWorkingMemoryRecord(event = {}) {
+  return {
+    taskId: event.taskId,
+    projectPath: event.projectPath,
+    threadId: event.replacementThreadId || event.threadId || null,
+    parentCeoThreadId: event.parentCeoThreadId || null,
+    status: event.status,
+    currentGoal: event.summary || event.title,
+    currentEvidence: [
+      ...safeArray(event.defaultSourceRefs),
+      { kind: "runtime_event", path: `memory-runtime://runtime-events/${event.id}`, title: event.title, updatedAt: event.updatedAt },
+    ],
+    decisions: event.decisions,
+    openRisks: event.openRisks,
+    nextAction: event.nextAction,
+    updatedAt: event.updatedAt,
+  };
+}
+
+function runtimeEventToRuntimeItem(event = {}) {
+  const title = compactText(event.title || event.eventType || event.id, 180);
+  const summaryParts = [
+    event.summary,
+    event.threadId ? `thread=${event.threadId}` : "",
+    event.automationId ? `automation=${event.automationId}` : "",
+    event.replacementThreadId ? `replacement=${event.replacementThreadId}` : "",
+    event.nextAction ? `next=${event.nextAction}` : "",
+  ].filter(Boolean);
+  return {
+    id: event.id,
+    kind: "runtime_event",
+    title,
+    summary: compactText(summaryParts.join(" | "), 700),
+    status: event.status === "blocked" ? "blocked" : "ready",
+    freshness: "fresh",
+    whyMatched: [
+      `event:${event.eventType}`,
+      event.severity ? `severity:${event.severity}` : "",
+      ...safeArray(event.observedSignals).slice(0, 3),
+    ].filter(Boolean),
+    sourceRefs: [
+      ...safeArray(event.defaultSourceRefs),
+      { kind: "runtime_event", path: `memory-runtime://runtime-events/${event.id}`, title, updatedAt: event.updatedAt },
+    ],
+    tokenEstimate: estimateTokensFromText(title, event.summary, event.nextAction, safeArray(event.observedSignals).join(" ")),
+  };
+}
+
+function workingMemoryToRuntimeItem(record = {}) {
+  return {
+    id: `working-memory:${safeIdPart(record.taskId)}`,
+    kind: "runtime_event",
+    title: compactText(`工作记忆：${record.taskId || "task"}`, 180),
+    summary: compactText([record.currentGoal, record.nextAction].filter(Boolean).join(" | "), 700),
+    status: record.status === "blocked" ? "blocked" : "ready",
+    freshness: "fresh",
+    whyMatched: [
+      `workingMemory:${record.status || "active"}`,
+      record.threadId ? `thread:${record.threadId}` : "",
+      record.parentCeoThreadId ? `ceo:${record.parentCeoThreadId}` : "",
+    ].filter(Boolean),
+    sourceRefs: normalizeSourceRefs(record.currentEvidence, 8),
+    tokenEstimate: estimateTokensFromText(record.currentGoal, record.nextAction, safeArray(record.decisions).join(" ")),
+  };
+}
+
+async function writeRuntimeEventMemory(storeRoot, event = {}) {
+  const normalized = normalizeRuntimeEventMemory(event);
+  const eventPath = path.join(runtimeSubdir(storeRoot, "runtime-events"), `${safeIdPart(normalized.id)}.json`);
+  await writeJson(eventPath, normalized);
+  const workingMemory = await upsertWorkingMemoryRecord(storeRoot, runtimeEventToWorkingMemoryRecord(normalized));
+  return {
+    schemaVersion: MEMORY_RUNTIME_STORAGE_SCHEMA,
+    id: normalized.id,
+    status: "recorded",
+    eventType: normalized.eventType,
+    severity: normalized.severity,
+    taskId: normalized.taskId,
+    projectPath: normalized.projectPath,
+    threadId: normalized.threadId,
+    automationId: normalized.automationId,
+    replacementThreadId: normalized.replacementThreadId,
+    warnings: normalized.warnings,
+    storagePath: eventPath,
+    workingMemory,
+    safety: normalized.safety,
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
+  };
+}
+
+async function listRuntimeEventRecords(storeRoot, options = {}) {
+  const root = runtimeSubdir(storeRoot, "runtime-events");
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const records = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    const record = await readJson(path.join(root, entry.name), null);
+    if (!record) continue;
+    if (options.eventType && record.eventType !== options.eventType) continue;
+    if (options.status && record.status !== options.status) continue;
+    if (options.projectPath && record.projectPath !== options.projectPath) continue;
+    if (options.threadId && record.threadId !== options.threadId && record.replacementThreadId !== options.threadId && record.parentCeoThreadId !== options.threadId) continue;
+    records.push({
+      ...record,
+      storagePath: path.join(root, entry.name),
+    });
+  }
+  records.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  return records.slice(0, Math.max(1, Math.min(Number(options.limit || 80), 200)));
+}
+
+function buildRuntimeItemsFromVolatileMemory({ events = [], workingMemory = [] } = {}) {
+  return [
+    ...safeArray(events).map(runtimeEventToRuntimeItem),
+    ...safeArray(workingMemory).map(workingMemoryToRuntimeItem),
+  ].filter(Boolean);
+}
+
 async function writeEvidenceWriteback(storeRoot, packet = {}) {
   const evaluated = evaluateWritebackEvidence(packet);
   const createdAt = new Date().toISOString();
@@ -1327,13 +1576,17 @@ module.exports = {
   buildThreadRecoveryPacket,
   buildFlowSkillReadyCandidate,
   buildActivatedMemoryGraph,
+  buildRuntimeItemsFromVolatileMemory,
   evaluatePromotionCandidate,
   evaluateWritebackEvidence,
   listFlowSkillCandidateRecords,
+  listRuntimeEventRecords,
   listWorkingMemoryRecords,
   mergeMemoryGraphs,
+  normalizeRuntimeEventMemory,
   normalizeRuntimeItem,
   promoteMemoryCandidate,
   upsertWorkingMemoryRecord,
+  writeRuntimeEventMemory,
   writeEvidenceWriteback,
 };

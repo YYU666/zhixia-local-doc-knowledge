@@ -5,11 +5,14 @@ const path = require("node:path");
 
 const {
   buildRuntimeContextPacket,
+  buildRuntimeItemsFromVolatileMemory,
   buildRuntimePrecedentPacket,
   buildRuntimePrecedentRequest,
   listFlowSkillCandidateRecords,
+  listRuntimeEventRecords,
   listWorkingMemoryRecords,
   upsertWorkingMemoryRecord,
+  writeRuntimeEventMemory,
   writeEvidenceWriteback,
 } = require("../electron/memoryRuntimePolicy.cjs");
 
@@ -235,6 +238,50 @@ async function main() {
     assert.equal(acceptedWorkingMemory.status, "accepted", "working memory should close to accepted");
     assert.equal((await listWorkingMemoryRecords(storeRoot, { status: "active" })).length, 0, "accepted working memory should leave active list");
     assert.equal((await listWorkingMemoryRecords(storeRoot, { status: "accepted" })).length, 1, "accepted working memory should be listable");
+
+    const brokenThreadEventReceipt = await writeRuntimeEventMemory(storeRoot, {
+      eventType: "heartbeat_fuse",
+      severity: "error",
+      projectPath: storeRoot,
+      threadId: "public-thread-id",
+      automationId: "rgs-ceo-harvest-post-43-wave",
+      title: "RGS CEO heartbeat 熔断",
+      summary: "旧 CEO 线程连续空转，心跳已暂停，后续应使用 takeover 线程和恢复包。",
+      observedSignals: ["systemError", "last_agent_message=null", "stream disconnected before completion"],
+      decisions: ["暂停旧 heartbeat。", "不 fork 旧超大 CEO 线程。"],
+      openRisks: ["最后一轮 inProgress 可能仍需等待 Codex 结束。"],
+      nextAction: "retrieve_context(thread_recovery) 应返回该短期运行记忆。",
+      sourceRefs: [
+        { kind: "automation", path: ".codex/automations/rgs-ceo-harvest-post-43-wave/automation.toml" },
+        { kind: "raw_session", path: "fixtures/.codex/sessions/rgs-ceo.jsonl" },
+      ],
+    });
+    assert.equal(brokenThreadEventReceipt.status, "recorded", "runtime event should be recorded in lifecycle probe");
+    assert.equal(brokenThreadEventReceipt.workingMemory.status, "blocked", "heartbeat fuse should create blocked short-term memory");
+    const storedRuntimeEvent = JSON.parse(await fs.readFile(brokenThreadEventReceipt.storagePath, "utf8"));
+    assert.equal(JSON.stringify(storedRuntimeEvent).includes(".codex/sessions"), false, "stored runtime event must not retain raw session paths");
+    assert.equal(JSON.stringify(storedRuntimeEvent).includes("raw_session"), false, "stored runtime event must not retain raw session sourceRef kind");
+    assert.equal(storedRuntimeEvent.unsafeSourceRefCount, 1, "stored runtime event should keep unsafe ref count only");
+    const runtimeEventItems = buildRuntimeItemsFromVolatileMemory({
+      events: await listRuntimeEventRecords(storeRoot, { threadId: "public-thread-id" }),
+      workingMemory: await listWorkingMemoryRecords(storeRoot, { status: "blocked" }),
+    });
+    const recoveryContextWithEvent = buildRuntimeContextPacket({
+      queryType: "thread_recovery",
+      query: "recover RGS CEO takeover",
+      projectPath: storeRoot,
+      items: runtimeEventItems,
+    }, {
+      taskGoal: "recover RGS CEO takeover",
+      queryType: "thread_recovery",
+      threadId: "public-thread-id",
+      projectPath: storeRoot,
+      allowedKinds: ["runtime_event"],
+      tokenBudget: 900,
+    });
+    assert.equal(recoveryContextWithEvent.items.some((item) => item.kind === "runtime_event"), true, "recovery context should surface runtime event hot memory");
+    assert.equal(recoveryContextWithEvent.memoryLayers.hot.count >= 1, true, "runtime event should be hot memory in lifecycle probe");
+    assertNoUnsafePayload(recoveryContextWithEvent, giantTail);
 
     const safeAcceptedWriteback = {
       decision: "accept",
