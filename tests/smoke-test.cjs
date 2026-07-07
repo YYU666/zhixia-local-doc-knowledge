@@ -56,6 +56,8 @@ assert.match(main, /const MAX_DOCUMENT_VERSIONS_PER_DOCUMENT = 3/, "Document ver
 assert.match(main, /const MAX_DOCUMENT_CONTENT_TEXT_CHARS = 60000/, "Document content stored in SQLite must stay compact enough for sql.js export/save");
 assert.match(main, /CONTENT_STORE_COMPACTION_VERSION/, "Legacy oversized document content must have a versioned compaction migration");
 assert.match(main, /backupDatabaseBeforeCompaction/, "Legacy content compaction must create a database backup before mutating stored document text");
+assert.match(main, /async function backupUnreadableDatabaseFile/, "Unreadable existing SQLite databases must be backed up before startup fails");
+assert.match(main, /error\?\.code === "ENOENT"[\s\S]*new Runtime\.Database\(\)[\s\S]*backupUnreadableDatabaseFile[\s\S]*refused to replace an unreadable knowledge-store\.sqlite/, "ensureDatabase must only create an empty DB for ENOENT and must refuse to overwrite unreadable existing databases");
 assert.match(main, /duplicateOf IS NOT NULL[\s\S]*contentText = ''/, "Duplicate document rows must not keep redundant full contentText payloads");
 assert.match(main, /substr\(contentText, 1, \$limit\)/, "Oversized legacy document contentText must be trimmed to the current compact limit");
 assert.match(main, /GENERATED_CONTEXT_VERSION_RE[\s\S]*\.codex-knowledge[\s\S]*codex-history-vault/, "Generated Zhixia context and thread-vault files must be excluded from version snapshots");
@@ -892,6 +894,7 @@ assert.match(ceoFlowMemoryRuntimeDoc, /No raw sessions by default[\s\S]*No giant
 assert.match(publicationChecklist, /Must Not Publish[\s\S]*\.codex-knowledge\/[\s\S]*Real Codex session JSONL[\s\S]*Release installers/, "Publication checklist must list private/generated artifacts to exclude");
 assert.match(publicRepoLayout, /Include[\s\S]*electron\/[\s\S]*src\/[\s\S]*tests\/[\s\S]*Exclude[\s\S]*vaults\/[\s\S]*evidence\//, "Public repo layout must explain source include/exclude paths");
 assert.match(pkg.scripts["prepare:public"], /node scripts\/prepare-public-repo\.cjs/, "package scripts must expose a safe public staging command");
+assert.match(pkg.scripts.test, /prepare-public-repo-policy\.test\.cjs/, "Default npm test must include public staging sanitizer behavior tests");
 assert.match(preparePublicRepoScript, /assertOwnedStagingTarget[\s\S]*path\.relative\(resolvedRoot,\s*resolvedTarget\)[\s\S]*zhixia-local-doc-knowledge/, "Public staging script must verify it only recreates its owned staging directory");
 assert.match(preparePublicRepoScript, /const rootFiles = new Set[\s\S]*LICENSE[\s\S]*README\.md[\s\S]*package-lock\.json/, "Public staging script must copy root files from an explicit whitelist");
 assert.match(preparePublicRepoScript, /const publicDocs = new Set[\s\S]*CEO_FLOW_MEMORY_RUNTIME\.md[\s\S]*PUBLIC_REPO_LAYOUT\.md[\s\S]*TEST_PLAN\.md/, "Public staging script must whitelist public docs");
@@ -899,6 +902,7 @@ assert.match(preparePublicRepoScript, /blockedNames[\s\S]*\.codex-knowledge[\s\S
 assert.doesNotMatch(preparePublicRepoScript, /const publicDirs = new Set\(\[[\s\S]*"build"/, "Public staging should not copy installer build helpers by default");
 assert.doesNotMatch(preparePublicRepoScript, /const publicScripts = new Set\(\[[\s\S]*apply-windows-icon\.cjs/, "Public staging should not copy packaging icon helper by default");
 assert.match(preparePublicRepoScript, /writePublicReleaseNotes[\s\S]*public-safe generated replacement/, "Public staging script must replace private release notes with public-safe notes");
+assert.match(preparePublicRepoScript, /function privatePublicationTermPatterns[\s\S]*\\b[\s\S]*sanitizePublicCodeText[\s\S]*replacePrivateTerms: false[\s\S]*module\.exports/, "Public staging sanitizer must use bounded private-term patterns and export code/doc sanitizers for behavior tests");
 assert.match(preparePublicRepoScript, /preserveStagingGitMetadata[\s\S]*restoreStagingGitMetadata/, "Public staging refresh must preserve the staging Git repository metadata");
 assert.match(preparePublicRepoScript, /entry\.name === "\.git"[\s\S]*continue/, "Public staging manifest must not enumerate Git internals");
 assert.match(preparePublicRepoScript, /One-click safe relief now starts with Codex hot-log cleanup/, "Public release notes must describe the current one-click safe relief hot-log cleanup change");

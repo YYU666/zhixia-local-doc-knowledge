@@ -76,10 +76,10 @@ const RUNTIME_EVENT_TYPES = [
 const RUNTIME_EVENT_SEVERITIES = ["info", "warning", "error", "critical"];
 const WRITEBACK_DECISIONS = ["accept", "revise", "block", "supersede"];
 const SAFE_MEMORY_TARGETS = ["knowledge_item", "experience_card", "memory_card", "project_update", "lineage_update", "flowskill_candidate"];
-const DANGEROUS_ACTION_RE = /\b(archive|compact|delete|move|restore|install|enable|execute|publish|export_public|host_archive|set_thread_archived)\b/i;
+const DANGEROUS_ACTION_RE = /\b(archive|compact|delete|move|restore|install|enable|execute|publish|export public|host archive|set thread archived)\b/i;
 const RAW_SESSION_KIND_RE = /\b(raw[_ -]?session|codex[_ -]?session|thread[_ -]?session|session[_ -]?jsonl)\b/i;
 const RAW_SESSION_PATH_RE = /(?:^|[\\/])\.codex[\\/]sessions[\\/]|(?:^|[\\/])sessions[\\/][^\\/]*(?:session|thread)[^\\/]*\.jsonl$/i;
-const SECRET_REF_RE = /(?:^|[\\/])\.env(?:$|[\\/._-])|\b(api[_ -]?key|auth[_ -]?token|bearer[_ -]?token|credential|credentials|secret|secrets|private[_ -]?key|id_rsa|oauth|cookie|password)\b/i;
+const SECRET_REF_RE = /(?:^|[\\/])\.env(?:$|[\\/._-])|\b(api key|auth token|bearer token|credential|credentials|secret|secrets|private key|id rsa|oauth|cookie|password)\b/i;
 const BASE64_RE = /\bdata:[^;,\s]+;base64,[A-Za-z0-9+/=]{80,}|\b[A-Za-z0-9+/]{180,}={0,2}\b/g;
 
 function redactCompactText(value) {
@@ -106,6 +106,14 @@ function compactText(value, maxChars = 600) {
   const text = redactCompactText(value).replace(/\s+/g, " ").trim();
   if (text.length <= maxChars) return text;
   return `${text.slice(0, Math.max(0, maxChars - 1)).trim()}…`;
+}
+
+function normalizeSignalTextForPolicy(value) {
+  return String(value || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function hashJson(value) {
@@ -146,6 +154,19 @@ function normalizeSourceRef(ref = {}) {
     sourceType: ref.sourceType || null,
     readByDefault: ref.readByDefault === false ? false : undefined,
   };
+}
+
+function redactSourceRef(ref = {}) {
+  if (!ref || typeof ref !== "object") return ref;
+  return {
+    ...ref,
+    path: ref.path ? compactText(ref.path, 320) : ref.path,
+    title: ref.title ? compactText(ref.title, 180) : ref.title,
+  };
+}
+
+function redactSourceRefs(refs = []) {
+  return safeArray(refs).map((ref) => redactSourceRef(ref));
 }
 
 function normalizeSourceRefs(refs, limit = 12) {
@@ -1002,7 +1023,9 @@ function actionSignalParts(value) {
 }
 
 function containsDangerousIntent(value) {
-  const actionText = actionSignalParts(value).map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(" ");
+  const actionText = normalizeSignalTextForPolicy(
+    actionSignalParts(value).map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(" "),
+  );
   return DANGEROUS_ACTION_RE.test(actionText);
 }
 
@@ -1024,7 +1047,16 @@ function sourceRefsContainRawSession(refs = []) {
 }
 
 function sourceRefsContainSecrets(refs = []) {
-  return safeArray(refs).some((ref) => SECRET_REF_RE.test(sourceRefSignalText(ref)));
+  return safeArray(refs).some((ref) => {
+    const fields = [
+      ref.kind,
+      ref.path,
+      ref.title,
+      ref.artifactType,
+      ref.sourceType,
+    ].filter(Boolean);
+    return fields.some((field) => SECRET_REF_RE.test(normalizeSignalTextForPolicy(field)));
+  });
 }
 
 function actionFieldsContainRawSession(value) {
@@ -1033,7 +1065,9 @@ function actionFieldsContainRawSession(value) {
 }
 
 function actionFieldsContainSecrets(value) {
-  const actionText = actionSignalParts(value).map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(" ");
+  const actionText = normalizeSignalTextForPolicy(
+    actionSignalParts(value).map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(" "),
+  );
   return SECRET_REF_RE.test(actionText);
 }
 
@@ -1050,6 +1084,7 @@ function compactEvidencePacket(packet = {}) {
   const sourceRefs = normalizeSourceRefs(evidence.sourceRefs, 20);
   const inferredContainsRawSession = inferContainsRawSession(packet, sourceRefs);
   const inferredContainsSecrets = inferContainsSecrets(packet, sourceRefs);
+  const sourceRefsForStorage = inferredContainsRawSession || inferredContainsSecrets ? redactSourceRefs(sourceRefs) : sourceRefs;
   return {
     schemaVersion: 1,
     decision: WRITEBACK_DECISIONS.includes(packet.decision) ? packet.decision : "block",
@@ -1069,7 +1104,7 @@ function compactEvidencePacket(packet = {}) {
       reusablePattern: safeArray(evidence.reusablePattern).map((item) => compactText(item, 360)).filter(Boolean).slice(0, 12),
       failurePattern: safeArray(evidence.failurePattern).map((item) => compactText(item, 360)).filter(Boolean).slice(0, 12),
       residualRisk: compactText(evidence.residualRisk || "", 700),
-      sourceRefs,
+      sourceRefs: sourceRefsForStorage,
     },
     writeback: packet.writeback && typeof packet.writeback === "object" ? packet.writeback : {},
     privacy: {
@@ -1231,7 +1266,7 @@ function inferRuntimeEventType(event = {}) {
   if (/(stream disconnected before completion|incomplete response returned|max_output_tokens|reconnect(?:ing)?\s+\d+\/\d+|自动压缩上下文|重新连接)/i.test(signalText)) {
     return "broken_thread";
   }
-  if (/(heartbeat|心跳|ExampleProject|ExampleProjectup).*(fuse|pause|loop|熔断|暂停|空转)/i.test(signalText)) {
+  if (/(heartbeat|心跳|wake|wakeup).*(fuse|pause|loop|熔断|暂停|空转)/i.test(signalText)) {
     return "heartbeat_fuse";
   }
   if (/(model|模型|reasoning|推理强度|降模型|改模型|5\.3|gpt-5\.3)/i.test(signalText)) {
@@ -1570,6 +1605,7 @@ function evaluatePromotionCandidate(candidate = {}) {
   const sourceRefs = normalizeSourceRefs(candidate.sourceRefs || candidate.evidence?.sourceRefs, 12);
   const containsRawSession = privacy.containsRawSession === true || candidate.containsRawSession === true || inferContainsRawSession(candidate, sourceRefs);
   const containsSecrets = privacy.containsSecrets === true || candidate.containsSecrets === true || inferContainsSecrets(candidate, sourceRefs);
+  const sourceRefsForStorage = containsRawSession || containsSecrets ? redactSourceRefs(sourceRefs) : sourceRefs;
   const blockers = [];
   const warnings = [];
   if (containsRawSession) blockers.push("contains_raw_session");
@@ -1585,7 +1621,7 @@ function evaluatePromotionCandidate(candidate = {}) {
     title: compactText(candidate.title || candidate.name || target, 180),
     summary: compactText(candidate.summary || candidate.body || "", 800),
     status,
-    sourceRefs,
+    sourceRefs: sourceRefsForStorage,
     blockers,
     warnings,
     requiresHumanConfirmation: true,

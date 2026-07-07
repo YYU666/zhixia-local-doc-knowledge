@@ -244,16 +244,16 @@ async function main() {
       severity: "error",
       projectPath: storeRoot,
       threadId: "11111111-2222-7333-8444-555555555555",
-      automationId: "ExampleProject-ceo-harvest-post-43-wave",
-      title: "ExampleProject CEO heartbeat 熔断",
+      automationId: "example-ceo-harvest-post-43-wave",
+      title: "Example Project CEO heartbeat 熔断",
       summary: "旧 CEO 线程连续空转，心跳已暂停，后续应使用 takeover 线程和恢复包。",
       observedSignals: ["systemError", "last_agent_message=null", "stream disconnected before completion"],
       decisions: ["暂停旧 heartbeat。", "不 fork 旧超大 CEO 线程。"],
       openRisks: ["最后一轮 inProgress 可能仍需等待 Codex 结束。"],
       nextAction: "retrieve_context(thread_recovery) 应返回该短期运行记忆。",
       sourceRefs: [
-        { kind: "automation", path: ".codex/automations/ExampleProject-ceo-harvest-post-43-wave/automation.toml" },
-        { kind: "raw_session", path: "fixtures/.codex/sessions/ExampleProject-ceo.jsonl" },
+        { kind: "automation", path: ".codex/automations/example-ceo-harvest-post-43-wave/automation.toml" },
+        { kind: "raw_session", path: "fixtures/.codex/sessions/example-ceo.jsonl" },
       ],
     });
     assert.equal(brokenThreadEventReceipt.status, "recorded", "runtime event should be recorded in lifecycle probe");
@@ -268,11 +268,11 @@ async function main() {
     });
     const recoveryContextWithEvent = buildRuntimeContextPacket({
       queryType: "thread_recovery",
-      query: "recover ExampleProject CEO takeover",
+      query: "recover Example Project CEO takeover",
       projectPath: storeRoot,
       items: runtimeEventItems,
     }, {
-      taskGoal: "recover ExampleProject CEO takeover",
+      taskGoal: "recover Example Project CEO takeover",
       queryType: "thread_recovery",
       threadId: "11111111-2222-7333-8444-555555555555",
       projectPath: storeRoot,

@@ -275,29 +275,29 @@ function compactGuardianErrorMessage(message) {
   return compactText(`${primary}${jsonHint}`, 900);
 }
 
-function guardianOptionAExampleProject(options = {}) {
-  const aExampleProject = [];
+function guardianOptionArgs(options = {}) {
+  const args = [];
   if (typeof options.query === "string" && options.query.trim()) {
-    aExampleProject.push("-Query", options.query.trim().slice(0, 500));
+    args.push("-Query", options.query.trim().slice(0, 500));
   }
   if (typeof options.threadId === "string" && options.threadId.trim()) {
-    aExampleProject.push("-ThreadId", options.threadId.trim().slice(0, 120));
+    args.push("-ThreadId", options.threadId.trim().slice(0, 120));
   }
   if (typeof options.projectPath === "string" && options.projectPath.trim()) {
-    aExampleProject.push("-ProjectPath", options.projectPath.trim().slice(0, 600));
+    args.push("-ProjectPath", options.projectPath.trim().slice(0, 600));
   }
   const limit = Number(options.limit);
   if (Number.isFinite(limit)) {
-    aExampleProject.push("-Limit", String(Math.max(1, Math.min(1000, Math.floor(limit)))));
+    args.push("-Limit", String(Math.max(1, Math.min(1000, Math.floor(limit)))));
   }
   const tokenBudget = Number(options.tokenBudget);
   if (Number.isFinite(tokenBudget)) {
-    aExampleProject.push("-TokenBudget", String(Math.max(200, Math.min(4000, Math.floor(tokenBudget)))));
+    args.push("-TokenBudget", String(Math.max(200, Math.min(4000, Math.floor(tokenBudget)))));
   }
   if (options.dryRun === true) {
-    aExampleProject.push("-DryRun");
+    args.push("-DryRun");
   }
-  return aExampleProject;
+  return args;
 }
 
 function runCodexGuardian(command, options = {}) {
@@ -311,7 +311,7 @@ function runCodexGuardian(command, options = {}) {
     });
   }
 
-  const aExampleProject = [
+  const args = [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -321,11 +321,11 @@ function runCodexGuardian(command, options = {}) {
     "-Json",
     "-CodexHome",
     codexHomePath(),
-    ...guardianOptionAExampleProject(options),
+    ...guardianOptionArgs(options),
   ];
 
   return new Promise((resolve) => {
-    execFile("powershell.exe", aExampleProject, { windowsHide: true, timeout: 120000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile("powershell.exe", args, { windowsHide: true, timeout: 120000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
         const normalized = normalizeGuardianError({ ...error, stdout, stderr });
         resolve({
@@ -2194,8 +2194,17 @@ async function ensureDatabase() {
     try {
       const bytes = await fs.readFile(file);
       db = new Runtime.Database(bytes);
-    } catch {
-      db = new Runtime.Database();
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        db = new Runtime.Database();
+      } else {
+        const backupPath = await backupUnreadableDatabaseFile(file, error);
+        const reason = error?.message || String(error || "unknown database open error");
+        throw new Error(
+          `Zhixia refused to replace an unreadable knowledge-store.sqlite with an empty database. ` +
+            `A byte-for-byte backup was written to ${backupPath || "unavailable"}. Original error: ${reason}`,
+        );
+      }
     }
     migrateSchema();
     await migrateLegacyJson();
@@ -2204,6 +2213,25 @@ async function ensureDatabase() {
     return db;
   })();
   return dbReady;
+}
+
+async function backupUnreadableDatabaseFile(source, error) {
+  if (!(await pathExists(source))) return null;
+  const backupDir = path.join(app.getPath("userData"), "backups");
+  await fs.mkdir(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+  const target = path.join(backupDir, `knowledge-store-unreadable-${stamp}-${crypto.randomUUID()}.sqlite`);
+  try {
+    await fs.copyFile(source, target);
+    return target;
+  } catch (backupError) {
+    const originalReason = error?.message || String(error || "unknown database open error");
+    const backupReason = backupError?.message || String(backupError || "unknown backup error");
+    throw new Error(
+      `Zhixia refused to open an unreadable knowledge-store.sqlite and also could not create a backup. ` +
+        `Original error: ${originalReason}; backup error: ${backupReason}`,
+    );
+  }
 }
 
 function migrateSchema() {
@@ -3567,11 +3595,11 @@ function normalizeBaseUrl(baseUrl) {
   return normalizeTrustedAiProviderBaseUrl(baseUrl || DEFAULT_AI_PROVIDER_BASE_URL);
 }
 
-function openAiCompatibleChatCompletion(aExampleProject) {
-  const baseUrl = aExampleProject.baseUrl;
-  const apiKey = aExampleProject.apiKey;
-  const model = aExampleProject.model;
-  const messages = aExampleProject.messages;
+function openAiCompatibleChatCompletion(args) {
+  const baseUrl = args.baseUrl;
+  const apiKey = args.apiKey;
+  const model = args.model;
+  const messages = args.messages;
   return new Promise((resolve, reject) => {
     const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
     const endpoint = new URL(

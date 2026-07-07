@@ -150,8 +150,8 @@ function parseIncludeKinds(raw) {
   return Array.from(new Set(normalized));
 }
 
-function parseAExampleProject(argv) {
-  const aExampleProject = {
+function parseArgs(argv) {
+  const args = {
     workspace: null,
     query: "",
     queryType: DEFAULT_QUERY_TYPE,
@@ -180,93 +180,93 @@ function parseAExampleProject(argv) {
   for (let index = 2; index < argv.length; index += 1) {
     const item = argv[index];
     if (item === "--query") {
-      aExampleProject.query = argv[index + 1] || "";
+      args.query = argv[index + 1] || "";
       index += 1;
     } else if (item === "--task-goal") {
-      aExampleProject.taskGoal = argv[index + 1] || "";
-      if (!aExampleProject.query) aExampleProject.query = aExampleProject.taskGoal;
+      args.taskGoal = argv[index + 1] || "";
+      if (!args.query) args.query = args.taskGoal;
       index += 1;
     } else if (item === "--query-type") {
-      aExampleProject.queryType = cleanText(argv[index + 1] || "") || DEFAULT_QUERY_TYPE;
+      args.queryType = cleanText(argv[index + 1] || "") || DEFAULT_QUERY_TYPE;
       index += 1;
     } else if (item === "--limit") {
-      aExampleProject.limit = clampNumber(argv[index + 1], 1, MAX_LIMIT, aExampleProject.limit);
+      args.limit = clampNumber(argv[index + 1], 1, MAX_LIMIT, args.limit);
       index += 1;
     } else if (item === "--token-budget") {
-      aExampleProject.tokenBudget = clampNumber(argv[index + 1], MIN_TOKEN_BUDGET, MAX_TOKEN_BUDGET, aExampleProject.tokenBudget);
+      args.tokenBudget = clampNumber(argv[index + 1], MIN_TOKEN_BUDGET, MAX_TOKEN_BUDGET, args.tokenBudget);
       index += 1;
     } else if (item === "--include-kinds") {
-      aExampleProject.includeKinds = parseIncludeKinds(argv[index + 1] || "");
+      args.includeKinds = parseIncludeKinds(argv[index + 1] || "");
       index += 1;
     } else if (item === "--allow-parent-knowledge") {
-      aExampleProject.allowParentKnowledge = true;
+      args.allowParentKnowledge = true;
     } else if (item === "--json") {
-      aExampleProject.json = true;
+      args.json = true;
     } else if (item === "--runtime-context" || item === "--retrieve-context") {
-      aExampleProject.runtimeContext = true;
+      args.runtimeContext = true;
     } else if (item === "--precedent" || item === "--retrieve-precedent") {
-      aExampleProject.precedent = true;
+      args.precedent = true;
       if (argv[index + 1] && !argv[index + 1].startsWith("--")) {
-        aExampleProject.query = argv[index + 1];
+        args.query = argv[index + 1];
         index += 1;
       }
     } else if (item === "--recover-thread" || item === "--retrieve-thread") {
-      aExampleProject.recoverThread = true;
-      aExampleProject.queryType = "thread_recovery";
-      aExampleProject.tokenBudget = Math.max(aExampleProject.tokenBudget, DEFAULT_RECOVERY_TOKEN_BUDGET);
+      args.recoverThread = true;
+      args.queryType = "thread_recovery";
+      args.tokenBudget = Math.max(args.tokenBudget, DEFAULT_RECOVERY_TOKEN_BUDGET);
       if (argv[index + 1] && !argv[index + 1].startsWith("--")) {
-        aExampleProject.query = argv[index + 1];
+        args.query = argv[index + 1];
         index += 1;
       }
     } else if (item === "--thread-id") {
-      aExampleProject.threadId = cleanText(argv[index + 1] || "");
-      if (!aExampleProject.query) aExampleProject.query = aExampleProject.threadId;
+      args.threadId = cleanText(argv[index + 1] || "");
+      if (!args.query) args.query = args.threadId;
       index += 1;
     } else if (item === "--thread-title" || item === "--title") {
-      aExampleProject.threadTitle = cleanText(argv[index + 1] || "");
-      if (!aExampleProject.query) aExampleProject.query = aExampleProject.threadTitle;
+      args.threadTitle = cleanText(argv[index + 1] || "");
+      if (!args.query) args.query = args.threadTitle;
       index += 1;
     } else if (item === "--parent-ceo-thread-id") {
-      aExampleProject.parentCeoThreadId = cleanText(argv[index + 1] || "");
+      args.parentCeoThreadId = cleanText(argv[index + 1] || "");
       index += 1;
     } else if (item === "--writeback-dry-run") {
-      aExampleProject.writebackDryRun = true;
+      args.writebackDryRun = true;
     } else if (item === "--evidence-json") {
-      aExampleProject.evidenceJson = argv[index + 1] || "";
+      args.evidenceJson = argv[index + 1] || "";
       index += 1;
     } else if (item === "--evidence-out") {
-      aExampleProject.evidenceOut = argv[index + 1] || "";
+      args.evidenceOut = argv[index + 1] || "";
       index += 1;
     } else if (item === "--decision") {
-      aExampleProject.decision = argv[index + 1] || "";
+      args.decision = argv[index + 1] || "";
       index += 1;
     } else if (item === "--task-id") {
-      aExampleProject.taskId = argv[index + 1] || "";
+      args.taskId = argv[index + 1] || "";
       index += 1;
     } else if (item === "--summary") {
-      aExampleProject.summary = argv[index + 1] || "";
+      args.summary = argv[index + 1] || "";
       index += 1;
     } else if (item === "--source-ref") {
-      aExampleProject.sourceRefs.push(parseSourceRefArg(argv[index + 1] || ""));
+      args.sourceRefs.push(parseSourceRefArg(argv[index + 1] || ""));
       index += 1;
     } else if (item === "--memory-mode") {
-      aExampleProject.memoryMode = cleanText(argv[index + 1] || "layered") || "layered";
+      args.memoryMode = cleanText(argv[index + 1] || "layered") || "layered";
       index += 1;
     } else if (item === "--allow-cold-layer") {
-      aExampleProject.allowColdLayer = true;
-    } else if (!aExampleProject.workspace) {
-      aExampleProject.workspace = item;
+      args.allowColdLayer = true;
+    } else if (!args.workspace) {
+      args.workspace = item;
     }
   }
-  if (aExampleProject.queryType === "retrieve_context") aExampleProject.runtimeContext = true;
-  if (aExampleProject.queryType === "retrieve_precedent") aExampleProject.precedent = true;
-  if (aExampleProject.queryType === "recover_thread" || aExampleProject.queryType === "thread_recovery") aExampleProject.recoverThread = true;
-  if (aExampleProject.precedent && aExampleProject.includeKinds.length === 0) aExampleProject.includeKinds = PRECEDENT_KINDS;
-  if (aExampleProject.recoverThread && !aExampleProject.query) aExampleProject.query = [aExampleProject.threadId, aExampleProject.threadTitle, aExampleProject.taskGoal].filter(Boolean).join(" ");
-  if (aExampleProject.recoverThread || COLD_QUERY_TYPES.has(aExampleProject.queryType) || MAINTENANCE_QUERY_RE.test([aExampleProject.query, aExampleProject.taskGoal, aExampleProject.threadTitle].join(" "))) {
-    aExampleProject.allowColdLayer = true;
+  if (args.queryType === "retrieve_context") args.runtimeContext = true;
+  if (args.queryType === "retrieve_precedent") args.precedent = true;
+  if (args.queryType === "recover_thread" || args.queryType === "thread_recovery") args.recoverThread = true;
+  if (args.precedent && args.includeKinds.length === 0) args.includeKinds = PRECEDENT_KINDS;
+  if (args.recoverThread && !args.query) args.query = [args.threadId, args.threadTitle, args.taskGoal].filter(Boolean).join(" ");
+  if (args.recoverThread || COLD_QUERY_TYPES.has(args.queryType) || MAINTENANCE_QUERY_RE.test([args.query, args.taskGoal, args.threadTitle].join(" "))) {
+    args.allowColdLayer = true;
   }
-  return aExampleProject;
+  return args;
 }
 
 function parseSourceRefArg(raw) {
@@ -895,11 +895,11 @@ function resolveWorkspaceContainedPath(workspace, candidatePath, optionName) {
   return resolved;
 }
 
-function normalizeEvidenceSourceRefs(evidence, aExampleProject) {
+function normalizeEvidenceSourceRefs(evidence, args) {
   const refs = [
     ...safeArray(evidence.evidence?.sourceRefs),
     ...safeArray(evidence.sourceRefs),
-    ...safeArray(aExampleProject.sourceRefs),
+    ...safeArray(args.sourceRefs),
   ].filter(Boolean).map((ref) => ({
     kind: cleanText(ref.kind || ref.sourceType || "source") || "source",
     path: ref.path ? String(ref.path) : null,
@@ -979,10 +979,10 @@ function buildFlowSkillCandidatePreview(packet, sourceRefs) {
   };
 }
 
-function buildEvidenceWritebackPacket(workspace, aExampleProject) {
-  const evidence = readEvidenceJson(aExampleProject.evidenceJson, workspace);
-  const decision = WRITEBACK_DECISIONS.includes(aExampleProject.decision || evidence.decision) ? (aExampleProject.decision || evidence.decision) : "block";
-  const sourceRefs = normalizeEvidenceSourceRefs(evidence, aExampleProject);
+function buildEvidenceWritebackPacket(workspace, args) {
+  const evidence = readEvidenceJson(args.evidenceJson, workspace);
+  const decision = WRITEBACK_DECISIONS.includes(args.decision || evidence.decision) ? (args.decision || evidence.decision) : "block";
+  const sourceRefs = normalizeEvidenceSourceRefs(evidence, args);
   const containsRawSession = evidence.privacy?.containsRawSession === true || evidence.privacy?.contains_raw_session === true || hasUnsafeRef(sourceRefs, RAW_SESSION_RE);
   const containsSecrets = evidence.privacy?.containsSecrets === true || evidence.privacy?.contains_credentials === true || evidence.privacy?.containsSecrets === true || hasUnsafeRef(sourceRefs, SECRET_REF_RE);
   const reusablePattern = normalizeWritebackReusablePatterns(evidence);
@@ -992,15 +992,15 @@ function buildEvidenceWritebackPacket(workspace, aExampleProject) {
     mode: "evidence_writeback_packet_dry_run",
     decision,
     task: {
-      id: compact(aExampleProject.taskId || evidence.task?.id || evidence.taskId || "unknown-task", 140),
-      goal: compact(aExampleProject.taskGoal || evidence.task?.goal || evidence.goal || aExampleProject.query || "", 360),
+      id: compact(args.taskId || evidence.task?.id || evidence.taskId || "unknown-task", 140),
+      goal: compact(args.taskGoal || evidence.task?.goal || evidence.goal || args.query || "", 360),
       domain: safeArray(evidence.task?.domain || evidence.domain).map((item) => compact(item, 80)).filter(Boolean).slice(0, 12),
       projectPath: evidence.task?.projectPath || evidence.projectPath || workspace,
       threadId: evidence.task?.threadId || evidence.threadId || null,
       parentCeoThreadId: evidence.task?.parentCeoThreadId || evidence.parentCeoThreadId || null,
     },
     evidence: {
-      summary: compact(aExampleProject.summary || evidence.evidence?.summary || evidence.summary || "", 1000),
+      summary: compact(args.summary || evidence.evidence?.summary || evidence.summary || "", 1000),
       changedFiles: safeArray(evidence.evidence?.changedFiles || evidence.changedFiles).map((item) => compact(item, 260)).filter(Boolean).slice(0, 40),
       artifacts: safeArray(evidence.evidence?.artifacts || evidence.artifacts).map((item) => compact(item, 260)).filter(Boolean).slice(0, 40),
       tests: safeArray(evidence.evidence?.tests || evidence.tests).map((item) => compact(item, 220)).filter(Boolean).slice(0, 40),
@@ -1087,13 +1087,13 @@ function printText(payload) {
 }
 
 function main() {
-  const aExampleProject = parseAExampleProject(process.argv);
-  const workspace = findWorkspace(aExampleProject.workspace, aExampleProject.allowParentKnowledge);
-  if (aExampleProject.writebackDryRun) {
-    const packet = buildEvidenceWritebackPacket(workspace, aExampleProject);
-    const outputPath = writeEvidenceOut(workspace, aExampleProject.evidenceOut, packet);
+  const args = parseArgs(process.argv);
+  const workspace = findWorkspace(args.workspace, args.allowParentKnowledge);
+  if (args.writebackDryRun) {
+    const packet = buildEvidenceWritebackPacket(workspace, args);
+    const outputPath = writeEvidenceOut(workspace, args.evidenceOut, packet);
     const payload = outputPath ? { ...packet, outputPath } : packet;
-    if (aExampleProject.json) {
+    if (args.json) {
       console.log(JSON.stringify(payload, null, 2));
     } else {
       console.log("# Zhixia Evidence Writeback Dry Run");
@@ -1105,15 +1105,15 @@ function main() {
     }
     return;
   }
-  const payload = collectResults(workspace, aExampleProject);
-  const lifecyclePayload = aExampleProject.precedent
-    ? buildRuntimePrecedentPacket(payload, aExampleProject)
-    : aExampleProject.recoverThread
-      ? buildThreadRecoveryPacket(payload, aExampleProject)
-      : aExampleProject.runtimeContext
-      ? buildRuntimeContextPacket(payload, aExampleProject)
+  const payload = collectResults(workspace, args);
+  const lifecyclePayload = args.precedent
+    ? buildRuntimePrecedentPacket(payload, args)
+    : args.recoverThread
+      ? buildThreadRecoveryPacket(payload, args)
+      : args.runtimeContext
+      ? buildRuntimeContextPacket(payload, args)
       : payload;
-  if (aExampleProject.json) {
+  if (args.json) {
     console.log(JSON.stringify(lifecyclePayload, null, 2));
   } else {
     printText(payload);

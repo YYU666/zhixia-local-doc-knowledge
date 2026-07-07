@@ -487,7 +487,7 @@ assert.ok(
   "ThreadLineageIndex retrieval must preserve archive/compact/restore/delete mutation boundary",
 );
 
-let persistedLineageAExampleProject = null;
+let persistedLineageArgs = null;
 const persistedLineageSources = collectAgentRetrieveContractSources(lineageOnlyRequest, {
   buildProjectRecords: () => contractProjectRecords,
   buildCEOFlowRecords: (records) => records.map((record) => ({
@@ -496,7 +496,7 @@ const persistedLineageSources = collectAgentRetrieveContractSources(lineageOnlyR
     workspacePaths: [record.rootPath],
   })),
   listThreadLineageIndexRecords: (options) => {
-    persistedLineageAExampleProject = options;
+    persistedLineageArgs = options;
     return [{
       id: "thread-lineage:persisted-alpha",
       kind: "thread_lineage_index",
@@ -515,7 +515,7 @@ const persistedLineageSources = collectAgentRetrieveContractSources(lineageOnlyR
   },
 });
 assert.deepEqual(
-  persistedLineageAExampleProject,
+  persistedLineageArgs,
   { projectPath: workspacePath, parentCeoThreadId: "019e-ceo", limit: 120 },
   "ThreadLineageIndex retrieval should request persisted lineage rows with scoped project/CEO metadata",
 );

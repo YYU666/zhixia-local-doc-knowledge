@@ -147,14 +147,14 @@ assert.equal(normalizedLongThread.vaultSessionPath, "C:/Zhixia/vault/019e-optimi
 (async () => {
   const processFailure = await sampleAgentProcesses({
     sampledAt: "2026-06-12T18:30:00.000Z",
-    executor: (_file, _aExampleProject, _options, callback) => callback(new Error("mock failure"), ""),
+    executor: (_file, _args, _options, callback) => callback(new Error("mock failure"), ""),
   });
   assert.deepEqual(processFailure.processes, [], "process sampler failures should return an empty safe process list");
   assert.ok(processFailure.warnings[0].startsWith("process_sample_failed:"), "process sampler failures should be warnings, not thrown errors");
 
   const processSuccess = await sampleAgentProcesses({
     sampledAt: "2026-06-12T18:30:00.000Z",
-    executor: (_file, _aExampleProject, _options, callback) => callback(null, JSON.stringify({ ProcessId: 12, ProcessName: "Codex.exe", CpuPercent: 12, MemoryBytes: 2048 })),
+    executor: (_file, _args, _options, callback) => callback(null, JSON.stringify({ ProcessId: 12, ProcessName: "Codex.exe", CpuPercent: 12, MemoryBytes: 2048 })),
   });
   assert.equal(processSuccess.processes.length, 1, "process sampler should parse single-object PowerShell JSON");
   assert.equal(processSuccess.processes[0].platform, "codex", "process sampler should normalize parsed process rows");

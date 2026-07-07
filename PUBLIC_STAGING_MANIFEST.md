@@ -1,6 +1,6 @@
 # Public Staging Manifest
 
-Generated at: 2026-07-07T13:03:50.397Z
+Generated at: 2026-07-07T15:49:10.586Z
 
 Source app root: canonical app source directory
 Staging path: public-staging/zhixia-local-doc-knowledge
@@ -31,6 +31,7 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 ## Public Docs Included
 
 - docs/CEO_FLOW_MEMORY_RUNTIME.md
+- docs/EXTERNAL_AUDIT_REQUIREMENTS.md
 - docs/PRD.md
 - docs/PUBLICATION_CHECKLIST.md
 - docs/PUBLIC_REPO_LAYOUT.md
@@ -57,7 +58,7 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 
 ## File Count
 
-- 70 files
+- 72 files
 
 ## Manifest Hash Sample
 
@@ -67,13 +68,14 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - assets/icon.svg sha256=8c0af5d51c379b71
 - codex-skills/zhixia-local-docs/agents/openai.yaml sha256=90c5530730f02678
 - codex-skills/zhixia-local-docs/references/context-bundle.md sha256=6bb6756ca36f9f66
-- codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=506c815ae00a5bb3
+- codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=1b0f3d6e9e625515
 - codex-skills/zhixia-local-docs/SKILL.md sha256=f084fbdaf1ef1335
 - CONTRIBUTING.md sha256=c7022f052c7acffa
-- docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=4f1332907ba3114a
-- docs/PRD.md sha256=111784b02690b8c2
-- docs/PUBLIC_REPO_LAYOUT.md sha256=fcf22af027515921
-- docs/PUBLICATION_CHECKLIST.md sha256=dd20d81449ca3518
+- docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=6105cc0663cc2641
+- docs/EXTERNAL_AUDIT_REQUIREMENTS.md sha256=c0ae0f4d4090ce2f
+- docs/PRD.md sha256=d7cb1580545b7640
+- docs/PUBLIC_REPO_LAYOUT.md sha256=6cfba0f1ede9f423
+- docs/PUBLICATION_CHECKLIST.md sha256=0168c827bd88d36f
 - docs/RELEASE_NOTES.md sha256=1d39e98758bf57ae
 - docs/TECHNICAL_DESIGN.md sha256=6f36c03125682d8e
 - docs/TEST_PLAN.md sha256=b6c9d65afd65df2a
@@ -83,8 +85,8 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - electron/codexGuardianPolicy.cjs sha256=3bd63511b4c23853
 - electron/codexThreadHistoryAutoIngestPolicy.cjs sha256=1af4dfc2c135d468
 - electron/documentMetadataPolicy.cjs sha256=7be0330b6d7d3f0c
-- electron/main.cjs sha256=4add6fe64cb101d2
-- electron/memoryRuntimePolicy.cjs sha256=506a2bc696085ea2
+- electron/main.cjs sha256=85fbd105f6a3c710
+- electron/memoryRuntimePolicy.cjs sha256=6ac787ed6f99ab1f
 - electron/preload.cjs sha256=f9a6e793e5e3a33a
 - electron/projectArtifactPolicy.cjs sha256=a40a16e6c8259ddd
 - electron/projectMemoryBackfillPolicy.cjs sha256=e25fbc89abf8b889
@@ -94,10 +96,9 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - electron/toolSkillInventoryPolicy.cjs sha256=2fc7219a4bb32acc
 - index.html sha256=5e0d01703eb6a2c9
 - LICENSE sha256=707456d8b1206c93
-- package-lock.json sha256=be88b8b46d4d4315
-- package.json sha256=abf5ac4d4d88aa56
-- README.md sha256=059e5c8c55d98704
+- package-lock.json sha256=bd7046189a93f2cf
+- package.json sha256=63b56afe249d0f61
+- README.md sha256=52ce716b47582ab0
 - samples/api-metadata.json sha256=6b94d04228006d59
 - samples/budget.csv sha256=d4f040e9fd169e79
 - samples/contract-note.txt sha256=b981247bc99d4ca9
-- samples/meeting-notes.md sha256=09cbe93267538ce0

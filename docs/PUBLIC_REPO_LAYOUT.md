@@ -29,6 +29,7 @@ tsconfig*.json
 assets/
 codex-skills/zhixia-local-docs/
 docs/CEO_FLOW_MEMORY_RUNTIME.md
+docs/EXTERNAL_AUDIT_REQUIREMENTS.md
 docs/PRD.md
 docs/PUBLICATION_CHECKLIST.md
 docs/PUBLIC_REPO_LAYOUT.md

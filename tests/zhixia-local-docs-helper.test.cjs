@@ -7,8 +7,8 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const helperPath = path.join(root, "codex-skills", "zhixia-local-docs", "scripts", "read-project-knowledge.cjs");
 
-function runHelper(workspace, aExampleProject) {
-  const output = execFileSync(process.execPath, [helperPath, workspace, ...aExampleProject], {
+function runHelper(workspace, args) {
+  const output = execFileSync(process.execPath, [helperPath, workspace, ...args], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
@@ -16,9 +16,9 @@ function runHelper(workspace, aExampleProject) {
   return JSON.parse(output);
 }
 
-function runHelperFailure(workspace, aExampleProject) {
+function runHelperFailure(workspace, args) {
   assert.throws(
-    () => execFileSync(process.execPath, [helperPath, workspace, ...aExampleProject], {
+    () => execFileSync(process.execPath, [helperPath, workspace, ...args], {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 1024 * 1024,
@@ -35,7 +35,7 @@ function writeFixture(workspace) {
   fs.mkdirSync(docsDir, { recursive: true });
   fs.writeFileSync(
     path.join(docsDir, "EXAMPLE_PROJECT_CEO_RECOVERY_PACKET.md"),
-    "# ExampleProject Studio CEO Recovery\n\n中文恢复摘要：旧 CEO 线程坏掉后，新线程先读这里继续项目。",
+    "# Example Project CEO Recovery\n\n中文恢复摘要：旧 CEO 线程坏掉后，新线程先读这里继续项目。",
     "utf8",
   );
   fs.writeFileSync(
@@ -45,7 +45,7 @@ function writeFixture(workspace) {
   );
   fs.writeFileSync(
     path.join(docsDir, "PRD.md"),
-    "# PRD\n\nExampleProject Studio 是一个 2D 游戏与插件平台项目。",
+    "# PRD\n\nExample Project 是一个 2D 游戏与插件平台项目。",
     "utf8",
   );
   fs.writeFileSync(
@@ -53,7 +53,7 @@ function writeFixture(workspace) {
     [
       "# Retrieval Packet",
       "",
-      "## ExampleProject Current Accepted Engine Update",
+      "## Example Project Current Accepted Engine Update",
       "",
       "Current accepted engine progress: runtime adapter and scene workbench are accepted product milestones.",
       "",
@@ -74,7 +74,7 @@ function writeFixture(workspace) {
       "",
       "Alpha accepted contract rule with source-backed retrieval.",
       "",
-      "## 老线程优化：ExampleProject-PROGRESS-DRIFT-AUDIT-AFTER-W45",
+      "## 老线程优化：EXAMPLE-PROGRESS-DRIFT-AUDIT-AFTER-W45",
       "",
       "Guardian inventory found a CEO-created read-only audit thread past the cooling rule. This is maintenance evidence, not product progress.",
     ].join("\n"),
@@ -141,20 +141,20 @@ function main() {
     assert.ok(context.recallPlan.defaultReadOrder.includes("warm"), "recall plan should include warm long-term summaries");
     assert.equal(context.recallPlan.coldLayer.defaultRead, false, "cold history must not be read by default");
 
-    const ExampleProjectProductContext = runHelper(workspace, [
+    const rgsProductContext = runHelper(workspace, [
       "--runtime-context",
       "--task-goal",
-      "ExampleProject current product engine status accepted UI modules next CEO action not thread maintenance",
+      "Example Project current product engine status accepted UI modules next CEO action not thread maintenance",
       "--query-type",
       "project_resume",
       "--limit",
       "4",
       "--json",
     ]);
-    assert.match(ExampleProjectProductContext.items[0].title, /Current Accepted Engine/i, "product resume should rank accepted product progress before maintenance logs");
-    assert.doesNotMatch(ExampleProjectProductContext.items[0].title, /老线程优化|AUDIT/, "maintenance records must not outrank product memory for product queries");
+    assert.match(rgsProductContext.items[0].title, /Current Accepted Engine/i, "product resume should rank accepted product progress before maintenance logs");
+    assert.doesNotMatch(rgsProductContext.items[0].title, /老线程优化|AUDIT/, "maintenance records must not outrank product memory for product queries");
     assert.ok(
-      ExampleProjectProductContext.items.every((item) => item.memoryLayer !== "cold"),
+      rgsProductContext.items.every((item) => item.memoryLayer !== "cold"),
       "ordinary product queries should not include cold maintenance history by default",
     );
 
@@ -163,9 +163,9 @@ function main() {
       "--thread-id",
       "11111111-2222-7333-8444-555555555555",
       "--thread-title",
-      "ExampleProject Studio CEO",
+      "Example Project CEO",
       "--query",
-      "alpha ExampleProject recovery",
+      "alpha example-project recovery",
       "--limit",
       "5",
       "--json",

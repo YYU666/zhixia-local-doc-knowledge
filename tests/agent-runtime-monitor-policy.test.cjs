@@ -47,7 +47,7 @@ const redactedProcess = normalizeRuntimeProcessSample({
   commandLine: "claude --api-key sk-123456789012345 --project C:/work",
   sampledAt,
 });
-assert.equal(redactedProcess.commandLine, "claude --api-key [REDACTED] --project C:/work", "secret-like CLI aExampleProject should be redacted");
+assert.equal(redactedProcess.commandLine, "claude --api-key [REDACTED] --project C:/work", "secret-like CLI args should be redacted");
 assert.deepEqual(redactedProcess.redactedFields, ["commandLine"], "redacted process samples should report redacted fields");
 assert.equal(redactedProcess.platformSupport.supportLevel, "process_only_planned_session_adapter", "non-Codex platforms should remain process-only planned session adapters");
 assert.deepEqual(

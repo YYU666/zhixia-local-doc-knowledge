@@ -56,29 +56,29 @@ async function main() {
 
   const threadRecoveryPacket = buildThreadRecoveryPacket({
     threadId: "11111111-2222-7333-8444-555555555555",
-    title: "ExampleProject Studio CEO",
+    title: "Example Project CEO",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
     tokenBudget: 1600,
     contextPacket: {
       cacheKey: "context-cache",
       items: [
         {
-          id: "lineage:ExampleProject",
+          id: "lineage:example-project",
           kind: "thread_lineage_index",
-          title: "ThreadLineageIndex: ExampleProject Studio CEO",
+          title: "ThreadLineageIndex: Example Project CEO",
           summary: "Metadata-only lineage for the replacement CEO thread.",
           freshness: "review",
           memoryLayer: "cold",
           whyMatched: ["threadId:exact"],
-          sourceRefs: [{ kind: "thread_lineage_index", path: "sqlite://thread_lineage_index/ExampleProject" }],
+          sourceRefs: [{ kind: "thread_lineage_index", path: "sqlite://thread_lineage_index/example-project" }],
         },
       ],
     },
     lineageRecords: [
       {
-        id: "lineage:ExampleProject",
+        id: "lineage:example-project",
         ceoThreadId: "11111111-2222-7333-8444-555555555555",
-        title: "ThreadLineageIndex: ExampleProject Studio CEO",
+        title: "ThreadLineageIndex: Example Project CEO",
         workspacePaths: ["C:/Users/example/Documents/2D游戏项目"],
         relationships: {
           childThreadIds: ["11111111-2222-7333-8444-555555555555"],
@@ -91,13 +91,13 @@ async function main() {
           rawSessionPolicy: "metadata_only_no_raw_body",
           mutationPolicy: "read_only_no_archive_compact_restore_delete",
         },
-        sourceRefs: [{ kind: "thread_lineage_index", path: "sqlite://thread_lineage_index/ExampleProject" }],
+        sourceRefs: [{ kind: "thread_lineage_index", path: "sqlite://thread_lineage_index/example-project" }],
       },
     ],
     vaultManifests: [
       {
         threadId: "11111111-2222-7333-8444-555555555555",
-        title: "ExampleProject Studio CEO",
+        title: "Example Project CEO",
         projectPath: "C:/Users/example/Documents/2D游戏项目",
         vaultManifestPath: "C:/Users/example/local app data/Roaming/Zhixia/codex-history-vault/019eff6e/latest.json",
         vaultSessionPath: "C:/Users/example/local app data/Roaming/Zhixia/codex-history-vault/019eff6e/session.jsonl",
@@ -149,15 +149,15 @@ async function main() {
     severity: "error",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
     threadId: "11111111-2222-7333-8444-555555555555",
-    automationId: "ExampleProject-ceo-harvest-post-43-wave",
-    title: "ExampleProject CEO 线程断流空转",
-    summary: "ExampleProject CEO 主线程连续 heartbeat 空完成，已暂停心跳，应由干净接管线程恢复。",
+    automationId: "example-ceo-harvest-post-43-wave",
+    title: "Example Project CEO 线程断流空转",
+    summary: "Example Project CEO 主线程连续 heartbeat 空完成，已暂停心跳，应由干净接管线程恢复。",
     observedSignals: ["systemError", "last_agent_message=null", "15min heartbeat loop", "236k token turn"],
     decisions: ["暂停旧 heartbeat，不再向旧 CEO 主线程派工。"],
     openRisks: ["旧线程仍可能有最后一轮 inProgress 残留。"],
-    nextAction: "新建 ExampleProject CEO Takeover 线程并读取项目短记忆包。",
+    nextAction: "新建 Example Project CEO Takeover 线程并读取项目短记忆包。",
     sourceRefs: [
-      { kind: "automation", path: "C:/Users/example/.codex/automations/ExampleProject-ceo-harvest-post-43-wave/automation.toml" },
+      { kind: "automation", path: "C:/Users/example/.codex/automations/example-ceo-harvest-post-43-wave/automation.toml" },
       { kind: "raw_session", path: "C:/Users/example/.codex/sessions/2026/06/25/rollout.jsonl" },
       { kind: "secret", path: "C:/Users/example/Documents/project/.env" },
     ],
@@ -173,7 +173,7 @@ async function main() {
   const maxOutputDisconnectedEvent = normalizeRuntimeEventMemory({
     severity: "error",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
-    title: "ExampleProject callback stream disconnected",
+    title: "Example Project callback stream disconnected",
     summary: "stream disconnected before completion: Incomplete response returned, reason: max_output_tokens. 正在自动压缩上下文，正在重新连接 5/5。",
     observedSignals: ["max_output_tokens", "reconnecting 5/5"],
   });
@@ -301,11 +301,11 @@ async function main() {
   });
   const volatilePacket = buildRuntimeContextPacket({
     queryType: "thread_recovery",
-    query: "ExampleProject CEO takeover",
+    query: "Example Project CEO takeover",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
     items: volatileItems,
   }, {
-    taskGoal: "接管 ExampleProject CEO 坏线程",
+    taskGoal: "接管 Example Project CEO 坏线程",
     queryType: "thread_recovery",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
     allowedKinds: ["runtime_event", "project_record"],
@@ -315,26 +315,26 @@ async function main() {
   assert.equal(JSON.stringify(volatilePacket).includes(".codex/sessions"), false, "runtime event context must not leak raw session paths");
   assert.equal(JSON.stringify(volatilePacket).includes(".env"), false, "runtime event context must not leak secret paths");
 
-  const ExampleProjectActivatedGraph = buildActivatedMemoryGraph({
+  const exampleProjectActivatedGraph = buildActivatedMemoryGraph({
     nodes: [
       {
-        id: "project:ExampleProject",
+        id: "project:example",
         kind: "project",
-        title: "ExampleProject Studio / 2D游戏项目",
+        title: "Example Project / 2D游戏项目",
         summary: "边做2D游戏边长出轻量游戏引擎。",
         projectPath: "C:/Users/example/Documents/2D游戏项目",
-        tags: ["ExampleProject Studio", "ExampleProject", "2D游戏项目"],
+        tags: ["Example Project", "Example Project", "2D游戏项目"],
         status: "ready",
         freshness: "fresh",
       },
       {
         id: "thread:ceo",
         kind: "thread_lineage_index",
-        title: "ExampleProject Studio CEO",
-        summary: "旧CEO主线程，包含ExampleProject阶段任务、worker/reviewer分支和恢复入口。",
+        title: "Example Project CEO",
+        summary: "旧CEO主线程，包含Example Project 阶段任务、worker/reviewer分支和恢复入口。",
         projectPath: "C:/Users/example/Documents/2D游戏项目",
         threadId: "11111111-2222-7333-8444-555555555555",
-        tags: ["CEO", "ExampleProject"],
+        tags: ["CEO", "Example Project"],
         status: "ready",
         freshness: "review",
       },
@@ -360,25 +360,25 @@ async function main() {
       },
     ],
     edges: [
-      { from: "project:ExampleProject", to: "thread:ceo", kind: "project_contains", weight: 3 },
+      { from: "project:example", to: "thread:ceo", kind: "project_contains", weight: 3 },
       { from: "thread:ceo", to: "vault:old-thread", kind: "thread_evidence", weight: 2.5 },
-      { from: "project:ExampleProject", to: "experience:scope", kind: "project_contains", weight: 2 },
+      { from: "project:example", to: "experience:scope", kind: "project_contains", weight: 2 },
     ],
   }, {
-    taskGoal: "继续 ExampleProject Studio CEO，恢复 ExampleProject 旧线程记忆",
+    taskGoal: "继续 Example Project CEO，恢复 Example Project 旧线程记忆",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
     threadId: "11111111-2222-7333-8444-555555555555",
     maxNodes: 8,
   });
-  assert.equal(ExampleProjectActivatedGraph.mode, "persisted_activation_graph", "activated graph should use the persisted activation mode");
-  assert.equal(ExampleProjectActivatedGraph.performance.metadataOnly, true, "activated graph should be metadata-only");
-  assert.equal(ExampleProjectActivatedGraph.performance.rawSessionBodyRead, false, "activated graph must not read raw session bodies");
-  assert.equal(ExampleProjectActivatedGraph.nodes.some((node) => node.id === "thread:ceo"), true, "ExampleProject CEO thread should activate");
-  assert.equal(ExampleProjectActivatedGraph.nodes[0].threadId, "11111111-2222-7333-8444-555555555555", "exact threadId should outrank broad project keyword matches");
-  assert.equal(ExampleProjectActivatedGraph.nodes.some((node) => node.id === "vault:old-thread"), true, "vault pointer should be pulled in by graph neighbors");
-  assert.equal(ExampleProjectActivatedGraph.nodes.some((node) => node.id === "experience:scope"), true, "project experience should activate through project relationship");
-  assert.ok(ExampleProjectActivatedGraph.nodes[0].activation > 0, "activated nodes should carry activation scores");
-  assert.ok(ExampleProjectActivatedGraph.nodes[0].whyActivated.length > 0, "activated nodes should explain why they were recalled");
+  assert.equal(exampleProjectActivatedGraph.mode, "persisted_activation_graph", "activated graph should use the persisted activation mode");
+  assert.equal(exampleProjectActivatedGraph.performance.metadataOnly, true, "activated graph should be metadata-only");
+  assert.equal(exampleProjectActivatedGraph.performance.rawSessionBodyRead, false, "activated graph must not read raw session bodies");
+  assert.equal(exampleProjectActivatedGraph.nodes.some((node) => node.id === "thread:ceo"), true, "Example Project CEO thread should activate");
+  assert.equal(exampleProjectActivatedGraph.nodes[0].threadId, "11111111-2222-7333-8444-555555555555", "exact threadId should outrank broad project keyword matches");
+  assert.equal(exampleProjectActivatedGraph.nodes.some((node) => node.id === "vault:old-thread"), true, "vault pointer should be pulled in by graph neighbors");
+  assert.equal(exampleProjectActivatedGraph.nodes.some((node) => node.id === "experience:scope"), true, "project experience should activate through project relationship");
+  assert.ok(exampleProjectActivatedGraph.nodes[0].activation > 0, "activated nodes should carry activation scores");
+  assert.ok(exampleProjectActivatedGraph.nodes[0].whyActivated.length > 0, "activated nodes should explain why they were recalled");
   assert.equal(JSON.stringify(packet).includes(".codex/sessions/raw-backed.jsonl"), false, "runtime context must fail closed on raw-backed allowed-kind source refs");
   assert.equal(packet.items[0].rawSessionPolicy, "not_allowed", "runtime items should default to no raw-session reads");
   assert.equal(packet.items[0].memoryLayer, "hot", "project items should be tagged as hot memory");
@@ -550,6 +550,31 @@ async function main() {
   assert.equal(secretSourceRefWithoutPrivacy.status, "rejected", "secret-like sourceRefs should fail closed even when privacy flags are omitted");
   assert.ok(secretSourceRefWithoutPrivacy.safetyBlockers.includes("contains_secrets"), "secret sourceRef should infer contains_secrets");
 
+  const envPathWithHarmlessTitle = evaluateWritebackEvidence({
+    decision: "accept",
+    task: { id: "TASK-5B", goal: "Secret env path without privacy flags" },
+    evidence: {
+      summary: "Compact claim with env path source ref.",
+      sourceRefs: [{ kind: "document", path: "C:/repo/.env", title: "env config" }],
+    },
+    privacy: { containsRawSession: false, containsSecrets: false },
+  });
+  assert.equal(envPathWithHarmlessTitle.status, "rejected", ".env path sourceRefs should fail closed even when title text follows the path");
+  assert.ok(envPathWithHarmlessTitle.safetyBlockers.includes("contains_secrets"), ".env path should infer contains_secrets independent of title text");
+  assert.equal(JSON.stringify(envPathWithHarmlessTitle.compact).includes("C:/repo/.env"), false, "unsafe writeback receipts should redact secret sourceRef paths");
+
+  const underscoredDestructiveIntent = evaluateWritebackEvidence({
+    decision: "accept",
+    task: { id: "TASK-5C", goal: "Underscored destructive intent" },
+    evidence: {
+      summary: "Compact claim with explicit source.",
+      sourceRefs: [{ kind: "project_artifact", path: "docs/TECHNICAL_DESIGN.md" }],
+    },
+    requestedEffect: "archive_and_delete_old_thread",
+  });
+  assert.equal(underscoredDestructiveIntent.status, "rejected", "underscored destructive actions should fail closed");
+  assert.ok(underscoredDestructiveIntent.safetyBlockers.includes("destructive_or_executable_intent"), "underscore-separated archive/delete intent should be detected");
+
   const harmlessSessionProse = evaluateWritebackEvidence({
     decision: "accept",
     task: { id: "TASK-6", goal: "Harmless prose" },
@@ -693,6 +718,16 @@ async function main() {
     });
     assert.equal(secretPromotionWithoutPrivacy.status, "review", "secret promotion should stay review even when privacy flags are omitted");
     assert.ok(secretPromotionWithoutPrivacy.blockers.includes("contains_secrets"), "promotion should infer secret blocker from refs or action fields");
+
+    const envPromotionWithoutPrivacy = evaluatePromotionCandidate({
+      target: "memory_card",
+      title: "Env backed candidate",
+      sourceRefs: [{ kind: "document", path: "C:/repo/.env", title: "env config" }],
+      privacy: { containsRawSession: false, containsSecrets: false },
+    });
+    assert.equal(envPromotionWithoutPrivacy.status, "review", ".env promotion should stay review even when privacy flags are false");
+    assert.ok(envPromotionWithoutPrivacy.blockers.includes("contains_secrets"), "promotion should infer .env sourceRef blocker from path alone");
+    assert.equal(JSON.stringify(envPromotionWithoutPrivacy).includes("C:/repo/.env"), false, "unsafe promotion candidates should redact secret sourceRef paths");
   } finally {
     await fs.rm(storeRoot, { recursive: true, force: true });
   }

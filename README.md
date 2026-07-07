@@ -94,6 +94,7 @@ npm run build
 ## 文档
 
 - [CEO Flow Memory Runtime](docs/CEO_FLOW_MEMORY_RUNTIME.md)
+- [External Audit Requirements](docs/EXTERNAL_AUDIT_REQUIREMENTS.md)
 - [Technical Design](docs/TECHNICAL_DESIGN.md)
 - [Test Plan](docs/TEST_PLAN.md)
 - [Release Notes](docs/RELEASE_NOTES.md)

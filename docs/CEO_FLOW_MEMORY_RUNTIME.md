@@ -31,7 +31,7 @@ Use this hook when CEO Flow observes a runtime fact that future threads must not
 Supported event types:
 
 - `broken_thread`: a CEO/project-main/worker thread is unreadable, stream-broken, repeatedly empty, context-exhausted, stuck in reconnect/auto-compact loops, or fails with `max_output_tokens` / incomplete response.
-- `heartbeat_fuse`: a heartbeat, monitor, or ExampleProjectup loop was paused because it repeatedly targeted a broken or wasteful thread.
+- `heartbeat_fuse`: a heartbeat, monitor, or wakeup loop was paused because it repeatedly targeted a broken or wasteful thread.
 - `thread_takeover`: a clean replacement thread was designated for an old or broken thread.
 - `stale_lane_reference`: a roster, heartbeat, task card, or recovery packet points to a thread id that cannot be read or no longer resolves.
 - `task_checkpoint`, `user_rule_update`, `runtime_diagnosis`: compact operational facts that should appear in the next hot context packet. Model/reasoning drift, such as another lane changing CEO model or reasoning strength, should be recorded as `user_rule_update` and treated as a rule to preserve.

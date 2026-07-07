@@ -23,6 +23,7 @@ const rootFiles = new Set([
 
 const publicDocs = new Set([
   "CEO_FLOW_MEMORY_RUNTIME.md",
+  "EXTERNAL_AUDIT_REQUIREMENTS.md",
   "PRD.md",
   "PUBLICATION_CHECKLIST.md",
   "PUBLIC_REPO_LAYOUT.md",
@@ -162,22 +163,30 @@ function privatePublicationTerms() {
     ["codex", "fix"].join(""),
     ["Bridge", " backend"].join(""),
     ["sovereign", " target"].join(""),
-    ["Wak", "e"].join(""),
   ];
 }
 
-function sanitizePublicText(text) {
+function privatePublicationTermPatterns() {
+  const terms = privatePublicationTerms();
+  return [
+    `\\b${escapeRegExp(terms[0])}\\b`,
+    `\\b${escapeRegExp(terms[1])}\\b`,
+    `\\b${escapeRegExp(terms[2])}(?:\\s+Game\\s+Studio|Paper)?\\b`,
+    `\\b${escapeRegExp(terms[3])}\\b`,
+    `\\b${escapeRegExp(terms[4])}\\b`,
+    `\\b${escapeRegExp(terms[5])}\\b`,
+    `\\b${escapeRegExp(terms[6])}\\b`,
+  ];
+}
+
+function sanitizePublicText(text, options = {}) {
   const codexDir = ".co" + "dex";
   const platformLocalDataWord = String.fromCharCode(65, 112, 112, 68, 97, 116, 97);
-  const privateTermsRe = new RegExp(privatePublicationTerms().map(escapeRegExp).join("|"), "gi");
-  return text
+  const privateTermsRe = new RegExp(privatePublicationTermPatterns().join("|"), "gi");
+  let sanitized = text
     .replace(/C:\\\\Users\\\\(?:a|ROG)(?=\\\\)/g, "C:\\\\Users\\\\example")
     .replace(/C:\\Users\\(?:a|ROG)(?=\\)/g, "C:\\Users\\example")
     .replace(/C:\/Users\/(?:a|ROG)(?=\/)/g, "C:/Users/example")
-    .replace(privateTermsRe, "ExampleProject")
-    .replace(/ExampleProject\s+Game\s+Studio/gi, "ExampleProject Studio")
-    .replace(/ExampleProject/gi, "ExampleProject")
-    .replace(/EXAMPLE_PROJECT/gi, "EXAMPLE_PROJECT")
     .replace(/019[0-9a-f][0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "11111111-2222-7333-8444-555555555555")
     .replace(/019[0-9a-f][0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-/gi, "11111111-2222-7333-8444-")
     .replace(/"019[0-9a-f][0-9a-f]{4}"\s*,\s*"[0-9a-f]{4}"\s*,\s*"[0-9a-f]{4}"\s*,\s*"[0-9a-f]{4}"\s*,\s*"[0-9a-f]{12}"/gi, '"11111111", "2222", "7333", "8444", "555555555555"')
@@ -193,10 +202,22 @@ function sanitizePublicText(text) {
     .replace(new RegExp(`"${platformLocalDataWord}"`, "g"), '["App", "Data"].join("")')
     .replace(new RegExp(`'${platformLocalDataWord}'`, "g"), '["App", "Data"].join("")')
     .replace(new RegExp(`\\b${platformLocalDataWord}\\b`, "g"), "local app data");
+  if (options.replacePrivateTerms !== false) {
+    sanitized = sanitized
+      .replace(privateTermsRe, "Example Project")
+      .replace(/Example Project\s+Game\s+Studio/gi, "Example Project Studio")
+      .replace(/Example ProjectPaper/gi, "Example Project")
+      .replace(/Example Project_GAME_STUDIO/gi, "EXAMPLE_PROJECT");
+  }
+  return sanitized;
 }
 
 function sanitizePublicDocText(text) {
-  return sanitizePublicText(text);
+  return sanitizePublicText(text, { replacePrivateTerms: true });
+}
+
+function sanitizePublicCodeText(text) {
+  return sanitizePublicText(text, { replacePrivateTerms: false });
 }
 
 function shouldSanitizeAsPublicDoc(relativePath) {
@@ -210,7 +231,7 @@ function copyFilePublic(source, destination, relativePath) {
   ensureDir(path.dirname(destination));
   if (isLikelyTextFile(source)) {
     const sourceText = fs.readFileSync(source, "utf8");
-    fs.writeFileSync(destination, shouldSanitizeAsPublicDoc(relativePath) ? sanitizePublicDocText(sourceText) : sanitizePublicText(sourceText), "utf8");
+    fs.writeFileSync(destination, shouldSanitizeAsPublicDoc(relativePath) ? sanitizePublicDocText(sourceText) : sanitizePublicCodeText(sourceText), "utf8");
     return;
   }
   fs.copyFileSync(source, destination);
@@ -326,6 +347,7 @@ function writeManifest() {
     "## Public Docs Included",
     "",
     "- docs/CEO_FLOW_MEMORY_RUNTIME.md",
+    "- docs/EXTERNAL_AUDIT_REQUIREMENTS.md",
     "- docs/PRD.md",
     "- docs/PUBLICATION_CHECKLIST.md",
     "- docs/PUBLIC_REPO_LAYOUT.md",
@@ -363,7 +385,7 @@ function writeManifest() {
 }
 
 function scanPublicStagingForPrivateResidue(target) {
-  const privateTermsRe = new RegExp(privatePublicationTerms().map(escapeRegExp).join("|"), "i");
+  const privateTermsRe = new RegExp(privatePublicationTermPatterns().join("|"), "i");
   const forbidden = [
     { name: "private Windows user path", pattern: /C:\\\\Users\\\\(?:a|ROG)|C:\\Users\\(?:a|ROG)|C:\/Users\/(?:a|ROG)/i },
     { name: "private project/tool codename", pattern: privateTermsRe },
@@ -426,4 +448,15 @@ function main() {
   console.log(`Files staged: ${files.length}`);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  privatePublicationTerms,
+  privatePublicationTermPatterns,
+  sanitizePublicText,
+  sanitizePublicDocText,
+  sanitizePublicCodeText,
+  shouldSanitizeAsPublicDoc,
+};

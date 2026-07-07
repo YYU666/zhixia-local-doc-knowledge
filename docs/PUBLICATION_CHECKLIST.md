@@ -11,6 +11,7 @@ Use this checklist before publishing Zhixia to a public GitHub repository.
 - `.gitignore`
 - `package.json` with `license`
 - `docs/CEO_FLOW_MEMORY_RUNTIME.md`
+- `docs/EXTERNAL_AUDIT_REQUIREMENTS.md`
 - `docs/PUBLIC_REPO_LAYOUT.md`
 - `docs/PUBLICATION_CHECKLIST.md`
 - Public-safe design, test, and release notes selected by maintainers
