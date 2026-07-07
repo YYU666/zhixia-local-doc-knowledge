@@ -1655,7 +1655,7 @@ declare global {
         generatedToolSkillRecords?: number;
       }>;
       getCodexGuardianReport: () => Promise<CodexGuardianCommandResult<CodexGuardianReport>>;
-      cleanCodexHotLogs: () => Promise<CodexGuardianCommandResult<CodexGuardianCleanReceipt>>;
+      cleanCodexHotLogs: (options?: { userConfirmed?: boolean }) => Promise<CodexGuardianCommandResult<CodexGuardianCleanReceipt>>;
       searchCodexHistory: (
         options?: CodexGuardianHistoryQuery,
       ) => Promise<CodexGuardianCommandResult<CodexGuardianHistoryEnvelope>>;
@@ -1669,10 +1669,10 @@ declare global {
         options?: CodexGuardianHistoryQuery & { minBytes?: number; minAgeMinutes?: number },
       ) => Promise<CodexGuardianCommandResult<CodexGuardianHistoryEnvelope>>;
       optimizeCodexThread: (
-        options?: CodexGuardianHistoryQuery,
+        options?: CodexGuardianHistoryQuery & { userConfirmed?: boolean },
       ) => Promise<CodexGuardianCommandResult<CodexGuardianHistoryEnvelope>>;
       compactCodexThread: (
-        options?: CodexGuardianHistoryQuery & { dryRun?: boolean },
+        options?: CodexGuardianHistoryQuery & { dryRun?: boolean; userConfirmed?: boolean },
       ) => Promise<CodexGuardianCommandResult<CodexGuardianCompactReceipt>>;
       autoIngestCodexHistory: (
         options?: { limit?: number; recentWriteMinutes?: number },
@@ -1686,6 +1686,7 @@ declare global {
         ceoThreadIdleDays?: number;
         ceoCreatedThreadIdleDays?: number;
         unknownThreadIdleDays?: number;
+        userConfirmed?: boolean;
       }) => Promise<CodexGuardianCommandResult<CodexThreadArchiveQueue>>;
       scanToolSkillInventory: (projectPath: string) => Promise<ToolSkillInventoryResult>;
       getToolSkillInventory: (projectPath: string) => Promise<ToolSkillInventoryResult>;

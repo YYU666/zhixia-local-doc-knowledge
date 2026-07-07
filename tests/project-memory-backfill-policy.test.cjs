@@ -8,7 +8,7 @@ const {
   isBackfillableProjectDocument,
 } = require("../electron/projectMemoryBackfillPolicy.cjs");
 
-const projectPath = "C:\\Users\\a\\Documents\\zhixia";
+const projectPath = "C:\\Users\\example\\Documents\\zhixia";
 const docs = [
   {
     id: "prd-1",
@@ -70,7 +70,7 @@ const docs = [
     id: "raw-session",
     title: "Raw session",
     fileName: "session.jsonl",
-    filePath: "C:\\Users\\a\\.codex\\sessions\\2026\\06\\12\\session.jsonl",
+    filePath: "C:\\Users\\example\\.codex\\sessions\\2026\\06\\12\\session.jsonl",
     workspacePath: projectPath,
     artifactType: "other",
     sourceType: "workspace_file",

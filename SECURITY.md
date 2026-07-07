@@ -26,6 +26,24 @@ For a useful private report, include:
 - FlowSkill candidates are private review metadata unless a later explicit user action exports or installs them.
 - Archive, compact, restore, delete, move, install, execute, or public-export actions must be explicit and fail closed.
 
+## Current Application Guardrails
+
+- Renderer settings updates are key/type whitelisted in the main process. Unknown setting keys must be rejected rather than merged into persisted settings.
+- AI Provider endpoints must be trusted HTTPS URLs. The default provider is `https://api.deepseek.com` with model `deepseek-chat`; AI features are opt-in and may send selected document text to the configured provider only after a user action.
+- Project-memory writes and tool inventory scans must stay inside registered workspaces derived from imported or scanned project paths.
+- Electron windows use context isolation, no Node integration, explicit sandboxing, CSP response headers, denied window opens, guarded navigation, and denied permission requests.
+- Guardian actions that can clean logs, optimize/compact threads, or generate archive queues require an explicit user-confirmation signal. They must not run as hidden background maintenance.
+- The default Guardian script path is app-owned user data (`userData/tools/codex-history-guardian.ps1`). Development overrides require `ZHIXIA_CODEX_GUARDIAN_SCRIPT`.
+
+## Known Residual Risks
+
+- API keys are still stored locally in the app database rather than an OS keychain. They are masked before returning to the renderer, but local disk compromise remains in scope.
+- The app is still built around sql.js, which exports the full database on write; very large local stores can still hit performance and memory ceilings.
+- `electron/main.cjs` and `src/App.tsx` remain large files. Security-critical checks now have a policy module, but further module splitting is needed to reduce regression risk.
+- The product is Chinese-first and local-first. It should not be marketed as a complete international SaaS-style knowledge platform, cloud sync product, or unlimited memory graph.
+
 ## Public Repository Hygiene
 
 Before publishing or accepting contributions, verify that `.gitignore` excludes local databases, `.codex-knowledge/`, vaults, backups, app data, logs, screenshots, package outputs, and private evidence. See [docs/PUBLICATION_CHECKLIST.md](docs/PUBLICATION_CHECKLIST.md).
+
+Publish only the source-only staging directory created by `npm run prepare:public`. The canonical maintainer app directory may contain private docs, local release evidence, generated memory artifacts, and installer outputs by design.

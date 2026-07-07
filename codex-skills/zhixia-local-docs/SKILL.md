@@ -107,10 +107,18 @@ node scripts/read-project-knowledge.cjs <workspace-path> --recover-thread --thre
 
 The lifecycle JSON modes are compact and source-backed:
 
-- `--runtime-context` returns a RuntimeContextPacket-shaped object with `request`, `project`, `items`, `sourceRefs`, `warnings`, `tokenEstimate`, and `generatedAt`.
+- `--runtime-context` returns a layered RuntimeContextPacket-shaped object with `request`, `project`, `items`, `sourceRefs`, `memoryMode`, `memoryLayers`, `recallPlan`, `warnings`, `tokenEstimate`, and `generatedAt`.
 - `--precedent` returns a RuntimePrecedentPacket-shaped object over bounded metadata kinds: knowledge, experience, project artifacts, tool inventory, and skill candidates.
 - `--writeback-dry-run` returns an EvidenceWritebackPacket-like preview only. It may write a preview file with `--evidence-out <workspace-relative-path>`, but the output must stay inside the requested workspace.
 - `--recover-thread` returns a ThreadRecoveryPacket-shaped object for CEO Flow bootstrap. The helper version is workspace-metadata-only: it recommends project docs and compact `.codex-knowledge` sourceRefs, but does not walk Thread History Vault or read raw/vault session bodies.
+
+Layered recall contract:
+
+- `hot` is short-term working memory: current goal, active module, latest decisions, blockers, and next action.
+- `warm` is long-term project summary memory: PRD, architecture, accepted progress, design origin, module history, and source-backed project summaries.
+- `skill` is procedural memory: experience cards, tool records, Skill candidates, and reusable workflows.
+- `cold` is raw/vault/thread-history evidence pointers only. Cold bodies are not read by default; use `--recover-thread`, `--query-type thread_recovery`, `--query-type archive_candidate`, or an explicit recovery query before escalating to cold sourceRefs.
+- For ordinary product/project queries, the helper promotes product state and accepted progress and demotes thread maintenance / archive / Guardian optimization records so they do not outrank the project itself.
 
 Lifecycle no-go rules:
 

@@ -1,6 +1,6 @@
 # Public Staging Manifest
 
-Generated at: 2026-06-28T01:22:22.001Z
+Generated at: 2026-07-07T13:03:50.397Z
 
 Source app root: canonical app source directory
 Staging path: public-staging/zhixia-local-doc-knowledge
@@ -31,9 +31,7 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 ## Public Docs Included
 
 - docs/CEO_FLOW_MEMORY_RUNTIME.md
-- docs/CODEX_OPTIMIZATION_MONITOR.md
 - docs/PRD.md
-- docs/PROJECT_EVALUATION.md
 - docs/PUBLICATION_CHECKLIST.md
 - docs/PUBLIC_REPO_LAYOUT.md
 - docs/TECHNICAL_DESIGN.md
@@ -52,8 +50,9 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 ## Excluded Legacy Docs
 
 - docs/zhixia-complete-product-goal.md
-- docs/ARK_OFFICE_RUNLOG.md
 - docs/RELEASE_COMPLETION_AUDIT.md
+- private optimization monitors
+- private project evaluations
 - other non-whitelisted docs in the canonical app root
 
 ## File Count
@@ -67,38 +66,38 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - assets/icon.png sha256=c29ae2848e3e1d64
 - assets/icon.svg sha256=8c0af5d51c379b71
 - codex-skills/zhixia-local-docs/agents/openai.yaml sha256=90c5530730f02678
-- codex-skills/zhixia-local-docs/references/context-bundle.md sha256=7592ba2662be8024
-- codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=0fbc73cc409156ea
-- codex-skills/zhixia-local-docs/SKILL.md sha256=d5aa145271565de2
+- codex-skills/zhixia-local-docs/references/context-bundle.md sha256=6bb6756ca36f9f66
+- codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=506c815ae00a5bb3
+- codex-skills/zhixia-local-docs/SKILL.md sha256=f084fbdaf1ef1335
 - CONTRIBUTING.md sha256=c7022f052c7acffa
-- docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=cd0fef42c57db931
-- docs/CODEX_OPTIMIZATION_MONITOR.md sha256=db629fe4cfc579f7
-- docs/PRD.md sha256=ef23cfddda077116
-- docs/PROJECT_EVALUATION.md sha256=25d3536c61324a27
-- docs/PUBLIC_REPO_LAYOUT.md sha256=01a01bda9337271a
-- docs/PUBLICATION_CHECKLIST.md sha256=009c50093528e264
+- docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=4f1332907ba3114a
+- docs/PRD.md sha256=111784b02690b8c2
+- docs/PUBLIC_REPO_LAYOUT.md sha256=fcf22af027515921
+- docs/PUBLICATION_CHECKLIST.md sha256=dd20d81449ca3518
 - docs/RELEASE_NOTES.md sha256=1d39e98758bf57ae
-- docs/TECHNICAL_DESIGN.md sha256=2430c53c195fb3da
-- docs/TEST_PLAN.md sha256=f36b35070312c377
-- electron/agentRetrievePolicy.cjs sha256=bac38d0e5697d8fe
+- docs/TECHNICAL_DESIGN.md sha256=6f36c03125682d8e
+- docs/TEST_PLAN.md sha256=b6c9d65afd65df2a
+- electron/agentRetrievePolicy.cjs sha256=222a9541d46b6341
 - electron/agentRuntimeMonitorPolicy.cjs sha256=0a7051c8e3745c5e
 - electron/archiveCandidatePolicy.cjs sha256=14f2eef707fac6df
 - electron/codexGuardianPolicy.cjs sha256=3bd63511b4c23853
-- electron/codexThreadHistoryAutoIngestPolicy.cjs sha256=3c00e0b4d70e5308
+- electron/codexThreadHistoryAutoIngestPolicy.cjs sha256=1af4dfc2c135d468
 - electron/documentMetadataPolicy.cjs sha256=7be0330b6d7d3f0c
-- electron/main.cjs sha256=083794cd294c4eb8
-- electron/memoryRuntimePolicy.cjs sha256=d3522add59050b75
-- electron/preload.cjs sha256=08c94e78ce872f5b
+- electron/main.cjs sha256=4add6fe64cb101d2
+- electron/memoryRuntimePolicy.cjs sha256=506a2bc696085ea2
+- electron/preload.cjs sha256=f9a6e793e5e3a33a
 - electron/projectArtifactPolicy.cjs sha256=a40a16e6c8259ddd
 - electron/projectMemoryBackfillPolicy.cjs sha256=e25fbc89abf8b889
 - electron/projectResumePolicy.cjs sha256=e28ac4a7d2083e98
 - electron/runtimeMonitorAdapter.cjs sha256=618aafa1d919f708
+- electron/securityPolicy.cjs sha256=0d60e7f2b812fb03
 - electron/toolSkillInventoryPolicy.cjs sha256=2fc7219a4bb32acc
 - index.html sha256=5e0d01703eb6a2c9
 - LICENSE sha256=707456d8b1206c93
-- package-lock.json sha256=bd7046189a93f2cf
-- package.json sha256=cd230fb7bfaaba23
-- README.md sha256=7647fdd8740bad92
-- samples/api-metadata.json sha256=868e6d502d99e636
-- samples/budget.csv sha256=263149b91d4317e3
+- package-lock.json sha256=be88b8b46d4d4315
+- package.json sha256=abf5ac4d4d88aa56
+- README.md sha256=059e5c8c55d98704
+- samples/api-metadata.json sha256=6b94d04228006d59
+- samples/budget.csv sha256=d4f040e9fd169e79
 - samples/contract-note.txt sha256=b981247bc99d4ca9
+- samples/meeting-notes.md sha256=09cbe93267538ce0

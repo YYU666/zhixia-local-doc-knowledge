@@ -11,6 +11,7 @@
 - 项目知识库：按真实项目组织文档、历史、知识条目、经验卡片、工具/Skill 线索。
 - 可独立使用的本地文档知识库：支持导入、搜索、标签、摘要、项目页、个人库和手动扫描。
 - 面向 Codex 的 compact retrieval layer：默认返回 metadata、summary、sourceRefs、freshness/status 和 token estimate，而不是完整聊天或巨型 Markdown。
+- 当前是中文优先的本地桌面工具；英文文档主要服务开源协作和 CEO Flow contract 说明，尚未提供完整 i18n。
 
 ## 它不是什么
 
@@ -44,6 +45,7 @@ CEO Flow 可以把知匣当作本地 Memory Runtime：
 ## 本地优先隐私模型
 
 - 默认数据保存在用户本机应用数据目录和项目工作区内。
+- 默认不上传用户文档。可选 AI 整理只在用户配置 API Key 并主动点击测试连接、AI 整理或项目摘要生成时调用可信 HTTPS Provider；此时会把待整理文本发送给该 Provider。
 - 默认 retrieval 是 metadata-first：不读取 raw session body，不返回巨大 Markdown，不携带截图/base64/长日志/密钥。
 - Evidence writeback 保存 compact JSON receipt；没有 sourceRefs 的证据只能作为 advisory/candidate。
 - Raw session、secret、credential、token、private key、public export、install、execute、archive、compact、delete、move、restore 等信号会 fail closed，进入 review/blocked。
@@ -78,6 +80,8 @@ npm run build
 公开 source-only 仓库默认不包含 Windows 安装器脚本或打包命令；二进制发布流程应在签名、安装器和分发策略完成后单独维护。公开 staging 的默认 `npm test` 运行源码级政策、契约和 helper 测试；依赖 `sql.js` 的数据库测试和 Electron 安装版 E2E 属于完整开发环境 / 维护者 release gate。
 
 
+在 source-only public staging 里，package metadata 会被收窄到开发、构建、测试和 `prepare:public`。安装包、签名、portable、fresh-user 验收属于维护者 release gate，不是普通公开源码使用者的默认流程。
+
 ## 公开仓库范围
 
 推荐 GitHub 仓库采用 source-only 布局：
@@ -105,9 +109,12 @@ npm run build
 知匣已包含可执行的 Memory Runtime policy、IPC、helper tests、Electron e2e 和 smoke guards，但仍处于快速产品化阶段：
 
 - Memory Runtime 和项目识别策略是 conservative heuristic + tests，不是云端权威知识图谱。
+- 图谱/“神经网络式记忆”是 bounded metadata activation：默认快速读取 Hot/Warm/Skill，Cold 长历史只作为恢复/审计等显式场景的 source pointer，不会后台全量读 raw history。
 - FlowSkill 输出仍是私有 candidate/review，不是自动推广系统。
 - Archive/compact/restore/delete 等破坏性动作不属于默认 Memory Runtime 行为。
-- 公开发布前仍需要一次中立 hygiene audit，重点检查私有路径、真实 thread IDs、生成知识包、release artifacts 和本地数据库是否被排除。
+- `sql.js` 仍适合个人/小团队本地库；超大库和长期高频写入需要未来迁移到更强的存储/索引架构。
+- `electron/main.cjs` 和 `src/App.tsx` 仍需继续拆分，前端列表虚拟化、搜索防抖、CI/lint/formatter 和更多真实行为测试仍是后续工程债。
+- 公开发布前必须运行 source-only staging 和隐私扫描，重点检查私有路径、真实 thread IDs、生成知识包、release artifacts 和本地数据库是否被排除。
 
 ## License
 

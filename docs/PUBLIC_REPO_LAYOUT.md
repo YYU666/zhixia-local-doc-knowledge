@@ -12,6 +12,8 @@ npm run prepare:public
 
 The script writes only to `public-staging/zhixia-local-doc-knowledge`, verifies that the resolved target stays under `public-staging`, recreates only that owned staging directory, and copies files from an explicit whitelist. It also writes `PUBLIC_STAGING_MANIFEST.md` inside the staging directory with included top-level paths, excluded private/generated categories, and the legacy docs kept out by default.
 
+During copy, text files are sanitized for private paths, private project/tool codenames, and real-looking Codex thread IDs. After copy, the staging directory is scanned again; a hit blocks publication.
+
 ## Include
 
 ```text
@@ -27,6 +29,7 @@ tsconfig*.json
 assets/
 codex-skills/zhixia-local-docs/
 docs/CEO_FLOW_MEMORY_RUNTIME.md
+docs/PRD.md
 docs/PUBLICATION_CHECKLIST.md
 docs/PUBLIC_REPO_LAYOUT.md
 docs/TECHNICAL_DESIGN.md
@@ -44,9 +47,8 @@ Maintainers may include additional public-safe docs after reviewing them for pri
 The following legacy/private operational docs are excluded from staging by default and should not be uploaded unless replaced with sanitized public summaries:
 
 - `docs/zhixia-complete-product-goal.md`
-- `docs/ARK_OFFICE_RUNLOG.md`
 - `docs/RELEASE_COMPLETION_AUDIT.md`
-- Other non-whitelisted operational runlogs, release-transfer evidence, and local validation notes
+- private optimization monitors, project evaluations, release-transfer evidence, local validation notes, and other non-whitelisted operational runlogs
 
 ## Exclude
 
@@ -76,8 +78,12 @@ Also exclude raw Codex sessions, installed global skills, FlowSkill private stor
 
 The source-only staging copy intentionally excludes installer helper scripts and installer include files. They can be restored later in a separate binary-release workflow after signing, installer, and public distribution policies are reviewed.
 
+The staging package metadata is also source-only. Public users should expect `dev`, `build`, `test`, and `prepare:public`; installer/package commands are maintainer release gates, not part of the default public source workflow.
+
 ## Public Docs Policy
 
 Public docs should explain product behavior, architecture, tests, Memory Runtime contracts, and contribution workflow. They should not preserve operational runlogs that contain private machine paths, real thread identifiers, local install paths, private hashes, or personal release-transfer evidence.
 
 When a private operational note is historically important, publish a sanitized summary instead of the raw note.
+
+Public docs should not link to maintainer-only design files unless those files are included in staging. If the canonical app directory keeps a private design doc for operational context, summarize the stable public behavior in `TECHNICAL_DESIGN.md` or `CEO_FLOW_MEMORY_RUNTIME.md` instead.

@@ -40,7 +40,7 @@ function writeFixture() {
     [
       "# CEO Flow Handoff",
       "",
-      "Thread public-thread-id coordinates worker public-thread-id and reviewer public-thread-id.",
+      "Thread 11111111-2222-7333-8444-555555555555 coordinates worker 11111111-2222-7333-8444-555555555555 and reviewer 11111111-2222-7333-8444-555555555555.",
       "Decision: accept metadata-only ThreadLineage governance; no archive, compact, restore, or delete mutation.",
     ].join("\n"),
     "utf8",

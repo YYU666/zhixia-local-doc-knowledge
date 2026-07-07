@@ -14,7 +14,7 @@ const projectSkillPath = path.join(projectPath, "codex-skills", "e2e-review-skil
 const projectScriptsPath = path.join(projectPath, "scripts");
 const projectDocsPath = path.join(projectPath, "docs");
 const codexSessionsPath = path.join(codexHome, "sessions", "2026", "06", "01");
-const oldThreadId = "public-thread-id";
+const oldThreadId = "11111111-2222-7333-8444-555555555555";
 
 function writeFixture() {
   fs.mkdirSync(projectSkillPath, { recursive: true });
@@ -43,7 +43,7 @@ function writeFixture() {
     [
       "# CEO Flow Handoff",
       "",
-      "Thread public-thread-id coordinates worker and reviewer lanes.",
+      "Thread 11111111-2222-7333-8444-555555555555 coordinates worker and reviewer lanes.",
       "Decision: accept metadata-only ThreadLineage governance; no archive, compact, restore, or delete mutation.",
     ].join("\n"),
     "utf8",
@@ -66,6 +66,26 @@ function writeFixture() {
   fs.writeFileSync(sessionPath, sessionLines + "\n", "utf8");
   const oldTime = new Date("2026-05-01T00:00:00.000Z");
   fs.utimesSync(sessionPath, oldTime, oldTime);
+  const guardianToolsDir = path.join(userData, "tools");
+  fs.mkdirSync(guardianToolsDir, { recursive: true });
+  const escapedSessionPath = sessionPath.replace(/'/g, "''");
+  fs.writeFileSync(
+    path.join(guardianToolsDir, "codex-history-guardian.ps1"),
+    [
+      "$result = @{",
+      "  largest_session_files = @(",
+      "    @{",
+      `      path = '${escapedSessionPath}'`,
+      "      size_bytes = 9437184",
+      "      last_write_time = '2026-05-01T00:00:00.000Z'",
+      "    }",
+      "  )",
+      "  provenance = @{ guardianInventoryPath = '' }",
+      "}",
+      "$result | ConvertTo-Json -Depth 8",
+    ].join("\n"),
+    "utf8",
+  );
 }
 
 function rendererScript() {

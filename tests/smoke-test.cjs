@@ -35,7 +35,7 @@ const testPlan = fs.readFileSync(path.join(root, "docs", "TEST_PLAN.md"), "utf8"
 const ceoFlowMemoryRuntimeDoc = fs.readFileSync(path.join(root, "docs", "CEO_FLOW_MEMORY_RUNTIME.md"), "utf8");
 const publicationChecklist = fs.readFileSync(path.join(root, "docs", "PUBLICATION_CHECKLIST.md"), "utf8");
 const publicRepoLayout = fs.readFileSync(path.join(root, "docs", "PUBLIC_REPO_LAYOUT.md"), "utf8");
-const codexOptimizationMonitor = fs.readFileSync(path.join(root, "docs", "CODEX_OPTIMIZATION_MONITOR.md"), "utf8");
+const codexOptimizationMonitor = readTextIfExists("docs", "CODEX_OPTIMIZATION_MONITOR.md");
 const freshUserValidationDoc = readTextIfExists("docs", "FRESH_USER_RELEASE_VALIDATION.md");
 const freshUserValidationScript = readTextIfExists("scripts", "validate-fresh-user-release.ps1");
 const preparePublicRepoScript = fs.readFileSync(path.join(root, "scripts", "prepare-public-repo.cjs"), "utf8");
@@ -49,7 +49,7 @@ const acceptFreshUserReturnHereScript = readTextIfExists("scripts", "accept-fres
 const acceptFreshUserReturnHereBatch = readTextIfExists("scripts", "ACCEPT_RETURN_HERE.bat");
 const installerIncludePath = path.join(root, "build", "installer.nsh");
 const installerInclude = fs.existsSync(installerIncludePath) ? fs.readFileSync(installerIncludePath, "utf8") : "";
-const guardianScriptPath = path.join(os.homedir(), "Documents", "codexfix", "tools", "codex-history-guardian.ps1");
+const guardianScriptPath = process.env.ZHIXIA_CODEX_GUARDIAN_SCRIPT || "";
 const guardianScript = fs.existsSync(guardianScriptPath) ? fs.readFileSync(guardianScriptPath, "utf8") : "";
 
 assert.match(main, /const MAX_DOCUMENT_VERSIONS_PER_DOCUMENT = 3/, "Document version history must stay capped to prevent repeated scan bloat");
@@ -345,7 +345,7 @@ const normalizedExperienceMeta = evaluateExperienceCardRetrieveMeta({
   sourceRefs: [
     {
       kind: "document",
-      path: "C:\\Users\\a\\Documents\\zhixia\\docs\\PRD.md",
+      path: "C:\\Users\\example\\Documents\\zhixia\\docs\\PRD.md",
       title: "知匣 PRD",
       hash: "hash-prd",
       updatedAt: "2026-06-12T18:00:00.000Z",
@@ -367,7 +367,7 @@ assert.equal(normalizedExperienceMeta.duplicateState, "kept", "experience-card r
 assert.equal(normalizedExperienceMeta.duplicateCount, 2, "experience-card retrieve meta should preserve duplicate counts");
 assert.equal(normalizedExperienceMeta.suggestedMergeTargetId, "experience-old", "experience-card retrieve meta should preserve suggested merge target");
 assert.equal(normalizedExperienceMeta.reviewedAt, "2026-06-12T19:00:00.000Z", "experience-card retrieve meta should preserve reviewedAt");
-assert.equal(normalizedExperienceMeta.sourceRefs[0].path, "C:\\Users\\a\\Documents\\zhixia\\docs\\PRD.md", "experience-card retrieve meta should preserve exact sourceRef paths");
+assert.equal(normalizedExperienceMeta.sourceRefs[0].path, "C:\\Users\\example\\Documents\\zhixia\\docs\\PRD.md", "experience-card retrieve meta should preserve exact sourceRef paths");
 assert.equal(normalizedExperienceMeta.sourceRefs[0].artifactType, "prd", "experience-card retrieve meta should preserve sourceRef artifactType");
 assert.equal(normalizedExperienceMeta.sourceRefs[0].sourceType, "codex_output", "experience-card retrieve meta should preserve sourceRef sourceType");
 
@@ -511,7 +511,7 @@ const retrieveProjectRecord = buildProjectRecordRetrieveEvaluator(main);
 const staleProjectRecordItem = retrieveProjectRecord({
   id: "project:stale",
   name: "Zhixia",
-  rootPath: "C:\\Users\\a\\Documents\\Zhixia-Local-Doc-Knowledge\\app",
+  rootPath: "C:\\Users\\example\\Documents\\Zhixia-Local-Doc-Knowledge\\app",
   lastSummary: "Generated status is active, but the human confirmation signature is stale.",
   nextAction: "Re-review ProjectRecord sources.",
   status: "active",
@@ -532,7 +532,7 @@ assert.ok(
 const currentProjectRecordItem = retrieveProjectRecord({
   id: "project:current",
   name: "Zhixia",
-  rootPath: "C:\\Users\\a\\Documents\\Zhixia-Local-Doc-Knowledge\\app",
+  rootPath: "C:\\Users\\example\\Documents\\Zhixia-Local-Doc-Knowledge\\app",
   lastSummary: "Human-confirmed current ProjectRecord.",
   nextAction: "Continue execution.",
   status: "active",
@@ -600,8 +600,8 @@ assert.match(main, /aiProviderApiKey/, "AI provider key setting must exist");
 assert.match(main, /sanitizedSettings/, "AI provider key must be sanitized before renderer responses");
 assert.match(main, /completion_ledger\.json/, "AutoFlow import must read the completion ledger");
 assert.match(main, /memory_cards\.json/, "AutoFlow import must read agent family memory cards");
-assert.doesNotMatch(main, /C:\\Users\\a\\Documents\\Playground\\SceneForge\\workflow/, "main process should not hardcode a personal AutoFlow workflow path");
-assert.doesNotMatch(main, /C:\\Users\\a\\Documents\\ceshi\\docs\\BUG_FIX_MEMORY\.md/, "main process should not hardcode a personal BUG_FIX_MEMORY path");
+assert.doesNotMatch(main, /C:\\Users\\example\\Documents\\Playground\\SceneForge\\workflow/, "main process should not hardcode a personal AutoFlow workflow path");
+assert.doesNotMatch(main, /C:\\Users\\example\\Documents\\ceshi\\docs\\BUG_FIX_MEMORY\.md/, "main process should not hardcode a personal BUG_FIX_MEMORY path");
 assert.match(main, /buildProjectMemoryBackfillCards/, "Project export must backfill compact project document memory candidates");
 assert.match(projectMemoryBackfillPolicy, /sourceType:\s*"project_doc"/, "Project memory backfill must mark project documents as the source");
 assert.match(projectMemoryBackfillPolicy, /status:\s*"candidate"/, "Project memory backfill must keep automatic cards as candidates");
@@ -904,16 +904,18 @@ assert.match(preparePublicRepoScript, /entry\.name === "\.git"[\s\S]*continue/, 
 assert.match(preparePublicRepoScript, /One-click safe relief now starts with Codex hot-log cleanup/, "Public release notes must describe the current one-click safe relief hot-log cleanup change");
 assert.match(preparePublicRepoScript, /Memory Runtime now includes an explicit memory graph/, "Public release notes must describe the current Memory Runtime graph capability");
 assert.match(preparePublicRepoScript, /PUBLIC_STAGING_MANIFEST\.md/, "Public staging script must write a staging manifest");
-assert.match(preparePublicRepoScript, /Excluded Legacy Docs[\s\S]*zhixia-complete-product-goal\.md[\s\S]*ARK_OFFICE_RUNLOG\.md[\s\S]*RELEASE_COMPLETION_AUDIT\.md/, "Public staging script must exclude cited private legacy docs");
-assert.match(publicRepoLayout, /npm run prepare:public[\s\S]*PUBLIC_STAGING_MANIFEST\.md[\s\S]*zhixia-complete-product-goal\.md[\s\S]*ARK_OFFICE_RUNLOG\.md[\s\S]*RELEASE_COMPLETION_AUDIT\.md/, "Public repo layout must document staging and private legacy doc exclusions");
+assert.match(preparePublicRepoScript, /Excluded Legacy Docs[\s\S]*zhixia-complete-product-goal\.md[\s\S]*RELEASE_COMPLETION_AUDIT\.md[\s\S]*private optimization monitors[\s\S]*private project evaluations/, "Public staging script must exclude private legacy doc categories without publishing private codenames");
+assert.match(publicRepoLayout, /npm run prepare:public[\s\S]*PUBLIC_STAGING_MANIFEST\.md[\s\S]*zhixia-complete-product-goal\.md[\s\S]*RELEASE_COMPLETION_AUDIT\.md[\s\S]*private optimization monitors[\s\S]*project evaluations/, "Public repo layout must document staging and private legacy doc exclusions without private codenames");
 assert.doesNotMatch(publicationChecklist, new RegExp("App" + "Data"), "Publication checklist should avoid platform-specific private path strings in public staging docs");
-assert.match(publicationChecklist, /Required Staging Step[\s\S]*npm run prepare:public[\s\S]*zhixia-complete-product-goal\.md[\s\S]*ARK_OFFICE_RUNLOG\.md[\s\S]*RELEASE_COMPLETION_AUDIT\.md/, "Publication checklist must require staging and exclude private legacy docs");
+assert.match(publicationChecklist, /Required Staging Step[\s\S]*npm run prepare:public[\s\S]*zhixia-complete-product-goal\.md[\s\S]*RELEASE_COMPLETION_AUDIT\.md[\s\S]*private optimization monitors[\s\S]*project evaluations/, "Publication checklist must require staging and exclude private legacy doc categories");
 assert.match(gitignore, /\.codex-knowledge\/[\s\S]*\*\*\/\.codex-knowledge\//, ".gitignore must protect generated .codex-knowledge memory artifacts");
 assert.match(gitignore, /\*\.sqlite[\s\S]*\*\.sqlite3[\s\S]*userData\//, ".gitignore must protect local database and app data files");
 assert.match(gitignore, /vaults\/[\s\S]*backups\/[\s\S]*private-evidence\//, ".gitignore must protect vault, backup, and private evidence artifacts");
 assert.match(gitignore, /release\/[\s\S]*\*\.blockmap[\s\S]*\*\.exe/, ".gitignore must protect release installers and package metadata");
-assert.doesNotMatch(readme, /C:\\Users\\a\\Documents\\Playground\\SceneForge\\workflow/, "README should not expose a personal AutoFlow workflow path");
-assert.match(codexOptimizationMonitor, /待确认 \/ 待复核 \/ 已确认/, "Optimization monitor must track the snapshot governance states explicitly");
+assert.doesNotMatch(readme, /C:\\Users\\example\\Documents\\Playground\\SceneForge\\workflow/, "README should not expose a personal AutoFlow workflow path");
+if (!isPublicSourceStaging) {
+  assert.match(codexOptimizationMonitor, /待确认 \/ 待复核 \/ 已确认/, "Optimization monitor must track the snapshot governance states explicitly");
+}
 assert.match(appTsx, /这个项目现在做到哪了/, "Project overview must expose the ProjectRecord confirmation card in product language");
 assert.match(appTsx, /function projectCompletionLabel/, "Project progress UI must map internal completion enums to Chinese labels");
 assert.match(appTsx, /想法[\s\S]*需求[\s\S]*设计[\s\S]*开发中[\s\S]*测试中[\s\S]*打包中[\s\S]*已发布[\s\S]*维护中/, "Project completion labels must be user-facing Chinese stages");
@@ -1226,7 +1228,7 @@ for (const docPath of [
   "docs/TECHNICAL_DESIGN.md",
   "docs/TEST_PLAN.md",
   "docs/RELEASE_NOTES.md",
-  "docs/PROJECT_EVALUATION.md",
+  ...(isPublicSourceStaging ? [] : ["docs/PROJECT_EVALUATION.md"]),
 ]) {
   assert.ok(fs.existsSync(path.join(root, docPath)), `${docPath} must exist`);
 }

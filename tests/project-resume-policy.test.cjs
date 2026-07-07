@@ -3,17 +3,17 @@ const assert = require("node:assert/strict");
 const { buildProjectResumePacket } = require("../electron/projectResumePolicy.cjs");
 
 const longPathSegment = "nested-folder-name-".repeat(13);
-const longSourcePath = `C:\\Users\\a\\Documents\\zhixia\\${longPathSegment}\\source-material\\docs\\PRD.md`;
-const longArtifactPath = `C:\\Users\\a\\Documents\\zhixia\\${longPathSegment}\\artifacts\\project\\TECHNICAL_DESIGN.md`;
+const longSourcePath = `C:\\Users\\example\\Documents\\zhixia\\${longPathSegment}\\source-material\\docs\\PRD.md`;
+const longArtifactPath = `C:\\Users\\example\\Documents\\zhixia\\${longPathSegment}\\artifacts\\project\\TECHNICAL_DESIGN.md`;
 
 const packet = buildProjectResumePacket({
   id: "project-zhixia",
   name: "知匣",
-  rootPath: "C:\\Users\\a\\Documents\\zhixia",
+  rootPath: "C:\\Users\\example\\Documents\\zhixia",
   status: "paused",
   completion: "implementation",
   completionPercent: 60,
-  ownerThreadId: "public-thread-id",
+  ownerThreadId: "11111111-2222-7333-8444-555555555555",
   workerThreadIds: ["worker-1"],
   reviewerThreadIds: ["reviewer-1"],
   lastActivityAt: "2026-06-12T16:00:00.000Z",
@@ -54,7 +54,7 @@ assert.equal(packet.contractVersion, "resume_packet_v2", "resume packet should e
 assert.equal(packet.freshness, "review", "paused projects should require review freshness");
 assert.equal(packet.requiresHumanConfirmation, true, "heuristic paused project packets should require confirmation");
 assert.equal(packet.packetAuthority, "heuristic", "default packets should stay heuristic until confirmed");
-assert.equal(packet.projectIdentity.rootPath, "C:\\Users\\a\\Documents\\zhixia", "packet should expose project identity metadata");
+assert.equal(packet.projectIdentity.rootPath, "C:\\Users\\example\\Documents\\zhixia", "packet should expose project identity metadata");
 assert.equal(packet.currentGoal.text, "让知匣先返回低 token 的项目恢复上下文。", "packet should expose the hot/current goal");
 assert.equal(packet.currentGoal.status, "planned", "planned goals must stay labeled as planned");
 assert.deepEqual(
@@ -83,10 +83,10 @@ assert.match(packet.markdown, /# Project Resume Packet/, "packet should render t
 assert.match(packet.markdown, /Packet authority: heuristic metadata-only review material\./, "packet should keep heuristic authority visible");
 assert.match(packet.markdown, /Raw session policy: Do not read raw Codex sessions by default\./, "packet should make the raw-session gate explicit");
 assert.match(packet.markdown, /Project: 知匣/, "packet should include project name");
-assert.match(packet.markdown, /Project root: C:\\Users\\a\\Documents\\zhixia/, "packet should include project root");
+assert.match(packet.markdown, /Project root: C:\\Users\\example\\Documents\\zhixia/, "packet should include project root");
 assert.match(packet.markdown, /Status: paused/, "packet should include status");
 assert.match(packet.markdown, /Completion: implementation \(60%\) \[heuristic\]/, "packet should include completion percent with an explicit label");
-assert.match(packet.markdown, /Last known CEO thread: public-thread-id/, "packet should include CEO thread");
+assert.match(packet.markdown, /Last known CEO thread: 11111111-2222-7333-8444-555555555555/, "packet should include CEO thread");
 assert.match(packet.markdown, /Hot\/current goal: 让知匣先返回低 token 的项目恢复上下文。 \[planned\]/, "packet should keep planned goals visibly planned");
 assert.match(packet.markdown, /Recent decisions:/, "packet should include recent decisions");
 assert.match(packet.markdown, /归档候选先走只读闸门 \[implemented\]/, "packet should label implemented decisions");
@@ -106,7 +106,7 @@ assert.match(activePacket.markdown, /Packet authority: heuristic metadata-only r
 
 const rawSessionRef = {
   kind: "raw_session",
-  path: "C:\\Users\\a\\.codex\\sessions\\thread-123.jsonl",
+  path: "C:\\Users\\example\\.codex\\sessions\\thread-123.jsonl",
   get title() {
     throw new Error("raw session title should not be read by default");
   },

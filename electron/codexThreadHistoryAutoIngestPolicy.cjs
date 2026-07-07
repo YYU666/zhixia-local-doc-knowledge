@@ -212,9 +212,8 @@ function extractSearchTermsFromPrefix(prefixText, metadata = {}) {
   if (projectName) terms.push(projectName);
   if (metadata.cwd && metadata.cwd !== metadata.projectPath) terms.push(pathBaseName(metadata.cwd), metadata.cwd);
   const regexes = [
-    /\bRefmuse\s+Game\s+Studio\b/gi,
     /\bCEO\s+Flow\b/gi,
-    /\bRGS\b/g,
+    /\b[A-Z][A-Za-z0-9_-]{2,24}\s+(?:Studio|Project|Engine|Platform|Flow|Runtime)\b/g,
     /[\u4e00-\u9fffA-Za-z0-9_-]{2,24}项目/g,
     /[\u4e00-\u9fffA-Za-z0-9_-]{2,24}记忆/g,
     /[\u4e00-\u9fffA-Za-z0-9_-]{2,24}线程/g,
@@ -227,12 +226,10 @@ function extractSearchTermsFromPrefix(prefixText, metadata = {}) {
 
 function inferTitleFromSessionMetadata(threadId, metadata) {
   const terms = metadata.searchTerms || [];
-  const refmuse = terms.find((term) => /refmuse game studio/i.test(term));
-  const rgs = terms.find((term) => /^rgs$/i.test(term));
+  const namedProject = terms.find((term) => /\b(?:Studio|Project|Engine|Platform|Flow|Runtime)\b/i.test(term));
   const projectName = pathBaseName(metadata.projectPath || metadata.cwd);
-  if (refmuse && projectName) return `${refmuse} / ${projectName}`;
-  if (refmuse) return refmuse;
-  if (rgs && projectName) return `${rgs} / ${projectName}`;
+  if (namedProject && projectName) return `${namedProject} / ${projectName}`;
+  if (namedProject) return namedProject;
   if (projectName && metadata.firstUserMessage) return `${projectName}：${cleanCompactText(metadata.firstUserMessage, 48)}`;
   if (metadata.firstUserMessage) return cleanCompactText(metadata.firstUserMessage, 72);
   return `Codex session ${String(threadId || "").slice(0, 8)}`;

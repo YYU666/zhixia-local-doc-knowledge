@@ -67,6 +67,13 @@ const {
   buildToolSkillInventoryJson,
   buildToolSkillInventoryMarkdown,
 } = require("./toolSkillInventoryPolicy.cjs");
+const {
+  buildRendererCsp,
+  isDestructiveGuardianConfirmation,
+  normalizeTrustedAiProviderBaseUrl,
+  resolveRegisteredWorkspacePath,
+  sanitizeRendererSettingsPatch,
+} = require("./securityPolicy.cjs");
 
 const SUPPORTED_EXTENSIONS = [
   ".txt",
@@ -122,15 +129,8 @@ const DEFAULT_AUTOFLOW_WORKFLOW_PATH =
   process.env.ZHIXIA_DEFAULT_AUTOFLOW_WORKFLOW_PATH || path.join(DEFAULT_AUTOFLOW_ROOT, "workflow");
 const DEFAULT_BUG_FIX_MEMORY_PATH =
   process.env.ZHIXIA_DEFAULT_BUG_FIX_MEMORY_PATH || path.join(os.homedir(), "Documents", "BUG_FIX_MEMORY.md");
-const DEFAULT_CODEX_GUARDIAN_SCRIPT_PATH = path.join(
-  os.homedir(),
-  "Documents",
-  "codexfix",
-  "tools",
-  "codex-history-guardian.ps1",
-);
 const DEFAULT_AI_PROVIDER_BASE_URL = "https://api.deepseek.com";
-const DEFAULT_AI_PROVIDER_MODEL = "deepseek-v4-flash";
+const DEFAULT_AI_PROVIDER_MODEL = "deepseek-chat";
 const ZHIXIA_SKILL_PROJECT_SUMMARY_ID = "project-summary-cn";
 const KNOWLEDGE_BODY_CHARS = 720;
 const KNOWLEDGE_PROMPT_CHARS = 6000;
@@ -219,7 +219,7 @@ function installedSkillPath() {
 }
 
 function codexGuardianScriptPath() {
-  return process.env.ZHIXIA_CODEX_GUARDIAN_SCRIPT || DEFAULT_CODEX_GUARDIAN_SCRIPT_PATH;
+  return process.env.ZHIXIA_CODEX_GUARDIAN_SCRIPT || path.join(app.getPath("userData"), "tools", "codex-history-guardian.ps1");
 }
 
 function codexHistoryVaultRoot() {
@@ -275,29 +275,29 @@ function compactGuardianErrorMessage(message) {
   return compactText(`${primary}${jsonHint}`, 900);
 }
 
-function guardianOptionArgs(options = {}) {
-  const args = [];
+function guardianOptionAExampleProject(options = {}) {
+  const aExampleProject = [];
   if (typeof options.query === "string" && options.query.trim()) {
-    args.push("-Query", options.query.trim().slice(0, 500));
+    aExampleProject.push("-Query", options.query.trim().slice(0, 500));
   }
   if (typeof options.threadId === "string" && options.threadId.trim()) {
-    args.push("-ThreadId", options.threadId.trim().slice(0, 120));
+    aExampleProject.push("-ThreadId", options.threadId.trim().slice(0, 120));
   }
   if (typeof options.projectPath === "string" && options.projectPath.trim()) {
-    args.push("-ProjectPath", options.projectPath.trim().slice(0, 600));
+    aExampleProject.push("-ProjectPath", options.projectPath.trim().slice(0, 600));
   }
   const limit = Number(options.limit);
   if (Number.isFinite(limit)) {
-    args.push("-Limit", String(Math.max(1, Math.min(1000, Math.floor(limit)))));
+    aExampleProject.push("-Limit", String(Math.max(1, Math.min(1000, Math.floor(limit)))));
   }
   const tokenBudget = Number(options.tokenBudget);
   if (Number.isFinite(tokenBudget)) {
-    args.push("-TokenBudget", String(Math.max(200, Math.min(4000, Math.floor(tokenBudget)))));
+    aExampleProject.push("-TokenBudget", String(Math.max(200, Math.min(4000, Math.floor(tokenBudget)))));
   }
   if (options.dryRun === true) {
-    args.push("-DryRun");
+    aExampleProject.push("-DryRun");
   }
-  return args;
+  return aExampleProject;
 }
 
 function runCodexGuardian(command, options = {}) {
@@ -311,7 +311,7 @@ function runCodexGuardian(command, options = {}) {
     });
   }
 
-  const args = [
+  const aExampleProject = [
     "-NoProfile",
     "-ExecutionPolicy",
     "Bypass",
@@ -321,11 +321,11 @@ function runCodexGuardian(command, options = {}) {
     "-Json",
     "-CodexHome",
     codexHomePath(),
-    ...guardianOptionArgs(options),
+    ...guardianOptionAExampleProject(options),
   ];
 
   return new Promise((resolve) => {
-    execFile("powershell.exe", args, { windowsHide: true, timeout: 120000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile("powershell.exe", aExampleProject, { windowsHide: true, timeout: 120000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
         const normalized = normalizeGuardianError({ ...error, stdout, stderr });
         resolve({
@@ -2823,6 +2823,18 @@ async function pathExists(filePath) {
   }
 }
 
+function listRegisteredWorkspacePaths() {
+  const paths = new Set();
+  for (const doc of listDocuments({ includeContentText: false })) {
+    if (doc.workspacePath) paths.add(path.resolve(doc.workspacePath));
+  }
+  return Array.from(paths);
+}
+
+function resolveRegisteredProjectPathInput(projectPathInput) {
+  return resolveRegisteredWorkspacePath(projectPathInput, listRegisteredWorkspacePaths());
+}
+
 async function copyDirectory(sourceDir, targetDir) {
   await fs.mkdir(targetDir, { recursive: true });
   const entries = await fs.readdir(sourceDir, { withFileTypes: true });
@@ -3552,15 +3564,14 @@ function parseAiKnowledgeResponse(raw, doc, provider, model) {
 }
 
 function normalizeBaseUrl(baseUrl) {
-  const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
-  return trimmed || DEFAULT_AI_PROVIDER_BASE_URL;
+  return normalizeTrustedAiProviderBaseUrl(baseUrl || DEFAULT_AI_PROVIDER_BASE_URL);
 }
 
-function openAiCompatibleChatCompletion(args) {
-  const baseUrl = args.baseUrl;
-  const apiKey = args.apiKey;
-  const model = args.model;
-  const messages = args.messages;
+function openAiCompatibleChatCompletion(aExampleProject) {
+  const baseUrl = aExampleProject.baseUrl;
+  const apiKey = aExampleProject.apiKey;
+  const model = aExampleProject.model;
+  const messages = aExampleProject.messages;
   return new Promise((resolve, reject) => {
     const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
     const endpoint = new URL(
@@ -3653,7 +3664,7 @@ async function summarizeDocumentToKnowledgeItem(doc, providerSettings, mode) {
 async function generateKnowledgeItems(options = {}) {
   await ensureDatabase();
   const mode = options.mode === "ai" ? "ai" : "heuristic";
-  const projectPath = options.projectPath || null;
+  const projectPath = options.projectPath ? resolveRegisteredProjectPathInput(options.projectPath) : null;
   let docs = listDocuments().filter((doc) => doc.parseStatus !== "failed" && (doc.contentText || doc.summary));
   if (projectPath) {
     docs = docs.filter((doc) => doc.workspacePath === projectPath);
@@ -3978,7 +3989,7 @@ function parseProjectSummarySkillOutput(raw, context, provider, model) {
 
 async function runProjectSummarySkill(options = {}) {
   const startedAt = Date.now();
-  const projectPath = String(options.projectPath || "").trim();
+  const projectPath = options.projectPath ? resolveRegisteredProjectPathInput(options.projectPath) : "";
   if (!projectPath) throw new Error("缺少 projectPath。");
   const skill = getZhixiaSkillDefinition(ZHIXIA_SKILL_PROJECT_SUMMARY_ID);
   if (!skill || !skill.enabled) throw new Error("项目中文摘要流程模块未启用。");
@@ -4782,8 +4793,8 @@ function toolSkillInventoryConfirmationStatus(result, confirmation) {
 
 async function getToolSkillInventoryForProject(projectPathInput) {
   await ensureDatabase();
-  const projectPath = path.resolve(String(projectPathInput || "").trim());
-  if (!projectPathInput || !(await pathExists(projectPath))) {
+  const projectPath = projectPathInput ? resolveRegisteredProjectPathInput(projectPathInput) : "";
+  if (!projectPath || !(await pathExists(projectPath))) {
     throw new Error("A valid projectPath is required for Tool/Skill inventory scan.");
   }
   const snapshot = buildProjectToolSkillInventorySnapshot(projectPath);
@@ -8846,9 +8857,9 @@ async function buildRecoveryProjectDocs(projectPath) {
     "docs/TEST_PLAN.md",
     "docs/RELEASE_NOTES.md",
     "docs/CEO_FLOW_MEMORY_RUNTIME.md",
-    "docs/REFMUSE_GAME_STUDIO_CEO_RECOVERY_PACKET.md",
-    "docs/REFMUSE_GAME_STUDIO_PRD.md",
-    "docs/REFMUSE_GAME_STUDIO_PLATFORM_STRATEGY.md",
+    "docs/EXAMPLE_PROJECT_CEO_RECOVERY_PACKET.md",
+    "docs/EXAMPLE_PROJECT_PRD.md",
+    "docs/EXAMPLE_PROJECT_PLATFORM_STRATEGY.md",
     "docs/PLUGIN_API_CONTRACT.md",
     ".codex-knowledge/project-resume.md",
     ".codex-knowledge/retrieval-packet.md",
@@ -9562,7 +9573,7 @@ async function runE2EGovernanceProbe(options = {}) {
     query: "CEO Flow worker reviewer handoff ThreadLineage archive",
     queryType: "task_dispatch",
     projectPath,
-    parentCeoThreadId: "public-thread-id",
+    parentCeoThreadId: "11111111-2222-7333-8444-555555555555",
     includeKinds: ["thread_lineage_index", "raw_session"],
     tokenBudget: 1200,
     maxResults: 5,
@@ -9624,10 +9635,35 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
 
   const devServer = process.env.VITE_DEV_SERVER_URL;
+  const allowedNavigationOrigins = new Set(devServer ? [new URL(devServer).origin] : []);
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [buildRendererCsp(devServer)],
+      },
+    });
+  });
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    try {
+      const parsed = new URL(url);
+      const isAllowed =
+        parsed.protocol === "file:" ||
+        (devServer && allowedNavigationOrigins.has(parsed.origin));
+      if (!isAllowed) event.preventDefault();
+    } catch {
+      event.preventDefault();
+    }
+  });
+  mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
   if (devServer) {
     mainWindow.loadURL(devServer);
   } else {
@@ -9755,7 +9791,12 @@ ipcMain.handle("codex:exportContext", async (_event, documentId) => exportCodexC
 
 ipcMain.handle("codexGuardian:report", async () => runCodexGuardian("report"));
 
-ipcMain.handle("codexGuardian:cleanLogs", async () => runCodexGuardian("clean-logs"));
+ipcMain.handle("codexGuardian:cleanLogs", async (_event, options = {}) => {
+  if (!isDestructiveGuardianConfirmation(options)) {
+    return { ok: false, error: "需要显式确认后才能清理 Codex 运行日志。", refused: true };
+  }
+  return runCodexGuardian("clean-logs");
+});
 
 ipcMain.handle("codexGuardian:searchHistory", async (_event, options = {}) => runCodexGuardian("search-history", options));
 
@@ -9765,13 +9806,26 @@ ipcMain.handle("codexGuardian:getProjectHistory", async (_event, options = {}) =
 
 ipcMain.handle("codexGuardian:listLongThreads", async (_event, options = {}) => listLongCodexThreads(options));
 
-ipcMain.handle("codexGuardian:optimizeThread", async (_event, options = {}) => optimizeCodexThread(options));
+ipcMain.handle("codexGuardian:optimizeThread", async (_event, options = {}) => {
+  if (!isDestructiveGuardianConfirmation(options)) {
+    return { ok: false, error: "需要显式确认后才能执行线程入库/瘦身。", refused: true };
+  }
+  return optimizeCodexThread(options);
+});
 
-ipcMain.handle("codexGuardian:compactThread", async (_event, options = {}) => compactCodexThread(options));
+ipcMain.handle("codexGuardian:compactThread", async (_event, options = {}) => {
+  if (!isDestructiveGuardianConfirmation(options)) {
+    return { ok: false, error: "需要显式确认后才能瘦身 Codex 线程。", refused: true };
+  }
+  return compactCodexThread(options);
+});
 
 ipcMain.handle("codexGuardian:autoIngestHistory", async (_event, options = {}) => autoIngestCodexThreadHistory(options));
 
 ipcMain.handle("codexGuardian:generateArchiveQueue", async (_event, options = {}) => {
+  if (!isDestructiveGuardianConfirmation(options)) {
+    return { ok: false, error: "需要显式确认后才能生成侧栏归档队列。", refused: true };
+  }
   const queue = await generateCodexArchiveQueue(options);
   return { ok: true, result: queue };
 });
@@ -9848,12 +9902,17 @@ ipcMain.handle("documents:export", async () => {
 
 ipcMain.handle("settings:update", async (_event, patch) => {
   await ensureDatabase();
-  updateSettings(patch);
+  const policy = sanitizeRendererSettingsPatch(patch);
+  updateSettings(policy.sanitized);
   await saveDatabase();
   if (Object.prototype.hasOwnProperty.call(patch || {}, "autoWatchChanges")) {
     await startFileWatchers();
   }
-  return { settings: sanitizedSettings(getSettings()) };
+  return {
+    settings: sanitizedSettings(getSettings()),
+    blockedKeys: policy.blockedKeys,
+    ignoredKeys: policy.ignoredKeys,
+  };
 });
 
 ipcMain.handle("documents:watchStatus", async () => {

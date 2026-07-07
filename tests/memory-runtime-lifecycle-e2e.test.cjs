@@ -68,7 +68,7 @@ async function main() {
       queryType: "task_dispatch",
       query: "Memory Runtime lifecycle probe",
       projectPath: storeRoot,
-      parentCeoThreadId: "public-thread-id",
+      parentCeoThreadId: "11111111-2222-7333-8444-555555555555",
       tokenBudget: 900,
       generatedAt: "2026-06-19T10:00:00.000Z",
       warnings: ["fixture_metadata_only"],
@@ -243,17 +243,17 @@ async function main() {
       eventType: "heartbeat_fuse",
       severity: "error",
       projectPath: storeRoot,
-      threadId: "public-thread-id",
-      automationId: "rgs-ceo-harvest-post-43-wave",
-      title: "RGS CEO heartbeat 熔断",
+      threadId: "11111111-2222-7333-8444-555555555555",
+      automationId: "ExampleProject-ceo-harvest-post-43-wave",
+      title: "ExampleProject CEO heartbeat 熔断",
       summary: "旧 CEO 线程连续空转，心跳已暂停，后续应使用 takeover 线程和恢复包。",
       observedSignals: ["systemError", "last_agent_message=null", "stream disconnected before completion"],
       decisions: ["暂停旧 heartbeat。", "不 fork 旧超大 CEO 线程。"],
       openRisks: ["最后一轮 inProgress 可能仍需等待 Codex 结束。"],
       nextAction: "retrieve_context(thread_recovery) 应返回该短期运行记忆。",
       sourceRefs: [
-        { kind: "automation", path: ".codex/automations/rgs-ceo-harvest-post-43-wave/automation.toml" },
-        { kind: "raw_session", path: "fixtures/.codex/sessions/rgs-ceo.jsonl" },
+        { kind: "automation", path: ".codex/automations/ExampleProject-ceo-harvest-post-43-wave/automation.toml" },
+        { kind: "raw_session", path: "fixtures/.codex/sessions/ExampleProject-ceo.jsonl" },
       ],
     });
     assert.equal(brokenThreadEventReceipt.status, "recorded", "runtime event should be recorded in lifecycle probe");
@@ -263,18 +263,18 @@ async function main() {
     assert.equal(JSON.stringify(storedRuntimeEvent).includes("raw_session"), false, "stored runtime event must not retain raw session sourceRef kind");
     assert.equal(storedRuntimeEvent.unsafeSourceRefCount, 1, "stored runtime event should keep unsafe ref count only");
     const runtimeEventItems = buildRuntimeItemsFromVolatileMemory({
-      events: await listRuntimeEventRecords(storeRoot, { threadId: "public-thread-id" }),
+      events: await listRuntimeEventRecords(storeRoot, { threadId: "11111111-2222-7333-8444-555555555555" }),
       workingMemory: await listWorkingMemoryRecords(storeRoot, { status: "blocked" }),
     });
     const recoveryContextWithEvent = buildRuntimeContextPacket({
       queryType: "thread_recovery",
-      query: "recover RGS CEO takeover",
+      query: "recover ExampleProject CEO takeover",
       projectPath: storeRoot,
       items: runtimeEventItems,
     }, {
-      taskGoal: "recover RGS CEO takeover",
+      taskGoal: "recover ExampleProject CEO takeover",
       queryType: "thread_recovery",
-      threadId: "public-thread-id",
+      threadId: "11111111-2222-7333-8444-555555555555",
       projectPath: storeRoot,
       allowedKinds: ["runtime_event"],
       tokenBudget: 900,
@@ -290,7 +290,7 @@ async function main() {
         goal: "Prove Memory Runtime lifecycle probe",
         domain: ["memory-runtime", "flowskill-candidate-bridge"],
         projectPath: storeRoot,
-        parentCeoThreadId: "public-thread-id",
+        parentCeoThreadId: "11111111-2222-7333-8444-555555555555",
       },
       evidence: {
         summary: [

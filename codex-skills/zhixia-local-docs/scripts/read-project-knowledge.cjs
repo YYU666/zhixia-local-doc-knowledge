@@ -62,6 +62,10 @@ const RUNTIME_ALLOWED_KINDS = [
   "thread_history_warm",
 ];
 const PRECEDENT_KINDS = ["knowledge", "experience", "artifacts", "tool_inventory", "skill_candidates"];
+const COLD_QUERY_TYPES = new Set(["thread_recovery", "archive_candidate"]);
+const MAINTENANCE_QUERY_RE = /\b(archive|guardian|vault|thread[_ -]?history|thread[_ -]?recovery|runtime[_ -]?diagnosis|log|cpu|memory)\b|归档|减负|瘦身|老线程|线程恢复|历史库|运行日志|卡顿|性能/i;
+const MAINTENANCE_ITEM_RE = /\b(guardian inventory|thread history vault|archive queue|archive bridge|read-only scout|neutral reviewer|bounded read-only|old thread|thread slimming|thread recovery|runtime monitor)\b|老线程优化|一键安全减负|归档|瘦身|线程审计|审计线程|维护线程|只读审计|只读.*CEO/i;
+const PRODUCT_ITEM_RE = /\b(accepted ui|accepted engine|prd|technical design|program goal|current accepted|project status|module|scene|workbench|runtime adapter|game studio)\b|当前验收|产品|模块|架构|引擎|游戏|设计/i;
 const RECOVERY_DOCS = [
   "docs/PROGRAM_GOAL_BRIEF.md",
   "docs/PRD.md",
@@ -69,9 +73,9 @@ const RECOVERY_DOCS = [
   "docs/TEST_PLAN.md",
   "docs/RELEASE_NOTES.md",
   "docs/CEO_FLOW_MEMORY_RUNTIME.md",
-  "docs/REFMUSE_GAME_STUDIO_CEO_RECOVERY_PACKET.md",
-  "docs/REFMUSE_GAME_STUDIO_CEO_TRANSCRIPT_EXTRACT.md",
-  "docs/REFMUSE_GAME_STUDIO_NEW_THREAD_START.md",
+  "docs/EXAMPLE_PROJECT_CEO_RECOVERY_PACKET.md",
+  "docs/EXAMPLE_PROJECT_CEO_TRANSCRIPT_EXTRACT.md",
+  "docs/EXAMPLE_PROJECT_NEW_THREAD_START.md",
   ".codex-knowledge/project-resume.md",
   ".codex-knowledge/retrieval-packet.md",
   ".codex-knowledge/project-index.md",
@@ -146,8 +150,8 @@ function parseIncludeKinds(raw) {
   return Array.from(new Set(normalized));
 }
 
-function parseArgs(argv) {
-  const args = {
+function parseAExampleProject(argv) {
+  const aExampleProject = {
     workspace: null,
     query: "",
     queryType: DEFAULT_QUERY_TYPE,
@@ -170,89 +174,99 @@ function parseArgs(argv) {
     taskId: "",
     summary: "",
     sourceRefs: [],
+    memoryMode: "layered",
+    allowColdLayer: false,
   };
   for (let index = 2; index < argv.length; index += 1) {
     const item = argv[index];
     if (item === "--query") {
-      args.query = argv[index + 1] || "";
+      aExampleProject.query = argv[index + 1] || "";
       index += 1;
     } else if (item === "--task-goal") {
-      args.taskGoal = argv[index + 1] || "";
-      if (!args.query) args.query = args.taskGoal;
+      aExampleProject.taskGoal = argv[index + 1] || "";
+      if (!aExampleProject.query) aExampleProject.query = aExampleProject.taskGoal;
       index += 1;
     } else if (item === "--query-type") {
-      args.queryType = cleanText(argv[index + 1] || "") || DEFAULT_QUERY_TYPE;
+      aExampleProject.queryType = cleanText(argv[index + 1] || "") || DEFAULT_QUERY_TYPE;
       index += 1;
     } else if (item === "--limit") {
-      args.limit = clampNumber(argv[index + 1], 1, MAX_LIMIT, args.limit);
+      aExampleProject.limit = clampNumber(argv[index + 1], 1, MAX_LIMIT, aExampleProject.limit);
       index += 1;
     } else if (item === "--token-budget") {
-      args.tokenBudget = clampNumber(argv[index + 1], MIN_TOKEN_BUDGET, MAX_TOKEN_BUDGET, args.tokenBudget);
+      aExampleProject.tokenBudget = clampNumber(argv[index + 1], MIN_TOKEN_BUDGET, MAX_TOKEN_BUDGET, aExampleProject.tokenBudget);
       index += 1;
     } else if (item === "--include-kinds") {
-      args.includeKinds = parseIncludeKinds(argv[index + 1] || "");
+      aExampleProject.includeKinds = parseIncludeKinds(argv[index + 1] || "");
       index += 1;
     } else if (item === "--allow-parent-knowledge") {
-      args.allowParentKnowledge = true;
+      aExampleProject.allowParentKnowledge = true;
     } else if (item === "--json") {
-      args.json = true;
+      aExampleProject.json = true;
     } else if (item === "--runtime-context" || item === "--retrieve-context") {
-      args.runtimeContext = true;
+      aExampleProject.runtimeContext = true;
     } else if (item === "--precedent" || item === "--retrieve-precedent") {
-      args.precedent = true;
+      aExampleProject.precedent = true;
       if (argv[index + 1] && !argv[index + 1].startsWith("--")) {
-        args.query = argv[index + 1];
+        aExampleProject.query = argv[index + 1];
         index += 1;
       }
     } else if (item === "--recover-thread" || item === "--retrieve-thread") {
-      args.recoverThread = true;
-      args.queryType = "thread_recovery";
-      args.tokenBudget = Math.max(args.tokenBudget, DEFAULT_RECOVERY_TOKEN_BUDGET);
+      aExampleProject.recoverThread = true;
+      aExampleProject.queryType = "thread_recovery";
+      aExampleProject.tokenBudget = Math.max(aExampleProject.tokenBudget, DEFAULT_RECOVERY_TOKEN_BUDGET);
       if (argv[index + 1] && !argv[index + 1].startsWith("--")) {
-        args.query = argv[index + 1];
+        aExampleProject.query = argv[index + 1];
         index += 1;
       }
     } else if (item === "--thread-id") {
-      args.threadId = cleanText(argv[index + 1] || "");
-      if (!args.query) args.query = args.threadId;
+      aExampleProject.threadId = cleanText(argv[index + 1] || "");
+      if (!aExampleProject.query) aExampleProject.query = aExampleProject.threadId;
       index += 1;
     } else if (item === "--thread-title" || item === "--title") {
-      args.threadTitle = cleanText(argv[index + 1] || "");
-      if (!args.query) args.query = args.threadTitle;
+      aExampleProject.threadTitle = cleanText(argv[index + 1] || "");
+      if (!aExampleProject.query) aExampleProject.query = aExampleProject.threadTitle;
       index += 1;
     } else if (item === "--parent-ceo-thread-id") {
-      args.parentCeoThreadId = cleanText(argv[index + 1] || "");
+      aExampleProject.parentCeoThreadId = cleanText(argv[index + 1] || "");
       index += 1;
     } else if (item === "--writeback-dry-run") {
-      args.writebackDryRun = true;
+      aExampleProject.writebackDryRun = true;
     } else if (item === "--evidence-json") {
-      args.evidenceJson = argv[index + 1] || "";
+      aExampleProject.evidenceJson = argv[index + 1] || "";
       index += 1;
     } else if (item === "--evidence-out") {
-      args.evidenceOut = argv[index + 1] || "";
+      aExampleProject.evidenceOut = argv[index + 1] || "";
       index += 1;
     } else if (item === "--decision") {
-      args.decision = argv[index + 1] || "";
+      aExampleProject.decision = argv[index + 1] || "";
       index += 1;
     } else if (item === "--task-id") {
-      args.taskId = argv[index + 1] || "";
+      aExampleProject.taskId = argv[index + 1] || "";
       index += 1;
     } else if (item === "--summary") {
-      args.summary = argv[index + 1] || "";
+      aExampleProject.summary = argv[index + 1] || "";
       index += 1;
     } else if (item === "--source-ref") {
-      args.sourceRefs.push(parseSourceRefArg(argv[index + 1] || ""));
+      aExampleProject.sourceRefs.push(parseSourceRefArg(argv[index + 1] || ""));
       index += 1;
-    } else if (!args.workspace) {
-      args.workspace = item;
+    } else if (item === "--memory-mode") {
+      aExampleProject.memoryMode = cleanText(argv[index + 1] || "layered") || "layered";
+      index += 1;
+    } else if (item === "--allow-cold-layer") {
+      aExampleProject.allowColdLayer = true;
+    } else if (!aExampleProject.workspace) {
+      aExampleProject.workspace = item;
     }
   }
-  if (args.queryType === "retrieve_context") args.runtimeContext = true;
-  if (args.queryType === "retrieve_precedent") args.precedent = true;
-  if (args.queryType === "recover_thread" || args.queryType === "thread_recovery") args.recoverThread = true;
-  if (args.precedent && args.includeKinds.length === 0) args.includeKinds = PRECEDENT_KINDS;
-  if (args.recoverThread && !args.query) args.query = [args.threadId, args.threadTitle, args.taskGoal].filter(Boolean).join(" ");
-  return args;
+  if (aExampleProject.queryType === "retrieve_context") aExampleProject.runtimeContext = true;
+  if (aExampleProject.queryType === "retrieve_precedent") aExampleProject.precedent = true;
+  if (aExampleProject.queryType === "recover_thread" || aExampleProject.queryType === "thread_recovery") aExampleProject.recoverThread = true;
+  if (aExampleProject.precedent && aExampleProject.includeKinds.length === 0) aExampleProject.includeKinds = PRECEDENT_KINDS;
+  if (aExampleProject.recoverThread && !aExampleProject.query) aExampleProject.query = [aExampleProject.threadId, aExampleProject.threadTitle, aExampleProject.taskGoal].filter(Boolean).join(" ");
+  if (aExampleProject.recoverThread || COLD_QUERY_TYPES.has(aExampleProject.queryType) || MAINTENANCE_QUERY_RE.test([aExampleProject.query, aExampleProject.taskGoal, aExampleProject.threadTitle].join(" "))) {
+    aExampleProject.allowColdLayer = true;
+  }
+  return aExampleProject;
 }
 
 function parseSourceRefArg(raw) {
@@ -347,6 +361,70 @@ function scoreTokens(tokens, fields) {
   return score;
 }
 
+function isMaintenanceQuery(options = {}) {
+  return Boolean(options.allowColdLayer || COLD_QUERY_TYPES.has(options.queryType) || MAINTENANCE_QUERY_RE.test([
+    options.query,
+    options.taskGoal,
+    options.threadTitle,
+  ].filter(Boolean).join(" ")));
+}
+
+function isMaintenanceItem(entry, block, excerpt) {
+  return MAINTENANCE_ITEM_RE.test([entry.kind, entry.fileName, block.title, excerpt].filter(Boolean).join(" "));
+}
+
+function isProductItem(entry, block, excerpt) {
+  return PRODUCT_ITEM_RE.test([entry.kind, entry.fileName, block.title, excerpt].filter(Boolean).join(" "));
+}
+
+function queryTypeKindAdjustment(entry, options, block, excerpt) {
+  const queryType = options.queryType || DEFAULT_QUERY_TYPE;
+  let adjustment = 0;
+  const reasons = [];
+  if (["project_resume", "task_dispatch"].includes(queryType)) {
+    if (entry.kind === "retrieval_packet") {
+      adjustment += 18;
+      reasons.push("layer:current_project_packet");
+    } else if (entry.kind === "resume") {
+      adjustment += 12;
+      reasons.push("layer:project_resume");
+    } else if (entry.kind === "project_index" || entry.kind === "artifacts") {
+      adjustment += 8;
+      reasons.push("layer:project_map");
+    }
+  }
+  if (["bug_repair", "review_gate", "architecture"].includes(queryType) && entry.kind === "experience") {
+    adjustment += 10;
+    reasons.push("layer:experience_precedent");
+  }
+  if (["tool_skill_lookup", "workflow_reuse"].includes(queryType) && ["tool_inventory", "skill_candidates", "experience"].includes(entry.kind)) {
+    adjustment += 16;
+    reasons.push("layer:procedural_memory");
+  }
+  const maintenance = isMaintenanceItem(entry, block, excerpt);
+  if (maintenance && !isMaintenanceQuery(options)) {
+    adjustment -= 45;
+    reasons.push("maintenance_memory_demoted_for_product_query");
+  }
+  if (!maintenance && isProductItem(entry, block, excerpt) && !isMaintenanceQuery(options)) {
+    adjustment += 8;
+    reasons.push("product_memory_promoted");
+  }
+  return { adjustment, reasons, maintenance };
+}
+
+function memoryLayerForHelperItem(entry, item, options = {}) {
+  const maintenance = item.isMaintenance === true || MAINTENANCE_ITEM_RE.test([item.title, item.excerpt].join(" "));
+  if (["skill_candidates", "tool_inventory", "experience"].includes(entry.kind || item.kind)) return "skill";
+  if (maintenance || ["thread_history_hot", "thread_history_warm"].includes(entry.kind || item.kind)) {
+    return isMaintenanceQuery(options) ? "cold" : "warm";
+  }
+  if (["retrieval_packet", "project_index", "context"].includes(entry.kind || item.kind)) return "hot";
+  if ((entry.kind || item.kind) === "resume") return item.freshness === "fresh" ? "hot" : "warm";
+  if (item.freshness === "fresh" && ["active", "ready", "curated"].includes(item.status)) return "warm";
+  return "warm";
+}
+
 function whyMatched(tokens, fields, baselineReasons = []) {
   const reasons = [...baselineReasons];
   const normalizedFields = fields.map((field) => ({
@@ -408,9 +486,10 @@ function collectItems(workspace, options) {
         { text: entry.fileName, weight: 3 },
       ]);
       const baselineScore = entry.priority + (entry.freshness === "fresh" ? 5 : entry.freshness === "review" ? 1 : -5);
-      const score = baselineScore + textScore;
+      const layerAdjustment = queryTypeKindAdjustment(entry, options, block, excerpt);
+      const score = baselineScore + textScore + layerAdjustment.adjustment;
       if (tokens.length > 0 && textScore === 0) continue;
-      items.push({
+      const item = {
         id: hashText(`${entry.kind}|${filePath}|${block.title}`).slice(0, 24),
         kind: entry.kind,
         title: block.title,
@@ -430,9 +509,15 @@ function collectItems(workspace, options) {
           `source:${entry.kind}`,
           `status:${entry.status}`,
           `freshness:${entry.freshness}`,
+          ...layerAdjustment.reasons,
         ]),
         requiresHumanConfirmation: entry.humanConfirmation || entry.freshness !== "fresh",
-      });
+        isMaintenance: layerAdjustment.maintenance,
+      };
+      item.memoryLayer = memoryLayerForHelperItem(entry, item, options);
+      item.recallDepth = item.memoryLayer === "cold" ? "pointer_only" : item.memoryLayer === "skill" ? "procedural" : "summary";
+      if (item.memoryLayer === "cold" && !options.allowColdLayer) continue;
+      items.push(item);
     }
   }
 
@@ -520,6 +605,8 @@ function runtimeItemFromHelperItem(item) {
     tokenEstimate: item.tokenEstimate || estimateTokens(`${item.title} ${item.excerpt}`),
     requiresHumanConfirmation: item.requiresHumanConfirmation === true || item.freshness !== "fresh",
     rawSessionPolicy: "not_allowed",
+    memoryLayer: item.memoryLayer || "warm",
+    recallDepth: item.recallDepth || "summary",
   };
 }
 
@@ -540,6 +627,7 @@ function collectPacketSourceRefs(items) {
 
 function buildRuntimeContextPacket(retrieval, options) {
   const items = (retrieval.items || []).map(runtimeItemFromHelperItem).filter((item) => RUNTIME_ALLOWED_KINDS.includes(item.kind));
+  const memoryLayers = summarizeMemoryLayers(items);
   return {
     schemaVersion: 1,
     provider: retrieval.provider,
@@ -562,14 +650,61 @@ function buildRuntimeContextPacket(retrieval, options) {
     },
     items,
     sourceRefs: collectPacketSourceRefs(items),
+    memoryMode: "layered",
+    memoryLayers,
+    recallPlan: buildRecallPlan(options, memoryLayers),
     warnings: [
       "metadata_first_no_raw_session_body",
       "no_giant_markdown_or_base64_default_output",
       "no_archive_compact_delete_move_restore",
+      "layered_memory_hot_warm_default_cold_pointer_only",
       ...retrieval.warnings,
     ],
     tokenEstimate: retrieval.tokenEstimate,
     generatedAt: retrieval.generatedAt,
+  };
+}
+
+function summarizeMemoryLayers(items) {
+  const summary = {
+    hot: { count: 0, tokenEstimate: 0, role: "短期工作记忆：当前目标、最近决策、正在进行的模块。" },
+    warm: { count: 0, tokenEstimate: 0, role: "项目长期摘要：PRD、架构、验收记录、模块演化和重要设计来源。" },
+    cold: { count: 0, tokenEstimate: 0, role: "长历史证据指针：旧线程、Vault、归档历史，默认只给 sourceRefs 不读正文。" },
+    skill: { count: 0, tokenEstimate: 0, role: "程序性记忆：经验卡、工具、Skill 候选和可复用流程。" },
+  };
+  for (const item of items || []) {
+    const layer = summary[item.memoryLayer] ? item.memoryLayer : "warm";
+    summary[layer].count += 1;
+    summary[layer].tokenEstimate += Number(item.tokenEstimate || 0);
+  }
+  return summary;
+}
+
+function buildRecallPlan(options, memoryLayers) {
+  const coldEnabled = Boolean(options.allowColdLayer || options.recoverThread || COLD_QUERY_TYPES.has(options.queryType));
+  return {
+    mode: "hot_warm_cold_skill_layered_recall",
+    defaultReadOrder: ["hot", "warm", "skill"],
+    coldLayer: {
+      enabled: coldEnabled,
+      defaultRead: false,
+      policy: "source_refs_only_until_explicit_recovery_or_evidence_gate",
+      reason: coldEnabled
+        ? "query_type_allows_cold_pointer_recall"
+        : "ordinary_tasks_use_hot_warm_skill_before_cold_history",
+    },
+    escalation: [
+      "先用 hot 工作记忆恢复当前目标和下一步。",
+      "再用 warm 项目长期摘要补齐最初设计、模块状态和验收结论。",
+      "需要做法或避免重复错误时读取 skill/procedural 记忆。",
+      "只有摘要不足、线程恢复或证据冲突时，才按 sourceRefs 小范围读取 cold 长历史。",
+    ],
+    layerCounts: {
+      hot: memoryLayers.hot.count,
+      warm: memoryLayers.warm.count,
+      skill: memoryLayers.skill.count,
+      cold: memoryLayers.cold.count,
+    },
   };
 }
 
@@ -760,11 +895,11 @@ function resolveWorkspaceContainedPath(workspace, candidatePath, optionName) {
   return resolved;
 }
 
-function normalizeEvidenceSourceRefs(evidence, args) {
+function normalizeEvidenceSourceRefs(evidence, aExampleProject) {
   const refs = [
     ...safeArray(evidence.evidence?.sourceRefs),
     ...safeArray(evidence.sourceRefs),
-    ...safeArray(args.sourceRefs),
+    ...safeArray(aExampleProject.sourceRefs),
   ].filter(Boolean).map((ref) => ({
     kind: cleanText(ref.kind || ref.sourceType || "source") || "source",
     path: ref.path ? String(ref.path) : null,
@@ -844,10 +979,10 @@ function buildFlowSkillCandidatePreview(packet, sourceRefs) {
   };
 }
 
-function buildEvidenceWritebackPacket(workspace, args) {
-  const evidence = readEvidenceJson(args.evidenceJson, workspace);
-  const decision = WRITEBACK_DECISIONS.includes(args.decision || evidence.decision) ? (args.decision || evidence.decision) : "block";
-  const sourceRefs = normalizeEvidenceSourceRefs(evidence, args);
+function buildEvidenceWritebackPacket(workspace, aExampleProject) {
+  const evidence = readEvidenceJson(aExampleProject.evidenceJson, workspace);
+  const decision = WRITEBACK_DECISIONS.includes(aExampleProject.decision || evidence.decision) ? (aExampleProject.decision || evidence.decision) : "block";
+  const sourceRefs = normalizeEvidenceSourceRefs(evidence, aExampleProject);
   const containsRawSession = evidence.privacy?.containsRawSession === true || evidence.privacy?.contains_raw_session === true || hasUnsafeRef(sourceRefs, RAW_SESSION_RE);
   const containsSecrets = evidence.privacy?.containsSecrets === true || evidence.privacy?.contains_credentials === true || evidence.privacy?.containsSecrets === true || hasUnsafeRef(sourceRefs, SECRET_REF_RE);
   const reusablePattern = normalizeWritebackReusablePatterns(evidence);
@@ -857,15 +992,15 @@ function buildEvidenceWritebackPacket(workspace, args) {
     mode: "evidence_writeback_packet_dry_run",
     decision,
     task: {
-      id: compact(args.taskId || evidence.task?.id || evidence.taskId || "unknown-task", 140),
-      goal: compact(args.taskGoal || evidence.task?.goal || evidence.goal || args.query || "", 360),
+      id: compact(aExampleProject.taskId || evidence.task?.id || evidence.taskId || "unknown-task", 140),
+      goal: compact(aExampleProject.taskGoal || evidence.task?.goal || evidence.goal || aExampleProject.query || "", 360),
       domain: safeArray(evidence.task?.domain || evidence.domain).map((item) => compact(item, 80)).filter(Boolean).slice(0, 12),
       projectPath: evidence.task?.projectPath || evidence.projectPath || workspace,
       threadId: evidence.task?.threadId || evidence.threadId || null,
       parentCeoThreadId: evidence.task?.parentCeoThreadId || evidence.parentCeoThreadId || null,
     },
     evidence: {
-      summary: compact(args.summary || evidence.evidence?.summary || evidence.summary || "", 1000),
+      summary: compact(aExampleProject.summary || evidence.evidence?.summary || evidence.summary || "", 1000),
       changedFiles: safeArray(evidence.evidence?.changedFiles || evidence.changedFiles).map((item) => compact(item, 260)).filter(Boolean).slice(0, 40),
       artifacts: safeArray(evidence.evidence?.artifacts || evidence.artifacts).map((item) => compact(item, 260)).filter(Boolean).slice(0, 40),
       tests: safeArray(evidence.evidence?.tests || evidence.tests).map((item) => compact(item, 220)).filter(Boolean).slice(0, 40),
@@ -952,13 +1087,13 @@ function printText(payload) {
 }
 
 function main() {
-  const args = parseArgs(process.argv);
-  const workspace = findWorkspace(args.workspace, args.allowParentKnowledge);
-  if (args.writebackDryRun) {
-    const packet = buildEvidenceWritebackPacket(workspace, args);
-    const outputPath = writeEvidenceOut(workspace, args.evidenceOut, packet);
+  const aExampleProject = parseAExampleProject(process.argv);
+  const workspace = findWorkspace(aExampleProject.workspace, aExampleProject.allowParentKnowledge);
+  if (aExampleProject.writebackDryRun) {
+    const packet = buildEvidenceWritebackPacket(workspace, aExampleProject);
+    const outputPath = writeEvidenceOut(workspace, aExampleProject.evidenceOut, packet);
     const payload = outputPath ? { ...packet, outputPath } : packet;
-    if (args.json) {
+    if (aExampleProject.json) {
       console.log(JSON.stringify(payload, null, 2));
     } else {
       console.log("# Zhixia Evidence Writeback Dry Run");
@@ -970,15 +1105,15 @@ function main() {
     }
     return;
   }
-  const payload = collectResults(workspace, args);
-  const lifecyclePayload = args.precedent
-    ? buildRuntimePrecedentPacket(payload, args)
-    : args.recoverThread
-      ? buildThreadRecoveryPacket(payload, args)
-      : args.runtimeContext
-      ? buildRuntimeContextPacket(payload, args)
+  const payload = collectResults(workspace, aExampleProject);
+  const lifecyclePayload = aExampleProject.precedent
+    ? buildRuntimePrecedentPacket(payload, aExampleProject)
+    : aExampleProject.recoverThread
+      ? buildThreadRecoveryPacket(payload, aExampleProject)
+      : aExampleProject.runtimeContext
+      ? buildRuntimeContextPacket(payload, aExampleProject)
       : payload;
-  if (args.json) {
+  if (aExampleProject.json) {
     console.log(JSON.stringify(lifecyclePayload, null, 2));
   } else {
     printText(payload);

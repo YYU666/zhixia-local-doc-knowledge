@@ -6,8 +6,8 @@ const {
   normalizeProjectArtifactDocument,
 } = require("../electron/projectArtifactPolicy.cjs");
 
-const projectPath = "C:\\Users\\a\\Documents\\zhixia";
-const lineageThreadId = ["019ebc7d", "1e6c", "7743", "9086", "b225a598fa5d"].join("-");
+const projectPath = "C:\\Users\\example\\Documents\\zhixia";
+const lineageThreadId = ["11111111", "2222", "7333", "8444", "555555555555"].join("-");
 const docs = [
   {
     id: "prd-old",
@@ -107,7 +107,7 @@ const docs = [
     id: "raw-session",
     title: "Raw Codex session",
     fileName: "session.jsonl",
-    filePath: "C:\\Users\\a\\.codex\\sessions\\2026\\06\\12\\session.jsonl",
+    filePath: "C:\\Users\\example\\.codex\\sessions\\2026\\06\\12\\session.jsonl",
     workspacePath: projectPath,
     artifactType: "other",
     sourceType: "workspace_file",

@@ -58,6 +58,8 @@ const MEMORY_ROUTER_KIND_PROFILES = {
 };
 const MEMORY_ROUTER_DEFAULT_TTL_MS = 90 * 1000;
 const MEMORY_ROUTER_DEFAULT_TIME_BUDGET_MS = 250;
+const COLD_MEMORY_QUERY_TYPES = new Set(["thread_recovery", "archive_candidate"]);
+const MAINTENANCE_MEMORY_RE = /\b(guardian inventory|thread history vault|archive queue|archive bridge|old thread|thread slimming|thread recovery|runtime monitor|bounded read-only|neutral reviewer)\b|老线程优化|一键安全减负|归档|瘦身|线程审计|审计线程|维护线程|只读审计|只读.*CEO/i;
 const THREAD_RECOVERY_PACKET_SCHEMA = "zhixia.thread_recovery_packet.v1";
 const RUNTIME_EVENT_SCHEMA = "zhixia.runtime_event_memory.v1";
 const MAX_RECOVERY_RECOMMENDED_DOC_BYTES = 768 * 1024;
@@ -207,7 +209,7 @@ function buildMemoryRouterPlan(options = {}) {
   const topK = clampNumber(options.topK || options.maxResults, topKDefault, 1, 12);
   const tokenBudget = clampNumber(options.tokenBudget, taskType === "project_resume" ? 1500 : 1200, 400, 3000);
   const timeBudgetMs = clampNumber(options.timeBudgetMs, MEMORY_ROUTER_DEFAULT_TIME_BUDGET_MS, 50, 1200);
-  const allowColdLayer = options.allowColdLayer === true || ["thread_recovery", "archive_candidate"].includes(taskType);
+  const allowColdLayer = options.allowColdLayer === true || COLD_MEMORY_QUERY_TYPES.has(taskType);
   const hardRawGate = options.rawSessionHardGate === true && options.explicitRawSessionRequest === true && options.sourceRange;
   const rawSessionDefaultRead = false;
   const profileKinds = MEMORY_ROUTER_KIND_PROFILES[taskType] || MEMORY_ROUTER_KIND_PROFILES.task_dispatch;
@@ -222,6 +224,7 @@ function buildMemoryRouterPlan(options = {}) {
     queryType,
     providerMode: compactText(options.providerMode || options.provider || "hybrid", 80),
     strategy: "hot_warm_cold_metadata_first",
+    memoryMode: "layered",
     retrieval: {
       query: compactText(options.taskGoal || options.task_goal || options.query || options.taskType || options.task_type || "", 260),
       includeKinds: runtimeAllowedKinds,
@@ -237,17 +240,22 @@ function buildMemoryRouterPlan(options = {}) {
     layers: {
       hot: {
         enabled: true,
-        purpose: "current_project_state_and_open_work",
+        purpose: "short_term_working_memory_current_goal_decisions_next_action",
         maxItems: Math.min(topK, 4),
       },
       warm: {
         enabled: true,
-        purpose: "project_summaries_decisions_experience_and_tools",
+        purpose: "long_term_project_summaries_prd_architecture_decisions_progress",
         maxItems: Math.min(topK, 8),
+      },
+      skill: {
+        enabled: true,
+        purpose: "procedural_memory_experience_cards_tools_and_skill_candidates",
+        maxItems: Math.min(topK, 4),
       },
       cold: {
         enabled: allowColdLayer,
-        purpose: "history_vault_or_guardian_pointers_only",
+        purpose: "raw_or_vault_history_pointers_only_for_deeper_recall",
         maxItems: allowColdLayer ? Math.min(topK, 4) : 0,
         rawSessionDefaultRead,
       },
@@ -273,7 +281,10 @@ function buildMemoryRouterPlan(options = {}) {
 function memoryLayerForRuntimeItem(item = {}, routerPlan = {}) {
   if (item.kind === "runtime_event") return "hot";
   if (["project_record", "project_resume_packet", "ceo_flow_record"].includes(item.kind)) return "hot";
+  if (["tool_skill_record", "skill_candidate", "experience_card"].includes(item.kind)) return "skill";
   if (item.kind === "thread_lineage_index") return routerPlan.layers?.cold?.enabled ? "cold" : "warm";
+  const text = [item.title, item.summary].filter(Boolean).join(" ");
+  if (MAINTENANCE_MEMORY_RE.test(text)) return COLD_MEMORY_QUERY_TYPES.has(routerPlan.queryType) ? "cold" : "warm";
   if (item.freshness === "fresh" && ["active", "ready", "curated"].includes(item.status)) return "hot";
   return "warm";
 }
@@ -390,6 +401,7 @@ function buildRuntimeContextPacket(retrieveResult = {}, options = {}) {
   const routerWarnings = safeArray(routerPlan.warnings).map((warning) => compactText(warning, 200)).filter(Boolean);
   return {
     schemaVersion: MEMORY_RUNTIME_SCHEMA_VERSION,
+    memoryMode: "layered",
     request: {
       taskGoal: compactText(options.taskGoal || options.query || retrieveResult.query || "", 260),
       queryType: compactText(routerPlan.queryType || options.queryType || retrieveResult.queryType || "task_dispatch", 80),
@@ -405,6 +417,7 @@ function buildRuntimeContextPacket(retrieveResult = {}, options = {}) {
     hotState: buildHotStateCacheSeed(items, options),
     memoryGraph: buildMemoryGraph(items),
     memoryLayers: summarizeMemoryLayers(items),
+    recallPlan: buildLayeredRecallPlan(routerPlan, items),
     routerPlan,
     performance: {
       metadataFirst: true,
@@ -435,6 +448,7 @@ function buildRuntimeContextPacket(retrieveResult = {}, options = {}) {
       "metadata_first_no_raw_session_body",
       "no_archive_compact_delete_move_restore",
       "memory_router_no_background_scan",
+      "layered_memory_hot_warm_skill_default_cold_pointer_only",
       ...routerWarnings,
       ...(timeBudgetExceeded ? ["memory_router_time_budget_exceeded_partial"] : []),
       ...safeArray(retrieveResult.warnings).map((warning) => compactText(warning, 200)).filter(Boolean),
@@ -446,9 +460,10 @@ function buildRuntimeContextPacket(retrieveResult = {}, options = {}) {
 
 function summarizeMemoryLayers(items = []) {
   const summary = {
-    hot: { count: 0, tokenEstimate: 0 },
-    warm: { count: 0, tokenEstimate: 0 },
-    cold: { count: 0, tokenEstimate: 0 },
+    hot: { count: 0, tokenEstimate: 0, role: "short_term_working_memory" },
+    warm: { count: 0, tokenEstimate: 0, role: "long_term_project_summary_memory" },
+    cold: { count: 0, tokenEstimate: 0, role: "raw_or_vault_history_pointer_memory" },
+    skill: { count: 0, tokenEstimate: 0, role: "procedural_experience_and_skill_memory" },
   };
   for (const item of safeArray(items)) {
     const layer = summary[item.memoryLayer] ? item.memoryLayer : "warm";
@@ -456,6 +471,35 @@ function summarizeMemoryLayers(items = []) {
     summary[layer].tokenEstimate += Number(item.tokenEstimate || 0);
   }
   return summary;
+}
+
+function buildLayeredRecallPlan(routerPlan = {}, items = []) {
+  const layerSummary = summarizeMemoryLayers(items);
+  const coldEnabled = routerPlan.layers?.cold?.enabled === true;
+  return {
+    mode: "hot_warm_cold_skill_layered_recall",
+    defaultReadOrder: ["hot", "warm", "skill"],
+    coldLayer: {
+      enabled: coldEnabled,
+      defaultRead: false,
+      policy: "source_refs_only_until_explicit_recovery_or_evidence_gate",
+      reason: coldEnabled
+        ? "query_type_allows_cold_pointer_recall"
+        : "ordinary_tasks_use_hot_warm_skill_before_cold_history",
+    },
+    escalation: [
+      "hot: recover current goal, active module, latest decisions, blockers, and next action.",
+      "warm: recall PRD, architecture, accepted progress, design origin, and long-term project summaries.",
+      "skill: recall reusable procedures, prior fixes, tools, and skill candidates.",
+      "cold: use sourceRefs only; read raw/vault history narrowly only after explicit recovery/evidence gate.",
+    ],
+    layerCounts: {
+      hot: layerSummary.hot.count,
+      warm: layerSummary.warm.count,
+      skill: layerSummary.skill.count,
+      cold: layerSummary.cold.count,
+    },
+  };
 }
 
 function buildHotStateCacheSeed(items = [], options = {}) {
@@ -1187,7 +1231,7 @@ function inferRuntimeEventType(event = {}) {
   if (/(stream disconnected before completion|incomplete response returned|max_output_tokens|reconnect(?:ing)?\s+\d+\/\d+|自动压缩上下文|重新连接)/i.test(signalText)) {
     return "broken_thread";
   }
-  if (/(heartbeat|心跳|wake|wakeup).*(fuse|pause|loop|熔断|暂停|空转)/i.test(signalText)) {
+  if (/(heartbeat|心跳|ExampleProject|ExampleProjectup).*(fuse|pause|loop|熔断|暂停|空转)/i.test(signalText)) {
     return "heartbeat_fuse";
   }
   if (/(model|模型|reasoning|推理强度|降模型|改模型|5\.3|gpt-5\.3)/i.test(signalText)) {

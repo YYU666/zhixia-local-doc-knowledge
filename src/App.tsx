@@ -2306,7 +2306,7 @@ function App() {
     setCodexGuardianBusy(true);
     setNotice("正在请求 Guardian 清理 Codex 热日志...");
     try {
-      const result = await window.docKnowledge.cleanCodexHotLogs();
+      const result = await window.docKnowledge.cleanCodexHotLogs({ userConfirmed: true });
       setCodexGuardianStatus(result);
       if (result.ok && result.result) {
         const before = Object.values(result.result.before || {}).reduce((sum, item) => sum + Number(item || 0), 0);
@@ -2445,6 +2445,7 @@ function App() {
       threadId,
       tokenBudget: 900,
       metadataOnly: options.metadataOnly === true,
+      userConfirmed: true,
     });
     if (result.ok && result.result) {
       if (updateContext) setHistoryContextEnvelope(result.result);
@@ -2488,6 +2489,7 @@ function App() {
       compactReceipts: receipts,
       skipThreadIds: [],
       bypassRoleCooling: options.bypassRoleCooling === true,
+      userConfirmed: true,
     });
     if (result.ok && result.result) {
       setHistoryArchiveQueue(result.result);
@@ -2568,7 +2570,7 @@ function App() {
     setHistoryOptimizeSummary(null);
     setNotice("正在备份并瘦身老线程本体...");
     try {
-      const result = await window.docKnowledge.compactCodexThread({ threadId });
+      const result = await window.docKnowledge.compactCodexThread({ threadId, userConfirmed: true });
       if (result.ok && result.result) {
         const receipt = result.result;
         applyCompactReceipt(threadId, receipt);
@@ -2607,7 +2609,7 @@ function App() {
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index];
         setNotice(`正在瘦身老线程 ${index + 1}/${items.length}：${item.threadId}`);
-        const result = await window.docKnowledge.compactCodexThread({ threadId: item.threadId });
+        const result = await window.docKnowledge.compactCodexThread({ threadId: item.threadId, userConfirmed: true });
         if (result.ok && result.result) {
           const receipt = result.result;
           succeeded.push(item.threadId);
@@ -2840,7 +2842,7 @@ function App() {
     let afterTotal = 0;
     let logCleanupReceipt: CodexGuardianCleanReceipt | null = null;
     try {
-      const logCleanup = await window.docKnowledge.cleanCodexHotLogs();
+      const logCleanup = await window.docKnowledge.cleanCodexHotLogs({ userConfirmed: true });
       setCodexGuardianStatus(logCleanup);
       if (!logCleanup.ok || !isCodexGuardianCleanReceipt(logCleanup.result)) {
         const message = logCleanup.refused
@@ -3068,7 +3070,7 @@ function App() {
             : current,
         );
         setNotice(`安全减负 ${index + 1}/${items.length}：保险库完成，正在瘦身 session 本体...`);
-        const compactResult = await window.docKnowledge.compactCodexThread({ threadId: item.threadId });
+        const compactResult = await window.docKnowledge.compactCodexThread({ threadId: item.threadId, userConfirmed: true });
         if (compactResult.ok && compactResult.result) {
           const receipt = compactResult.result;
           compacted.push(item.threadId);
@@ -3632,7 +3634,7 @@ function App() {
   );
 
   const personalVaultPath =
-    personalVaultProject?.path || personalVaultDocuments.find((doc) => doc.workspacePath)?.workspacePath || "C:\\Users\\a\\Documents\\个人知识库";
+    personalVaultProject?.path || personalVaultDocuments.find((doc) => doc.workspacePath)?.workspacePath || "C:\\Users\\example\\Documents\\个人知识库";
 
   const vaultCounts = useMemo(() => {
     const counts: Record<VaultSectionKey, number> = {

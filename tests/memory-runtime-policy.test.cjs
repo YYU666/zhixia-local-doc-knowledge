@@ -34,6 +34,7 @@ async function main() {
   assert.equal(defaultRouterPlan.budgets.topK, 12, "MemoryRouter should clamp excessive topK/maxResults");
   assert.equal(defaultRouterPlan.layers.hot.enabled, true, "MemoryRouter should always enable hot state");
   assert.equal(defaultRouterPlan.layers.warm.enabled, true, "MemoryRouter should always enable warm summaries");
+  assert.equal(defaultRouterPlan.layers.skill.enabled, true, "MemoryRouter should expose procedural Skill/experience memory");
   assert.equal(defaultRouterPlan.layers.cold.enabled, false, "MemoryRouter should keep cold history disabled by default");
   assert.equal(defaultRouterPlan.rawSessionGate.defaultRead, false, "MemoryRouter must never read raw sessions by default");
   assert.equal(defaultRouterPlan.backgroundPolicy.startsTimers, false, "MemoryRouter must not start background timers");
@@ -42,7 +43,7 @@ async function main() {
 
   const recoveryRouterPlan = buildMemoryRouterPlan({
     taskGoal: "恢复被瘦身老线程里的历史",
-    threadId: "public-thread-id",
+    threadId: "11111111-2222-7333-8444-555555555555",
     tokenBudget: 1200,
     rawSessionHardGate: true,
     explicitRawSessionRequest: true,
@@ -54,49 +55,49 @@ async function main() {
   assert.equal(recoveryRouterPlan.rawSessionGate.defaultRead, false, "explicit recovery gate still must not default-read raw bodies");
 
   const threadRecoveryPacket = buildThreadRecoveryPacket({
-    threadId: "public-thread-id",
-    title: "Refmuse game Studio CEO",
+    threadId: "11111111-2222-7333-8444-555555555555",
+    title: "ExampleProject Studio CEO",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
     tokenBudget: 1600,
     contextPacket: {
       cacheKey: "context-cache",
       items: [
         {
-          id: "lineage:refmuse",
+          id: "lineage:ExampleProject",
           kind: "thread_lineage_index",
-          title: "ThreadLineageIndex: Refmuse game Studio CEO",
+          title: "ThreadLineageIndex: ExampleProject Studio CEO",
           summary: "Metadata-only lineage for the replacement CEO thread.",
           freshness: "review",
           memoryLayer: "cold",
           whyMatched: ["threadId:exact"],
-          sourceRefs: [{ kind: "thread_lineage_index", path: "sqlite://thread_lineage_index/refmuse" }],
+          sourceRefs: [{ kind: "thread_lineage_index", path: "sqlite://thread_lineage_index/ExampleProject" }],
         },
       ],
     },
     lineageRecords: [
       {
-        id: "lineage:refmuse",
-        ceoThreadId: "public-thread-id",
-        title: "ThreadLineageIndex: Refmuse game Studio CEO",
+        id: "lineage:ExampleProject",
+        ceoThreadId: "11111111-2222-7333-8444-555555555555",
+        title: "ThreadLineageIndex: ExampleProject Studio CEO",
         workspacePaths: ["C:/Users/example/Documents/2D游戏项目"],
         relationships: {
-          childThreadIds: ["public-thread-id"],
-          workerThreadIds: ["public-thread-id"],
-          reviewerThreadIds: ["public-thread-id"],
-          vaultPointers: ["codex-history:public-thread-id"],
+          childThreadIds: ["11111111-2222-7333-8444-555555555555"],
+          workerThreadIds: ["11111111-2222-7333-8444-555555555555"],
+          reviewerThreadIds: ["11111111-2222-7333-8444-555555555555"],
+          vaultPointers: ["codex-history:11111111-2222-7333-8444-555555555555"],
         },
         governance: {
           status: "metadata_only",
           rawSessionPolicy: "metadata_only_no_raw_body",
           mutationPolicy: "read_only_no_archive_compact_restore_delete",
         },
-        sourceRefs: [{ kind: "thread_lineage_index", path: "sqlite://thread_lineage_index/refmuse" }],
+        sourceRefs: [{ kind: "thread_lineage_index", path: "sqlite://thread_lineage_index/ExampleProject" }],
       },
     ],
     vaultManifests: [
       {
-        threadId: "public-thread-id",
-        title: "Refmuse game Studio CEO",
+        threadId: "11111111-2222-7333-8444-555555555555",
+        title: "ExampleProject Studio CEO",
         projectPath: "C:/Users/example/Documents/2D游戏项目",
         vaultManifestPath: "C:/Users/example/local app data/Roaming/Zhixia/codex-history-vault/019eff6e/latest.json",
         vaultSessionPath: "C:/Users/example/local app data/Roaming/Zhixia/codex-history-vault/019eff6e/session.jsonl",
@@ -106,14 +107,14 @@ async function main() {
     ],
     projectDocs: [
       { kind: "project_artifact", path: "C:/Users/example/Documents/2D游戏项目/docs/PROGRAM_GOAL_BRIEF.md", title: "Program Goal", sizeBytes: 12000 },
-      { kind: "project_artifact", path: "C:/Users/example/Documents/2D游戏项目/docs/REFMUSE_GAME_STUDIO_CEO_TRANSCRIPT_EXTRACT.md", title: "Transcript Extract", sizeBytes: 2 * 1024 * 1024 },
+      { kind: "project_artifact", path: "C:/Users/example/Documents/2D游戏项目/docs/EXAMPLE_PROJECT_CEO_TRANSCRIPT_EXTRACT.md", title: "Transcript Extract", sizeBytes: 2 * 1024 * 1024 },
     ],
     coldHistorySources: [
       {
         kind: "raw_session",
         path: "C:/Users/example/.codex/sessions/2026/06/25/rollout-019eff6e.jsonl",
         title: "raw source pointer only",
-        threadId: "public-thread-id",
+        threadId: "11111111-2222-7333-8444-555555555555",
       },
     ],
   });
@@ -147,16 +148,16 @@ async function main() {
     eventType: "broken_thread",
     severity: "error",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
-    threadId: "public-thread-id",
-    automationId: "rgs-ceo-harvest-post-43-wave",
-    title: "RGS CEO 线程断流空转",
-    summary: "RGS CEO 主线程连续 heartbeat 空完成，已暂停心跳，应由干净接管线程恢复。",
+    threadId: "11111111-2222-7333-8444-555555555555",
+    automationId: "ExampleProject-ceo-harvest-post-43-wave",
+    title: "ExampleProject CEO 线程断流空转",
+    summary: "ExampleProject CEO 主线程连续 heartbeat 空完成，已暂停心跳，应由干净接管线程恢复。",
     observedSignals: ["systemError", "last_agent_message=null", "15min heartbeat loop", "236k token turn"],
     decisions: ["暂停旧 heartbeat，不再向旧 CEO 主线程派工。"],
     openRisks: ["旧线程仍可能有最后一轮 inProgress 残留。"],
-    nextAction: "新建 RGS CEO Takeover 线程并读取项目短记忆包。",
+    nextAction: "新建 ExampleProject CEO Takeover 线程并读取项目短记忆包。",
     sourceRefs: [
-      { kind: "automation", path: "C:/Users/example/.codex/automations/rgs-ceo-harvest-post-43-wave/automation.toml" },
+      { kind: "automation", path: "C:/Users/example/.codex/automations/ExampleProject-ceo-harvest-post-43-wave/automation.toml" },
       { kind: "raw_session", path: "C:/Users/example/.codex/sessions/2026/06/25/rollout.jsonl" },
       { kind: "secret", path: "C:/Users/example/Documents/project/.env" },
     ],
@@ -172,7 +173,7 @@ async function main() {
   const maxOutputDisconnectedEvent = normalizeRuntimeEventMemory({
     severity: "error",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
-    title: "RGS callback stream disconnected",
+    title: "ExampleProject callback stream disconnected",
     summary: "stream disconnected before completion: Incomplete response returned, reason: max_output_tokens. 正在自动压缩上下文，正在重新连接 5/5。",
     observedSignals: ["max_output_tokens", "reconnecting 5/5"],
   });
@@ -258,6 +259,10 @@ async function main() {
   assert.equal(packet.request.taskGoal, "Implement app-side Memory Runtime contract");
   assert.deepEqual(packet.request.allowedKinds, ["project_record", "knowledge_item"], "runtime context must reject raw-session allowed kinds");
   assert.equal(packet.routerPlan.strategy, "hot_warm_cold_metadata_first", "runtime context should include MemoryRouter strategy");
+  assert.equal(packet.memoryMode, "layered", "runtime context should declare layered memory mode");
+  assert.equal(packet.recallPlan.mode, "hot_warm_cold_skill_layered_recall", "runtime context should expose layered recall plan");
+  assert.deepEqual(packet.recallPlan.defaultReadOrder, ["hot", "warm", "skill"], "ordinary recall should read hot/warm/skill before cold history");
+  assert.equal(packet.recallPlan.coldLayer.defaultRead, false, "cold history must remain pointer-only by default");
   assert.equal(packet.routerPlan.backgroundPolicy.scansFullDatabase, false, "router plan should not request a full database scan");
   assert.equal(packet.performance.noBackgroundTimer, true, "runtime packet should declare no background timer");
   assert.equal(packet.performance.noFullTextRead, true, "runtime packet should declare no full text reads");
@@ -269,6 +274,7 @@ async function main() {
   assert.ok(packet.cacheKey, "runtime context should include stable cache key");
   assert.ok(packet.expiresAt, "runtime context should include expiration hint");
   assert.ok(packet.warnings.includes("memory_router_no_background_scan"), "runtime context should declare no background scan");
+  assert.ok(packet.warnings.includes("layered_memory_hot_warm_skill_default_cold_pointer_only"), "runtime context should declare layered cold pointer policy");
   assert.equal(packet.items.length, 1, "runtime context must not surface raw session items");
   assert.equal(JSON.stringify(packet).includes("ZHIXIA_RAW_BACKED_ALLOWED_KIND_BODY_SHOULD_NOT_LEAK"), false, "runtime context must fail closed on raw-backed allowed-kind bodies");
 
@@ -284,7 +290,7 @@ async function main() {
   assert.equal(storedRuntimeEvent.unsafeSourceRefCount, 2, "stored runtime event should keep unsafe ref count only");
   const listedEvents = await listRuntimeEventRecords(runtimeEventStore, {
     projectPath: "C:/Users/example/Documents/2D游戏项目",
-    threadId: "public-thread-id",
+    threadId: "11111111-2222-7333-8444-555555555555",
   });
   assert.equal(listedEvents.length, 1, "runtime event should be listable by project/thread");
   const listedWorking = await listWorkingMemoryRecords(runtimeEventStore, { status: "blocked" });
@@ -295,11 +301,11 @@ async function main() {
   });
   const volatilePacket = buildRuntimeContextPacket({
     queryType: "thread_recovery",
-    query: "RGS CEO takeover",
+    query: "ExampleProject CEO takeover",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
     items: volatileItems,
   }, {
-    taskGoal: "接管 RGS CEO 坏线程",
+    taskGoal: "接管 ExampleProject CEO 坏线程",
     queryType: "thread_recovery",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
     allowedKinds: ["runtime_event", "project_record"],
@@ -309,26 +315,26 @@ async function main() {
   assert.equal(JSON.stringify(volatilePacket).includes(".codex/sessions"), false, "runtime event context must not leak raw session paths");
   assert.equal(JSON.stringify(volatilePacket).includes(".env"), false, "runtime event context must not leak secret paths");
 
-  const refmuseActivatedGraph = buildActivatedMemoryGraph({
+  const ExampleProjectActivatedGraph = buildActivatedMemoryGraph({
     nodes: [
       {
-        id: "project:rgs",
+        id: "project:ExampleProject",
         kind: "project",
-        title: "Refmuse Game Studio / 2D游戏项目",
+        title: "ExampleProject Studio / 2D游戏项目",
         summary: "边做2D游戏边长出轻量游戏引擎。",
         projectPath: "C:/Users/example/Documents/2D游戏项目",
-        tags: ["Refmuse Game Studio", "RGS", "2D游戏项目"],
+        tags: ["ExampleProject Studio", "ExampleProject", "2D游戏项目"],
         status: "ready",
         freshness: "fresh",
       },
       {
         id: "thread:ceo",
         kind: "thread_lineage_index",
-        title: "Refmuse Game Studio CEO",
-        summary: "旧CEO主线程，包含RGS阶段任务、worker/reviewer分支和恢复入口。",
+        title: "ExampleProject Studio CEO",
+        summary: "旧CEO主线程，包含ExampleProject阶段任务、worker/reviewer分支和恢复入口。",
         projectPath: "C:/Users/example/Documents/2D游戏项目",
-        threadId: "public-thread-id",
-        tags: ["CEO", "RGS"],
+        threadId: "11111111-2222-7333-8444-555555555555",
+        tags: ["CEO", "ExampleProject"],
         status: "ready",
         freshness: "review",
       },
@@ -338,7 +344,7 @@ async function main() {
         title: "老线程历史：2D游戏项目",
         summary: "知匣已保存旧 Codex 线程完整历史到 Thread History Vault。",
         projectPath: "C:/Users/example/Documents/2D游戏项目",
-        threadId: "public-thread-id",
+        threadId: "11111111-2222-7333-8444-555555555555",
         tags: ["codex-history", "thread-history-vault"],
         sourceRefs: [{ kind: "thread_history_vault", path: "vault/latest.json", readByDefault: true }],
       },
@@ -354,25 +360,25 @@ async function main() {
       },
     ],
     edges: [
-      { from: "project:rgs", to: "thread:ceo", kind: "project_contains", weight: 3 },
+      { from: "project:ExampleProject", to: "thread:ceo", kind: "project_contains", weight: 3 },
       { from: "thread:ceo", to: "vault:old-thread", kind: "thread_evidence", weight: 2.5 },
-      { from: "project:rgs", to: "experience:scope", kind: "project_contains", weight: 2 },
+      { from: "project:ExampleProject", to: "experience:scope", kind: "project_contains", weight: 2 },
     ],
   }, {
-    taskGoal: "继续 Refmuse Game Studio CEO，恢复 RGS 旧线程记忆",
+    taskGoal: "继续 ExampleProject Studio CEO，恢复 ExampleProject 旧线程记忆",
     projectPath: "C:/Users/example/Documents/2D游戏项目",
-    threadId: "public-thread-id",
+    threadId: "11111111-2222-7333-8444-555555555555",
     maxNodes: 8,
   });
-  assert.equal(refmuseActivatedGraph.mode, "persisted_activation_graph", "activated graph should use the persisted activation mode");
-  assert.equal(refmuseActivatedGraph.performance.metadataOnly, true, "activated graph should be metadata-only");
-  assert.equal(refmuseActivatedGraph.performance.rawSessionBodyRead, false, "activated graph must not read raw session bodies");
-  assert.equal(refmuseActivatedGraph.nodes.some((node) => node.id === "thread:ceo"), true, "Refmuse CEO thread should activate");
-  assert.equal(refmuseActivatedGraph.nodes[0].threadId, "public-thread-id", "exact threadId should outrank broad project keyword matches");
-  assert.equal(refmuseActivatedGraph.nodes.some((node) => node.id === "vault:old-thread"), true, "vault pointer should be pulled in by graph neighbors");
-  assert.equal(refmuseActivatedGraph.nodes.some((node) => node.id === "experience:scope"), true, "project experience should activate through project relationship");
-  assert.ok(refmuseActivatedGraph.nodes[0].activation > 0, "activated nodes should carry activation scores");
-  assert.ok(refmuseActivatedGraph.nodes[0].whyActivated.length > 0, "activated nodes should explain why they were recalled");
+  assert.equal(ExampleProjectActivatedGraph.mode, "persisted_activation_graph", "activated graph should use the persisted activation mode");
+  assert.equal(ExampleProjectActivatedGraph.performance.metadataOnly, true, "activated graph should be metadata-only");
+  assert.equal(ExampleProjectActivatedGraph.performance.rawSessionBodyRead, false, "activated graph must not read raw session bodies");
+  assert.equal(ExampleProjectActivatedGraph.nodes.some((node) => node.id === "thread:ceo"), true, "ExampleProject CEO thread should activate");
+  assert.equal(ExampleProjectActivatedGraph.nodes[0].threadId, "11111111-2222-7333-8444-555555555555", "exact threadId should outrank broad project keyword matches");
+  assert.equal(ExampleProjectActivatedGraph.nodes.some((node) => node.id === "vault:old-thread"), true, "vault pointer should be pulled in by graph neighbors");
+  assert.equal(ExampleProjectActivatedGraph.nodes.some((node) => node.id === "experience:scope"), true, "project experience should activate through project relationship");
+  assert.ok(ExampleProjectActivatedGraph.nodes[0].activation > 0, "activated nodes should carry activation scores");
+  assert.ok(ExampleProjectActivatedGraph.nodes[0].whyActivated.length > 0, "activated nodes should explain why they were recalled");
   assert.equal(JSON.stringify(packet).includes(".codex/sessions/raw-backed.jsonl"), false, "runtime context must fail closed on raw-backed allowed-kind source refs");
   assert.equal(packet.items[0].rawSessionPolicy, "not_allowed", "runtime items should default to no raw-session reads");
   assert.equal(packet.items[0].memoryLayer, "hot", "project items should be tagged as hot memory");

@@ -225,6 +225,21 @@ function sortAndStripAgentRetrieveItems(items) {
     .map(({ _sortUpdatedAt, ...item }) => item);
 }
 
+function queryTypeAllowsColdLayer(queryType) {
+  return [
+    "thread_recovery",
+    "archive_candidate",
+    "runtime_diagnosis",
+    "old_thread_continuity",
+    "history_audit",
+  ].includes(String(queryType || "").trim());
+}
+
+function filterColdLayerForQueryType(items, request) {
+  if (queryTypeAllowsColdLayer(request.queryType)) return safeArray(items);
+  return safeArray(items).filter((item) => item.memoryLayer !== "cold");
+}
+
 function assembleAgentRetrieveContractResult(request, contractSources = {}, deps = {}) {
   const allItems = [];
   const pushBuiltItems = (records, buildItem, options = {}) => {
@@ -287,7 +302,7 @@ function assembleAgentRetrieveContractResult(request, contractSources = {}, deps
     }
   }
 
-  const sortedItems = sortAndStripAgentRetrieveItems(allItems);
+  const sortedItems = filterColdLayerForQueryType(sortAndStripAgentRetrieveItems(allItems), request);
   const trimmed = trimAgentResultsToBudget(sortedItems, request.tokenBudget, request.maxResults);
   return {
     items: trimmed.items,
@@ -331,9 +346,11 @@ module.exports = {
   buildAgentRetrieveCacheKey,
   collectAgentRetrieveContractSources,
   buildAgentRetrieveReadPlan,
+  filterColdLayerForQueryType,
   filterProjectRecordsForCEOFlow,
   filterCEOFlowRecords,
   normalizeAgentTokenEstimate,
+  queryTypeAllowsColdLayer,
   normalizeAgentRetrieveRequest,
   trimAgentResultsToBudget,
 };

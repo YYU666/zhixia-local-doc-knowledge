@@ -7,8 +7,8 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const helperPath = path.join(root, "codex-skills", "zhixia-local-docs", "scripts", "read-project-knowledge.cjs");
 
-function runHelper(workspace, args) {
-  const output = execFileSync(process.execPath, [helperPath, workspace, ...args], {
+function runHelper(workspace, aExampleProject) {
+  const output = execFileSync(process.execPath, [helperPath, workspace, ...aExampleProject], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
@@ -16,9 +16,9 @@ function runHelper(workspace, args) {
   return JSON.parse(output);
 }
 
-function runHelperFailure(workspace, args) {
+function runHelperFailure(workspace, aExampleProject) {
   assert.throws(
-    () => execFileSync(process.execPath, [helperPath, workspace, ...args], {
+    () => execFileSync(process.execPath, [helperPath, workspace, ...aExampleProject], {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 1024 * 1024,
@@ -34,24 +34,28 @@ function writeFixture(workspace) {
   fs.mkdirSync(bundleDir, { recursive: true });
   fs.mkdirSync(docsDir, { recursive: true });
   fs.writeFileSync(
-    path.join(docsDir, "REFMUSE_GAME_STUDIO_CEO_RECOVERY_PACKET.md"),
-    "# Refmuse Game Studio CEO Recovery\n\n中文恢复摘要：旧 CEO 线程坏掉后，新线程先读这里继续项目。",
+    path.join(docsDir, "EXAMPLE_PROJECT_CEO_RECOVERY_PACKET.md"),
+    "# ExampleProject Studio CEO Recovery\n\n中文恢复摘要：旧 CEO 线程坏掉后，新线程先读这里继续项目。",
     "utf8",
   );
   fs.writeFileSync(
-    path.join(docsDir, "REFMUSE_GAME_STUDIO_CEO_TRANSCRIPT_EXTRACT.md"),
+    path.join(docsDir, "EXAMPLE_PROJECT_CEO_TRANSCRIPT_EXTRACT.md"),
     `# Giant Transcript Pointer\n\n${"transcript filler\n".repeat(60000)}DO_NOT_READ_TRANSCRIPT_TAIL`,
     "utf8",
   );
   fs.writeFileSync(
     path.join(docsDir, "PRD.md"),
-    "# PRD\n\nRefmuse game studio 是一个 2D 游戏与插件平台项目。",
+    "# PRD\n\nExampleProject Studio 是一个 2D 游戏与插件平台项目。",
     "utf8",
   );
   fs.writeFileSync(
     path.join(bundleDir, "retrieval-packet.md"),
     [
       "# Retrieval Packet",
+      "",
+      "## ExampleProject Current Accepted Engine Update",
+      "",
+      "Current accepted engine progress: runtime adapter and scene workbench are accepted product milestones.",
       "",
       "## Alpha Dispatch",
       "",
@@ -63,7 +67,17 @@ function writeFixture(workspace) {
   );
   fs.writeFileSync(
     path.join(bundleDir, "knowledge-items.md"),
-    "# Knowledge\n\n## Alpha Contract\n\nAlpha accepted contract rule with source-backed retrieval.",
+    [
+      "# Knowledge",
+      "",
+      "## Alpha Contract",
+      "",
+      "Alpha accepted contract rule with source-backed retrieval.",
+      "",
+      "## 老线程优化：ExampleProject-PROGRESS-DRIFT-AUDIT-AFTER-W45",
+      "",
+      "Guardian inventory found a CEO-created read-only audit thread past the cooling rule. This is maintenance evidence, not product progress.",
+    ].join("\n"),
     "utf8",
   );
   fs.writeFileSync(
@@ -122,34 +136,55 @@ function main() {
     assert.ok(context.items.length > 0, "runtime context should return compact items");
     assert.ok(context.items.every((item) => item.rawSessionPolicy === "not_allowed"), "runtime context must forbid raw-session defaults");
     assert.ok(context.sourceRefs.length > 0, "runtime context should preserve sourceRefs");
+    assert.equal(context.memoryMode, "layered", "runtime context should use layered memory mode");
+    assert.ok(context.memoryLayers.hot.count >= 1, "runtime context should expose hot working memory");
+    assert.ok(context.recallPlan.defaultReadOrder.includes("warm"), "recall plan should include warm long-term summaries");
+    assert.equal(context.recallPlan.coldLayer.defaultRead, false, "cold history must not be read by default");
+
+    const ExampleProjectProductContext = runHelper(workspace, [
+      "--runtime-context",
+      "--task-goal",
+      "ExampleProject current product engine status accepted UI modules next CEO action not thread maintenance",
+      "--query-type",
+      "project_resume",
+      "--limit",
+      "4",
+      "--json",
+    ]);
+    assert.match(ExampleProjectProductContext.items[0].title, /Current Accepted Engine/i, "product resume should rank accepted product progress before maintenance logs");
+    assert.doesNotMatch(ExampleProjectProductContext.items[0].title, /老线程优化|AUDIT/, "maintenance records must not outrank product memory for product queries");
+    assert.ok(
+      ExampleProjectProductContext.items.every((item) => item.memoryLayer !== "cold"),
+      "ordinary product queries should not include cold maintenance history by default",
+    );
 
     const recovery = runHelper(workspace, [
       "--recover-thread",
       "--thread-id",
-      "public-thread-id",
+      "11111111-2222-7333-8444-555555555555",
       "--thread-title",
-      "Refmuse game Studio CEO",
+      "ExampleProject Studio CEO",
       "--query",
-      "alpha refmuse recovery",
+      "alpha ExampleProject recovery",
       "--limit",
       "5",
       "--json",
     ]);
     assert.equal(recovery.schemaVersion, "zhixia.thread_recovery_packet.v1", "helper should expose ThreadRecoveryPacket schema");
     assert.equal(recovery.mode, "thread_recovery_packet", "helper recovery mode should be explicit");
-    assert.equal(recovery.thread.threadId, "public-thread-id", "recovery packet should preserve target threadId");
+    assert.equal(recovery.thread.threadId, "11111111-2222-7333-8444-555555555555", "recovery packet should preserve target threadId");
     assert.equal(recovery.vault.policy, "helper_metadata_only_no_vault_walk", "helper recovery must not walk Thread History Vault");
     assert.equal(recovery.performance.rawSessionBodyRead, false, "helper recovery must not read raw session bodies");
     assert.equal(recovery.performance.startsTimers, false, "helper recovery must not start background timers");
     assert.equal(recovery.safety.archiveCompactDeleteMoveRestore, false, "helper recovery must not archive/compact/delete/move/restore");
-    assert.ok(recovery.recommendedReadOrder.some((item) => /REFMUSE_GAME_STUDIO_CEO_RECOVERY_PACKET\.md$/.test(item.path)), "recovery should recommend local recovery docs");
+    assert.ok(recovery.recommendedReadOrder.some((item) => /EXAMPLE_PROJECT_CEO_RECOVERY_PACKET\.md$/.test(item.path)), "recovery should recommend local recovery docs");
     assert.equal(
-      recovery.recommendedReadOrder.some((item) => /REFMUSE_GAME_STUDIO_CEO_TRANSCRIPT_EXTRACT\.md$/.test(item.path)),
+      recovery.recommendedReadOrder.some((item) => /EXAMPLE_PROJECT_CEO_TRANSCRIPT_EXTRACT\.md$/.test(item.path)),
       false,
       "giant transcript documents must not be recommended for default reading",
     );
     assert.ok(
-      recovery.coldHistorySources.some((item) => /REFMUSE_GAME_STUDIO_CEO_TRANSCRIPT_EXTRACT\.md$/.test(item.path) && item.kind === "large_project_artifact_pointer"),
+      recovery.coldHistorySources.some((item) => /EXAMPLE_PROJECT_CEO_TRANSCRIPT_EXTRACT\.md$/.test(item.path) && item.kind === "large_project_artifact_pointer"),
       "giant transcript documents should remain as cold pointers",
     );
     assert.ok(recovery.warnings.includes("large_recovery_docs_pointer_only"), "giant recovery docs should produce pointer-only warning");

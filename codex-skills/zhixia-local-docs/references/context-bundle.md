@@ -87,7 +87,7 @@ Machine-readable provenance manifest:
 {
   "bundleId": "ctx-20260526093000",
   "exportedAt": "2026-05-26T09:30:00.000Z",
-  "workspacePath": "C:\\Users\\ROG\\Documents\\project",
+  "workspacePath": "C:\\Users\\example\\Documents\\project",
   "sources": [
     {
       "documentId": "doc-id",

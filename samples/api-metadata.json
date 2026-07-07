@@ -1,8 +1,7 @@
 {
   "name": "Local Doc Knowledge",
-  "version": "0.1.0",
-  "features": ["import", "search", "tags", "favorites", "export"],
-  "storage": "local JSON",
+  "version": "0.8.3",
+  "features": ["import", "search", "tags", "favorites", "export", "memory-runtime"],
+  "storage": "local SQLite",
   "privacy": "offline first"
 }
-

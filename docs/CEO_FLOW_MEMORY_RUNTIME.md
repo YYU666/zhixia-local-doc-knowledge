@@ -31,7 +31,7 @@ Use this hook when CEO Flow observes a runtime fact that future threads must not
 Supported event types:
 
 - `broken_thread`: a CEO/project-main/worker thread is unreadable, stream-broken, repeatedly empty, context-exhausted, stuck in reconnect/auto-compact loops, or fails with `max_output_tokens` / incomplete response.
-- `heartbeat_fuse`: a heartbeat, monitor, or wakeup loop was paused because it repeatedly targeted a broken or wasteful thread.
+- `heartbeat_fuse`: a heartbeat, monitor, or ExampleProjectup loop was paused because it repeatedly targeted a broken or wasteful thread.
 - `thread_takeover`: a clean replacement thread was designated for an old or broken thread.
 - `stale_lane_reference`: a roster, heartbeat, task card, or recovery packet points to a thread id that cannot be read or no longer resolves.
 - `task_checkpoint`, `user_rule_update`, `runtime_diagnosis`: compact operational facts that should appear in the next hot context packet. Model/reasoning drift, such as another lane changing CEO model or reasoning strength, should be recorded as `user_rule_update` and treated as a rule to preserve.
@@ -42,11 +42,11 @@ Request shape:
 {
   "eventType": "heartbeat_fuse",
   "severity": "warning",
-  "projectPath": "C:/Users/example/Documents/2D游戏项目",
+  "projectPath": "C:/Users/example/Documents/example-project",
   "threadId": "public-thread-id",
   "replacementThreadId": "optional-clean-takeover-thread-id",
-  "automationId": "rgs-ceo-harvest-post-43-wave",
-  "title": "RGS CEO heartbeat paused",
+  "automationId": "example-ceo-harvest-post-43-wave",
+  "title": "Example CEO heartbeat paused",
   "summary": "The heartbeat was waking a broken large CEO thread and should not be retried until a takeover packet is used.",
   "observedSignals": ["last_agent_message=null", "stream_disconnect", "high_token_empty_turn"],
   "decisions": ["Pause the heartbeat target."],
@@ -112,6 +112,7 @@ Response shape:
       "rebuildsGraph": false
     }
   },
+  "memoryMode": "layered",
   "project": {
     "path": "workspace root or null",
     "name": "project display name",
@@ -143,7 +144,17 @@ Response shape:
   "memoryLayers": {
     "hot": { "count": 1, "tokenEstimate": 120 },
     "warm": { "count": 2, "tokenEstimate": 520 },
+    "skill": { "count": 1, "tokenEstimate": 180 },
     "cold": { "count": 0, "tokenEstimate": 0 }
+  },
+  "recallPlan": {
+    "mode": "hot_warm_cold_skill_layered_recall",
+    "defaultReadOrder": ["hot", "warm", "skill"],
+    "coldLayer": {
+      "enabled": false,
+      "defaultRead": false,
+      "policy": "source_refs_only_until_explicit_recovery_or_evidence_gate"
+    }
   },
   "memoryGraph": {
     "mode": "bounded_association_graph",
@@ -167,6 +178,12 @@ Response shape:
 Rules:
 
 - Default output is compact and metadata-first.
+- Runtime context now uses layered recall:
+  - Hot: short-term working memory for current goal, active module, latest decisions, blockers, and next action.
+  - Warm: long-term project summary memory for PRD, architecture, accepted progress, design origin, module history, and stable source refs.
+  - Skill: procedural memory for experience cards, tool records, Skill candidates, and reusable workflows.
+  - Cold: raw/vault/thread-history evidence pointers only. Cold bodies are not read by default and require explicit recovery or evidence-gate escalation.
+- Product/project queries should prioritize product state and accepted progress. Thread maintenance, archive, Guardian, and old-thread optimization records should not outrank product memory unless the query type is `thread_recovery`, `archive_candidate`, or an explicit maintenance/recovery query.
 
 ## Hook: recover_thread(threadId/title/projectPath)
 
@@ -177,8 +194,8 @@ Request shape:
 ```json
 {
   "threadId": "public-thread-id",
-  "title": "Refmuse game Studio CEO",
-  "projectPath": "C:/Users/example/Documents/2D游戏项目",
+  "title": "Example Project CEO",
+  "projectPath": "C:/Users/example/Documents/example-project",
   "tokenBudget": 1600
 }
 ```

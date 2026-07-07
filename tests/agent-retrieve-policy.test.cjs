@@ -7,9 +7,11 @@ const {
   buildAgentRetrieveCacheKey,
   collectAgentRetrieveContractSources,
   buildAgentRetrieveReadPlan,
+  filterColdLayerForQueryType,
   filterCEOFlowRecords,
   normalizeAgentTokenEstimate,
   normalizeAgentRetrieveRequest,
+  queryTypeAllowsColdLayer,
   trimAgentResultsToBudget,
 } = require("../electron/agentRetrievePolicy.cjs");
 
@@ -72,6 +74,32 @@ assert.equal(
   trimAgentResultsToBudget(manyRankedItems, 4000, 5).items.length,
   5,
   "retrieval trimming should still enforce topK and never return an unbounded candidate set",
+);
+
+assert.equal(queryTypeAllowsColdLayer("architecture"), false, "ordinary architecture retrieval should not include cold history");
+assert.equal(queryTypeAllowsColdLayer("thread_recovery"), true, "thread recovery retrieval may include cold pointers");
+assert.deepEqual(
+  filterColdLayerForQueryType(
+    [
+      { id: "hot", memoryLayer: "hot" },
+      { id: "cold", memoryLayer: "cold" },
+      { id: "warm", memoryLayer: "warm" },
+    ],
+    { queryType: "task_dispatch" },
+  ).map((item) => item.id),
+  ["hot", "warm"],
+  "ordinary dispatch retrieval should filter cold maintenance/history pointers",
+);
+assert.deepEqual(
+  filterColdLayerForQueryType(
+    [
+      { id: "hot", memoryLayer: "hot" },
+      { id: "cold", memoryLayer: "cold" },
+    ],
+    { queryType: "thread_recovery" },
+  ).map((item) => item.id),
+  ["hot", "cold"],
+  "thread recovery retrieval should keep cold pointers without reading raw bodies",
 );
 
 const workspacePath = path.resolve("C:/Users/example/Documents/demo-project");
@@ -459,7 +487,7 @@ assert.ok(
   "ThreadLineageIndex retrieval must preserve archive/compact/restore/delete mutation boundary",
 );
 
-let persistedLineageArgs = null;
+let persistedLineageAExampleProject = null;
 const persistedLineageSources = collectAgentRetrieveContractSources(lineageOnlyRequest, {
   buildProjectRecords: () => contractProjectRecords,
   buildCEOFlowRecords: (records) => records.map((record) => ({
@@ -468,7 +496,7 @@ const persistedLineageSources = collectAgentRetrieveContractSources(lineageOnlyR
     workspacePaths: [record.rootPath],
   })),
   listThreadLineageIndexRecords: (options) => {
-    persistedLineageArgs = options;
+    persistedLineageAExampleProject = options;
     return [{
       id: "thread-lineage:persisted-alpha",
       kind: "thread_lineage_index",
@@ -487,7 +515,7 @@ const persistedLineageSources = collectAgentRetrieveContractSources(lineageOnlyR
   },
 });
 assert.deepEqual(
-  persistedLineageArgs,
+  persistedLineageAExampleProject,
   { projectPath: workspacePath, parentCeoThreadId: "019e-ceo", limit: 120 },
   "ThreadLineageIndex retrieval should request persisted lineage rows with scoped project/CEO metadata",
 );

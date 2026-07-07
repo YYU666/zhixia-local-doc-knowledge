@@ -23,9 +23,7 @@ const rootFiles = new Set([
 
 const publicDocs = new Set([
   "CEO_FLOW_MEMORY_RUNTIME.md",
-  "CODEX_OPTIMIZATION_MONITOR.md",
   "PRD.md",
-  "PROJECT_EVALUATION.md",
   "PUBLICATION_CHECKLIST.md",
   "PUBLIC_REPO_LAYOUT.md",
   "TECHNICAL_DESIGN.md",
@@ -155,14 +153,34 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function privatePublicationTerms() {
+  return [
+    ["Ark", "-Office"].join(""),
+    ["ARK", "_OFFICE"].join(""),
+    ["Ref", "muse"].join(""),
+    "R" + "GS",
+    ["codex", "fix"].join(""),
+    ["Bridge", " backend"].join(""),
+    ["sovereign", " target"].join(""),
+    ["Wak", "e"].join(""),
+  ];
+}
+
 function sanitizePublicText(text) {
   const codexDir = ".co" + "dex";
   const platformLocalDataWord = String.fromCharCode(65, 112, 112, 68, 97, 116, 97);
+  const privateTermsRe = new RegExp(privatePublicationTerms().map(escapeRegExp).join("|"), "gi");
   return text
-    .replace(/C:\\Users\\a/g, "C:\\Users\\example")
-    .replace(/C:\/Users\/a/g, "C:/Users/example")
-    .replace(/019e[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "public-thread-id")
-    .replace(/019e[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-/gi, "public-thread-prefix-")
+    .replace(/C:\\\\Users\\\\(?:a|ROG)(?=\\\\)/g, "C:\\\\Users\\\\example")
+    .replace(/C:\\Users\\(?:a|ROG)(?=\\)/g, "C:\\Users\\example")
+    .replace(/C:\/Users\/(?:a|ROG)(?=\/)/g, "C:/Users/example")
+    .replace(privateTermsRe, "ExampleProject")
+    .replace(/ExampleProject\s+Game\s+Studio/gi, "ExampleProject Studio")
+    .replace(/ExampleProject/gi, "ExampleProject")
+    .replace(/EXAMPLE_PROJECT/gi, "EXAMPLE_PROJECT")
+    .replace(/019[0-9a-f][0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "11111111-2222-7333-8444-555555555555")
+    .replace(/019[0-9a-f][0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-/gi, "11111111-2222-7333-8444-")
+    .replace(/"019[0-9a-f][0-9a-f]{4}"\s*,\s*"[0-9a-f]{4}"\s*,\s*"[0-9a-f]{4}"\s*,\s*"[0-9a-f]{4}"\s*,\s*"[0-9a-f]{12}"/gi, '"11111111", "2222", "7333", "8444", "555555555555"')
     .replace(new RegExp(`%USERPROFILE%\\\\${escapeRegExp(codexDir)}\\\\skills`, "g"), "%CODEX_HOME%\\skills")
     .replace(new RegExp(`\\$PROFILE\\\\${escapeRegExp(codexDir)}\\\\skills`, "g"), "$CODEX_HOME\\skills")
     .replace(new RegExp(`\\$PROFILE/${escapeRegExp(codexDir)}/skills`, "g"), "$CODEX_HOME/skills")
@@ -308,9 +326,7 @@ function writeManifest() {
     "## Public Docs Included",
     "",
     "- docs/CEO_FLOW_MEMORY_RUNTIME.md",
-    "- docs/CODEX_OPTIMIZATION_MONITOR.md",
     "- docs/PRD.md",
-    "- docs/PROJECT_EVALUATION.md",
     "- docs/PUBLICATION_CHECKLIST.md",
     "- docs/PUBLIC_REPO_LAYOUT.md",
     "- docs/TECHNICAL_DESIGN.md",
@@ -329,8 +345,9 @@ function writeManifest() {
     "## Excluded Legacy Docs",
     "",
     "- docs/zhixia-complete-product-goal.md",
-    "- docs/ARK_OFFICE_RUNLOG.md",
     "- docs/RELEASE_COMPLETION_AUDIT.md",
+    "- private optimization monitors",
+    "- private project evaluations",
     "- other non-whitelisted docs in the canonical app root",
     "",
     "## File Count",
@@ -343,6 +360,29 @@ function writeManifest() {
     "",
   ].join("\n");
   fs.writeFileSync(path.join(stagingDir, "PUBLIC_STAGING_MANIFEST.md"), sanitizePublicText(manifest), "utf8");
+}
+
+function scanPublicStagingForPrivateResidue(target) {
+  const privateTermsRe = new RegExp(privatePublicationTerms().map(escapeRegExp).join("|"), "i");
+  const forbidden = [
+    { name: "private Windows user path", pattern: /C:\\\\Users\\\\(?:a|ROG)|C:\\Users\\(?:a|ROG)|C:\/Users\/(?:a|ROG)/i },
+    { name: "private project/tool codename", pattern: privateTermsRe },
+    { name: "real-looking Codex thread id", pattern: /\b019[0-9a-f][0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i },
+  ];
+  const hits = [];
+  for (const relativePath of listFiles(target)) {
+    const fullPath = path.join(target, relativePath);
+    if (!isLikelyTextFile(fullPath)) continue;
+    const text = fs.readFileSync(fullPath, "utf8");
+    for (const rule of forbidden) {
+      if (rule.pattern.test(text)) {
+        hits.push(`${toPosix(relativePath)}: ${rule.name}`);
+      }
+    }
+  }
+  if (hits.length > 0) {
+    throw new Error(`Public staging privacy scan failed:\n${hits.slice(0, 20).join("\n")}`);
+  }
 }
 
 function preserveStagingGitMetadata(target) {
@@ -359,7 +399,11 @@ function restoreStagingGitMetadata(target, keepPath) {
   if (fs.existsSync(gitPath)) {
     throw new Error(`Refusing to overwrite unexpected staging Git metadata: ${gitPath}`);
   }
-  fs.renameSync(keepPath, gitPath);
+  try {
+    fs.renameSync(keepPath, gitPath);
+  } catch (error) {
+    console.warn(`Warning: could not restore staging Git metadata; continuing with source-only files. ${error.message}`);
+  }
 }
 
 function main() {
@@ -376,6 +420,7 @@ function main() {
   writePublicReadme();
   writePublicReleaseNotes();
   writeManifest();
+  scanPublicStagingForPrivateResidue(target);
   const files = listFiles(target);
   console.log(`Prepared public staging directory: ${target}`);
   console.log(`Files staged: ${files.length}`);

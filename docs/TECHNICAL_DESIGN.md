@@ -13,6 +13,22 @@
 - 仓库内配套 `codex-skills/zhixia-local-docs` Skill，用于指导 Codex 使用知匣导出的上下文包并产出可被知匣扫描的文档。
 - 应用图标来自 `assets/icon.svg`，构建前生成 `assets/icon.png` 和 `assets/icon.ico`，Windows 打包使用 `assets/icon.ico`。
 
+## 信任边界和安全收口
+
+2026-07 外部审计后，主进程新增统一安全策略模块 `electron/securityPolicy.cjs`，用于把渲染进程输入先收口再进入数据库、AI Provider、项目记忆写入和 Guardian 操作。
+
+已落实的边界：
+
+- `settings:update` 不再无条件合并任意键；只接受白名单设置键，并按类型归一化。未知键会被拒绝并写入返回状态。
+- AI Provider Base URL 必须是 HTTPS 且属于可信 host；默认 Base URL 为 `https://api.deepseek.com`，默认模型为 `deepseek-chat`。这样可以避免把用户文档正文和本机保存的 API Key 转发到任意 HTTP、内网或攻击者端点。
+- `knowledge:generate`、项目摘要 Skill、工具资产扫描等会写入或读取项目目录的入口必须落在已导入或已扫描得到的 registered workspace 白名单内，不能只凭渲染进程传入的任意 `projectPath` 和 `pathExists` 通过。
+- Electron 窗口显式启用 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`；主窗口响应头注入 CSP；`setWindowOpenHandler` 默认拒绝新窗口；`will-navigate` 阻止离开应用本地页面；`setPermissionRequestHandler` 默认拒绝权限请求。
+- `codexGuardian:cleanLogs`、`optimizeThread`、`compactThread`、`generateArchiveQueue` 等会清理、瘦身或生成归档队列的 IPC 必须带用户确认信号；前端只在用户主动按钮流程中传递确认。
+- Guardian 默认脚本路径改为应用自有 `userData\tools\codex-history-guardian.ps1`，避免公开源码和安装包默认指向维护者私有目录。开发者仍可用 `ZHIXIA_CODEX_GUARDIAN_SCRIPT` 环境变量覆盖。
+- 公开 staging 脚本从文件级白名单扩展为文件级排除、内容级净化和 staging 隐私扫描，覆盖转义 Windows 路径、真实用户目录、真实形态 Codex thread id、私有项目/工具代号和私有运行记录。
+
+这些修复不能替代后续架构拆分。`electron/main.cjs` 和 `src/App.tsx` 仍然偏大，IPC、DB、AI 客户端、Guardian 桥和 UI 状态需要继续拆成更小模块，避免信任边界再次散落到单个万行文件里。
+
 ## 数据流
 
 1. 用户点击导入。
@@ -82,7 +98,7 @@
 - `skill:reveal`：打开用户 Codex skills 目录。
 - `runtimeMonitor:getSnapshot`：已实现只读 Codex-focused diagnostics snapshot，返回本机 agent 进程、Codex session/thread 元数据、知匣 vault/receipt/pointer 状态、observed facts、inferred attribution、uncertainty 和只读建议动作；当前不是 kill/cleanup/performance repair 接口。
 - `codexGuardian:autoIngestHistory`：启动后和一键安全减负前可运行 preservation-only 自动入库。启动自动入库使用 `startupBounded`，按最近目录优先、限制目录读取和 file stat 数量，并在达到批次上限后提前停止，避免为了启动小批次遍历/排序整棵 `.codex\sessions` 历史树；用户主动的一键安全减负仍可请求更大批次。该流程只扫描本机 `.codex\sessions` 元数据路径、复制 session 到知匣 Thread History Vault、校验 SHA-256、写 `latest.json` / hot-warm-cold manifest / memory pointer / auto-ingest index；不会 compact、archive、move、delete、restore 或修改 Codex session 文件。未变化的 threadId/source path/size/mtime/hash 会返回 already-preserved，最近写入的线程只标记 `preserved_not_archive_ready`，不能进入归档队列。
-- Memory Runtime contract IPC 已作为主进程薄层接入：`memoryRuntime:retrieveContext` 先用 `MemoryRouterPlan` 判断 `project_resume / task_dispatch / review_gate / thread_recovery / runtime_diagnosis / tool_skill_lookup` 等任务类型，再把现有 `retrieveAgentContext` 限制到小 `topK`、小 `tokenBudget`、`timeBudgetMs` 和允许的 compact kinds，最后包装为 RuntimeContextPacket。返回包现在包含 `routerPlan`、`hotState`、`memoryLayers`、`memoryGraph`、`activatedMemory`、`performance`、`cacheKey` 和 `expiresAt`。`memoryGraph` 由两部分合并：packet-local sourceRef 小图，以及 `memory_graph_nodes` / `memory_graph_edges` 持久关系表的 bounded activation 结果。持久节点/边从 `knowledge_items`、`experience_cards`、`thread_lineage_index` 派生，按 project/thread/sourceRef upsert；`memoryRuntime:activateMemory` 可显式按 taskGoal/projectPath/threadId 激活相关节点并做一跳邻居扩散。`memoryRuntime:observeEvent` 是事件触发的短期热记忆入口：主进程把 `broken_thread / heartbeat_fuse / thread_takeover / stale_lane_reference / task_checkpoint / user_rule_update / runtime_diagnosis` 写入 `memory-runtime\runtime-events` JSON，并同步 upsert `WorkingMemoryRecord`；`retrieve_context` 会在普通 retrieval 前读取匹配 project/thread 的最近 runtime events 与 working memory，转换为 `runtime_event` hot items 合并进 packet。闭环接入点现在包括：`recoverMemoryRuntimeThread` 生成恢复包后写入恢复/接管事件并返回 `runtimeEventWriteback`，`getRuntimeMonitorSnapshot` 从已计算的 recommendations 写入 bounded 运行诊断事件并返回 `runtimeEventWriteback`；两者都不新增扫描，可用 `observeRuntimeEvent=false` 或 `observeRuntimeEvents=false` 做 dry-run。该图谱和事件层都不启动后台定时器、不扫描 Vault、不读取全文/raw body、不运行 AI 摘要、不在启动时重建全图；底层允许 metadata-first bounded row reads，因此不能宣传成“绝对不读数据库 metadata”。如果检索耗时超过 `timeBudgetMs`，packet 会标记 `partial=true` 并附 `memory_router_time_budget_exceeded_partial` warning。`memoryRuntime:retrievePrecedent` 只从 accepted/reviewable KnowledgeItem、ExperienceCard、ProjectArtifact、ToolSkillRecord、SkillCandidate 和 hot/warm thread-history pointer metadata 中取 bounded precedent；默认不读取 raw session body、巨型 Markdown、截图或 base64；即使 allowed kind 携带 raw-session/secret sourceRef，也会 fail-closed 丢弃该 item。`memoryRuntime:writebackEvidence` 只把 compact evidence JSON 写入应用自有 `memory-runtime\evidence-writeback` inbox 并返回 hash receipt；无 sourceRefs 会降级为 candidate/review，raw-session、secret、archive/compact/delete/move/restore、install/execute/public-export 意图会 fail-closed。accepted 且 source-backed 的 reusablePattern / `writeback.flowSkillCandidate` 现在会生成私有 `memory-runtime\flowskill-candidates` review-only FlowSkill-ready packet，可通过 `memoryRuntime:listFlowSkillCandidates` 只读检查；该队列幂等按 task/input hash 覆盖，不运行 FlowSkill capture/promote/export/install，不公开导出，也不授权安装/执行。`WorkingMemoryRecord` 通过 `upsert/list/close` IPC 保存短期任务状态，`memoryRuntime:promoteMemory` 只排队 Memory/Experience/FlowSkill candidate metadata，不安装、导出或执行 FlowSkill。
+- Memory Runtime contract IPC 已作为主进程薄层接入：`memoryRuntime:retrieveContext` 先用 `MemoryRouterPlan` 判断 `project_resume / task_dispatch / review_gate / thread_recovery / runtime_diagnosis / tool_skill_lookup` 等任务类型，再把现有 `retrieveAgentContext` 限制到小 `topK`、小 `tokenBudget`、`timeBudgetMs` 和允许的 compact kinds，最后包装为 RuntimeContextPacket。返回包现在包含 `memoryMode=layered`、`routerPlan`、`hotState`、`memoryLayers`、`recallPlan`、`memoryGraph`、`activatedMemory`、`performance`、`cacheKey` 和 `expiresAt`。分层语义固定为 Hot 短期工作记忆、Warm 项目长期摘要记忆、Skill 程序性经验/工具记忆、Cold 长历史/Thread History Vault/raw session 指针。普通产品任务默认只读 Hot/Warm/Skill；Cold 只在 `thread_recovery`、`archive_candidate` 或显式恢复/证据门禁中作为 sourceRefs 返回，raw/vault 正文仍默认不读。`memoryGraph` 由两部分合并：packet-local sourceRef 小图，以及 `memory_graph_nodes` / `memory_graph_edges` 持久关系表的 bounded activation 结果。持久节点/边从 `knowledge_items`、`experience_cards`、`thread_lineage_index` 派生，按 project/thread/sourceRef upsert；`memoryRuntime:activateMemory` 可显式按 taskGoal/projectPath/threadId 激活相关节点并做一跳邻居扩散。`memoryRuntime:observeEvent` 是事件触发的短期热记忆入口：主进程把 `broken_thread / heartbeat_fuse / thread_takeover / stale_lane_reference / task_checkpoint / user_rule_update / runtime_diagnosis` 写入 `memory-runtime\runtime-events` JSON，并同步 upsert `WorkingMemoryRecord`；`retrieve_context` 会在普通 retrieval 前读取匹配 project/thread 的最近 runtime events 与 working memory，转换为 `runtime_event` hot items 合并进 packet。闭环接入点现在包括：`recoverMemoryRuntimeThread` 生成恢复包后写入恢复/接管事件并返回 `runtimeEventWriteback`，`getRuntimeMonitorSnapshot` 从已计算的 recommendations 写入 bounded 运行诊断事件并返回 `runtimeEventWriteback`；两者都不新增扫描，可用 `observeRuntimeEvent=false` 或 `observeRuntimeEvents=false` 做 dry-run。该图谱和事件层都不启动后台定时器、不扫描 Vault、不读取全文/raw body、不运行 AI 摘要、不在启动时重建全图；底层允许 metadata-first bounded row reads，因此不能宣传成“绝对不读数据库 metadata”。如果检索耗时超过 `timeBudgetMs`，packet 会标记 `partial=true` 并附 `memory_router_time_budget_exceeded_partial` warning。`memoryRuntime:retrievePrecedent` 只从 accepted/reviewable KnowledgeItem、ExperienceCard、ProjectArtifact、ToolSkillRecord、SkillCandidate 和 hot/warm thread-history pointer metadata 中取 bounded precedent；默认不读取 raw session body、巨型 Markdown、截图或 base64；即使 allowed kind 携带 raw-session/secret sourceRef，也会 fail-closed 丢弃该 item。`memoryRuntime:writebackEvidence` 只把 compact evidence JSON 写入应用自有 `memory-runtime\evidence-writeback` inbox 并返回 hash receipt；无 sourceRefs 会降级为 candidate/review，raw-session、secret、archive/compact/delete/move/restore、install/execute/public-export 意图会 fail-closed。accepted 且 source-backed 的 reusablePattern / `writeback.flowSkillCandidate` 现在会生成私有 `memory-runtime\flowskill-candidates` review-only FlowSkill-ready packet，可通过 `memoryRuntime:listFlowSkillCandidates` 只读检查；该队列幂等按 task/input hash 覆盖，不运行 FlowSkill capture/promote/export/install，不公开导出，也不授权安装/执行。`WorkingMemoryRecord` 通过 `upsert/list/close` IPC 保存短期任务状态，`memoryRuntime:promoteMemory` 只排队 Memory/Experience/FlowSkill candidate metadata，不安装、导出或执行 FlowSkill。
 - Memory Runtime lifecycle probe：`tests/memory-runtime-lifecycle-e2e.test.cjs` 使用 policy helpers 和临时 app-owned storage 证明上述合同能串成单个本地循环；probe 覆盖 context / precedent / runtime event / working memory / writeback / private FlowSkill candidate listing / duplicate-safe writeback / no-source candidate downgrade，并断言默认输出不包含 raw_session item、raw session path 或巨型 Markdown 尾部。
 - Large-library startup performance：主进程默认 `documents:list` 只返回 metadata 和 `contentLength`，renderer 首屏不再接收所有文档正文；`documents:get` 负责按选中文档读取完整正文。启动 Codex history auto-ingest 改为首屏后延迟执行，使用 daily cadence 和 tiny bounded batch，仍只做 copy/hash/vault preservation。自动来源检测和递归 watcher 经过 performance-safe migration 默认关闭；用户开启 watcher 后，文件事件只围绕变更路径/根做 debounce 后轻量检查，不扫描全部 workspace roots。项目卡片由 `documentsByProject` map 派生，避免项目数乘文档数的重复过滤。
 - Project IA classifier：renderer 在已有 metadata/snippet 上对 workspace 分组做 deterministic classification：`project`、`lead`、`non_project`。高置信项目需要核心项目文档、多条 Codex 历史、知识/记忆或多个相关来源；依赖目录、构建产物、备份/vault、生成知识索引、截图/剪贴板/视频链接、单条导入资料和孤立工具记录会被降级。项目页只把 `project` 渲染成顶层卡片，`lead` 进入“待整理线索”折叠区，避免资料噪声污染项目 IA。
@@ -94,12 +110,13 @@
 - 项目知识约定：扫描、知识整理或 AutoFlow 导入后自动写入分层 `.codex-knowledge/` bundle：`project-resume.md`、`retrieval-packet.md/json`、`project-index.md/json`、`project-chunks.jsonl`、兼容短索引 `project-knowledge.md`、`project-sources.json`、`project-artifacts.json/md`、`knowledge-items.json/md`、`experience-cards.json/md` 和 `skill-candidates.md`。Codex Skill 优先读取 `project-resume.md` 和 `retrieval-packet.md/json`，再按 query 读取 project index/chunks、ProjectArtifact、任务级 `context.md`、知识条目、经验卡片和 Skill 候选；`project-knowledge.md` 不再承载完整历史或长摘录。
 - 工具资产导出约定：项目知识导出会写入 `.codex-knowledge/tool-skill-inventory.json` 和 `tool-skill-inventory.md`，内容只包含 compact 摘要、路径/source hash、用途、风险边界和确认状态，不包含 API key、token、完整环境变量或敏感配置正文。
 - 打包配置包含 `codex-skills/**/*`，确保 portable 和目录包都带有配套 Skill。
-- Skill 检索脚本：`codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs` 可从工作区读取 `.codex-knowledge/`，支持 `--query <text>`、`--limit <n>`、`--json`，默认优先返回 resume、retrieval packet、project index、知识/记忆/工具短项，只输出短摘录，供 Codex 低 token 调用。该 helper 也提供 Codex/CEO Flow lifecycle 模式：`--runtime-context` 生成 RuntimeContextPacket-shaped JSON，`--precedent` 生成 metadata-first precedent packet，`--writeback-dry-run --evidence-json` 生成 EvidenceWritebackPacket-like 预览；输出仍只使用 compact sourceRefs，默认不读取 raw session、巨型 Markdown 尾部、截图/base64 或凭据，也不运行 FlowSkill capture/promote/export/install。
+- Skill 检索脚本：`codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs` 可从工作区读取 `.codex-knowledge/`，支持 `--query <text>`、`--limit <n>`、`--json`，默认优先返回 resume、retrieval packet、project index、知识/记忆/工具短项，只输出短摘录，供 Codex 低 token 调用。该 helper 也提供 Codex/CEO Flow lifecycle 模式：`--runtime-context` 生成 layered RuntimeContextPacket-shaped JSON，`--precedent` 生成 metadata-first precedent packet，`--writeback-dry-run --evidence-json` 生成 EvidenceWritebackPacket-like 预览；输出仍只使用 compact sourceRefs，默认不读取 raw session、巨型 Markdown 尾部、截图/base64 或凭据，也不运行 FlowSkill capture/promote/export/install。普通产品查询会提升 accepted product/project progress，降权 Guardian/归档/老线程优化等维护记录，避免维护日志盖过项目主线。
 
 ## 知识条目和 AI 整理
 
 - 默认能力是本地启发式整理：按标题、摘要、正文、标题行、项目路径和标签推断 category，并生成 compact summary/body。
-- 可选 AI 能力使用 OpenAI 兼容 `/chat/completions`，默认 Base URL 为 `https://api.deepseek.com`，模型可在设置页修改。
+- 可选 AI 能力使用 OpenAI 兼容 `/chat/completions`，默认 Base URL 为 `https://api.deepseek.com`，默认模型为 `deepseek-chat`，模型可在设置页修改。
+- AI Provider 仍是显式用户行为：未配置 API Key 时不会联网；点击测试连接或 AI 整理时才会调用。调用会发送待整理文档的短上下文给配置的可信 Provider，因此 UI、README 和 SECURITY 必须把“默认本地、AI 模式会把文本发给第三方”并列说明。
 - AI prompt 明确要求输出 JSON、限制 summary/body 长度、禁止输出密钥、token、password、session 或聊天全文。
 - 如果 AI 调用失败或未配置 API Key，主进程会降级为本地整理并把 `status=fallback`、短错误原因写入条目，用户仍能看到结果。
 - `knowledge-items.md/json` 只导出 compact 摘要和来源指针，不把完整文档正文写入 `.codex-knowledge/`。
@@ -182,7 +199,7 @@ Agent Runtime Monitor 已实现 Codex-focused read-only MVP，并采用平台适
 - 对 Electron renderer CPU 的 threadId 归因必须给出置信度。Codex 进程命令行通常不含 threadId，因此只能结合 active thread、最近写入、systemError、session 增长和 UI 状态推断。
 - 所有建议动作默认只读。结束进程、清理日志、恢复 session、compact-session 等动作必须走显式用户授权和既有安全合同。
 
-详细产品和验收设计见 `docs/AGENT_RUNTIME_MONITOR_DESIGN.md`。
+详细产品和验收设计保留在维护者工作目录的 `docs/AGENT_RUNTIME_MONITOR_DESIGN.md`。该文件默认不进入 source-only public staging；公开仓库应以本节和 `docs/CEO_FLOW_MEMORY_RUNTIME.md` 作为稳定说明，避免发布含私有运行证据的原始设计日志。
 
 ## 项目记忆回填与归档治理
 
@@ -220,7 +237,7 @@ Agent Runtime Monitor 已实现 Codex-focused read-only MVP，并采用平台适
 - Archive Candidate 会归一化 Guardian optimized envelope、compact receipt、vault manifest/source refs 和 memory pointer 证据；如果 compact receipt 明确 `thread_store_compatible=false`，候选必须 fail-closed 为 `compact_receipt_incompatible`。
 - 性能收益按证据表达。归档可能降低线程列表、session store 和长历史载入压力，但 Electron renderer CPU、鼠标卡顿和系统负载不能只按线程大小归因，Agent Runtime Monitor 必须显示事实、推断和置信度。
 
-详细规划见 `docs/PROJECT_MEMORY_AND_ARCHIVE_PLAN.md`。
+详细规划保留在维护者工作目录的 `docs/PROJECT_MEMORY_AND_ARCHIVE_PLAN.md`。该文件默认不进入 source-only public staging；公开仓库应避免链接到未发布的内部 runlog。
 
 ## Agent 检索扩容策略
 
@@ -269,6 +286,18 @@ MVP 规则：
 - `build/installer.nsh` 还接入安装向导自定义页，默认不勾选 Skill 安装；用户勾选后安装阶段调用 `--install-skill-and-quit`。
 - 升级安装时 electron-builder 会给旧卸载器传 `/KEEP_APP_DATA`，自定义卸载脚本检测到该参数后保留用户知识库数据。
 - 当前未做代码签名，分发到新机器时需要接受 Windows 安全提示。
+
+## 公开发布和已知技术债
+
+知匣可以作为 CEO Flow 官方本地 Memory Runtime 的 source-only 开源仓库发布，但不能直接上传维护者当前工作目录。公开发布必须通过 `npm run prepare:public` 生成 `public-staging\zhixia-local-doc-knowledge`，并只发布 staging 目录。
+
+当前仍需公开说明的限制：
+
+- 产品是中文优先桌面工具，尚无 i18n/locale 架构。
+- `sql.js` 仍有整库导出成本，适合个人/小团队本地知识库；超大库需要未来迁移到原生 SQLite、分片索引或后台 worker。
+- 前端仍有进一步性能债：主列表虚拟化、搜索防抖、更多真实行为测试和更细组件拆分尚未完成。
+- Memory Runtime 图谱是 bounded metadata activation，不是云端神经网络或无限召回系统；它默认优先 Hot/Warm/Skill，Cold 长历史必须通过恢复/审计等显式门禁读取 source pointer。
+- 公开仓库不应宣称完整解决大型团队知识图谱、跨端同步、自动归档闭环或国际化产品化。当前定位是可运行、本地优先、可审计的 CEO Flow 记忆运行时和个人知识库底座。
 
 ## 支持格式
 

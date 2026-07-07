@@ -13,7 +13,7 @@ const {
 async function main() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "zhixia-auto-ingest-"));
   try {
-    const threadId = ["019ed340", "b742", "7733", "9b1e", "b8af8429fd4d"].join("-");
+    const threadId = ["11111111", "2222", "7333", "8444", "555555555555"].join("-");
     const sessionsRoot = path.join(root, ".codex", "sessions", "2026", "06", "17");
     const vaultRoot = path.join(root, "codex-history-vault");
     await fs.mkdir(sessionsRoot, { recursive: true });
@@ -23,14 +23,14 @@ async function main() {
         type: "session_meta",
         thread_id: threadId,
         cwd: path.join(root, ".codex", "worktrees", "de33", "2D游戏项目"),
-        forked_from_id: "public-thread-id",
+        forked_from_id: "11111111-2222-7333-8444-555555555555",
       }),
       JSON.stringify({
         type: "message",
         role: "user",
         content: "# AGENTS.md instructions\n\n<INSTRUCTIONS>\n这些是启动规则，不应该出现在项目摘要里。\n</INSTRUCTIONS>\n<environment_context>workspace</environment_context>\n我想做一个2D游戏，但是我不会那些2D游戏的引擎。",
       }),
-      JSON.stringify({ type: "message", role: "assistant", content: "Refmuse Game Studio（RGS）可以作为项目代号。" }),
+      JSON.stringify({ type: "message", role: "assistant", content: "Example Studio 可以作为项目代号。" }),
     ].join("\n"), "utf8");
     const oldTime = new Date("2026-06-10T08:00:00.000Z");
     await fs.utimes(sessionPath, oldTime, oldTime);
@@ -38,9 +38,8 @@ async function main() {
     assert.equal(extractThreadIdFromSessionPath(sessionPath), threadId, "thread id should be parsed from Codex rollout session paths");
     const inferred = await inferCodexSessionMetadata(sessionPath, { threadId, maxPrefixBytes: 64 * 1024, maxPrefixLines: 20 });
     assert.match(inferred.projectPath, /2D游戏项目/, "bounded prefix metadata should keep the project path clue");
-    assert.match(inferred.inferredTitle, /Refmuse Game Studio|2D游戏项目/, "bounded prefix metadata should infer a useful title");
-    assert.ok(inferred.searchTerms.includes("Refmuse Game Studio"), "bounded prefix metadata should extract product aliases");
-    assert.ok(inferred.searchTerms.includes("RGS"), "bounded prefix metadata should extract short aliases");
+    assert.match(inferred.inferredTitle, /Example Studio|2D游戏项目/, "bounded prefix metadata should infer a useful title");
+    assert.ok(inferred.searchTerms.includes("Example Studio"), "bounded prefix metadata should extract generic project aliases");
     assert.match(inferred.firstUserMessage, /2D游戏/, "bounded prefix metadata should extract the first user goal");
     assert.doesNotMatch(inferred.firstUserMessage, /AGENTS|INSTRUCTIONS|environment_context/, "bounded prefix metadata should strip injected startup context");
 
@@ -63,11 +62,11 @@ async function main() {
     assert.equal(manifest.originalSha256, manifest.copiedSha256, "vault copy should be SHA-256 verified");
     assert.equal(manifest.layers.hot.retrieval, "same_thread_resume_pointer", "manifest should include hot summary evidence");
     assert.equal(manifest.layers.warm.retrieval, "same_project_or_keyword_match", "manifest should include warm summary evidence");
-    assert.match(manifest.title, /Refmuse Game Studio|2D游戏项目/, "manifest title should be inferred from bounded prefix clues");
+    assert.match(manifest.title, /Example Studio|2D游戏项目/, "manifest title should be inferred from bounded prefix clues");
     assert.match(manifest.projectPath, /2D游戏项目/, "manifest projectPath should be inferred without reading the full session");
-    assert.match(manifest.layers.warm.summary, /Refmuse Game Studio|RGS|2D游戏项目/, "warm layer should be keyword searchable");
+    assert.match(manifest.layers.warm.summary, /Example Studio|2D游戏项目/, "warm layer should be keyword searchable");
     assert.doesNotMatch(manifest.summary, /AGENTS|INSTRUCTIONS|environment_context/, "manifest summary should not expose injected startup context as the user goal");
-    assert.ok(manifest.searchTerms.includes("Refmuse Game Studio"), "manifest should retain searchable aliases");
+    assert.ok(manifest.searchTerms.includes("Example Studio"), "manifest should retain searchable aliases");
     assert.equal(manifest.policy.mutatesCodexSessionFiles, false, "manifest policy should preserve source-session boundary");
 
     const second = await autoIngestCodexSessions({
@@ -83,7 +82,7 @@ async function main() {
     const vaultSessions = (await fs.readdir(threadDir)).filter((name) => /^session-.+\.jsonl$/.test(name));
     assert.equal(vaultSessions.length, 1, "unchanged session should have one vault copy");
 
-    const activeThreadId = ["019ec034", "b42a", "7fc3", "8963", "67d17a9b84ab"].join("-");
+    const activeThreadId = ["11111111", "2222", "7333", "8444", "555555555555"].join("-");
     const activeSessionPath = path.join(sessionsRoot, `rollout-2026-06-19T07-55-00-${activeThreadId}.jsonl`);
     await fs.writeFile(activeSessionPath, JSON.stringify({ type: "message", content: "active" }), "utf8");
     const activeTime = new Date("2026-06-19T07:55:00.000Z");
