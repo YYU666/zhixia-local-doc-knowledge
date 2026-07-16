@@ -53,7 +53,7 @@ CEO Flow 可以把知匣当作本地 Memory Runtime：
 
 ## 快速开始
 
-需要 Node.js 和 npm。首次克隆后安装依赖：
+源码开发和测试需要 Node.js 24+ 与 npm。安装版不要求用户单独安装 Node；Electron 41 已内置运行时。首次克隆后安装依赖：
 
 ```powershell
 npm install

@@ -1,5 +1,191 @@
 # 技术设计
 
+## Memory Core 集成设计（已交付）
+
+### 1. 组件边界
+
+| 层 | 主要模块 | 已实现职责 |
+| --- | --- | --- |
+| Authority Core | `electron/memoryAuthorityPolicy.cjs` | principal/capability、scope、生命周期、standing rule、HMAC authority receipt、replay/tamper/expiry/revocation gate |
+| Project memory | `electron/projectBrainPolicy.cjs` | ProjectBrain、ProjectAnchor、ModuleMemory、checkpoint、14-slot ledger、完整 mandatory pagination |
+| Formation | `electron/memoryFormationPolicy.cjs` | deterministic event normalization、episode/decision/constraint/checkpoint candidate、continuity patch |
+| Composition root | `electron/memoryCoreRuntime.cjs` | app-owned provenance、签名 key、两阶段形成、authority-first retrieval、receipt rehydrate、continuity status、diagnostics |
+| Sidecar | `electron/memoryRuntimeIndexStore.cjs` | `node:sqlite` WAL/FTS5、Memory Core 表、MemoryFact、trigger receipt、兼容迁移 |
+| Electron lifecycle | `electron/main.cjs` / `electron/preload.cjs` | 现有 Memory Runtime 生命周期、受控 IPC、显式扫描 backfill、UI 数据读取 |
+| Packaged helper | `codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs` | IPC 不可用时的 compact 只读适配器和 advisory sidecar 视图 |
+| CEO Flow contract | `docs/CEO_FLOW_MEMORY_RUNTIME.md` | 事件触发 Continuity Gate、角色覆盖、分页/失败/回退规则 |
+
+### 2. Authority Core 与不透明 provenance
+
+`createMemoryAuthorityTrustContext()` 创建应用组合根。内部签名 key、principal 注册表、project binding 和 authority receipt 注册表不放进可序列化对象；受信 principal、decision、envelope 和 standing rule 通过 `WeakMap` 绑定到同一 trust context。
+
+因此以下输入都不能取得权威能力：
+
+- renderer/IPC 传入的 `role=owner` 或 `trustedIdentity=true`；
+- JSON 序列化后再还原的 principal、receipt 或 trust context；
+- caller-supplied resolver、receipt id 列表或“已经验证”布尔值；
+- packaged helper 从 SQLite 读取的 payload。
+
+当前真值规则：
+
+- `accepted` / `curated` 必须有 direct source refs。
+- project scope 必须通过精确 project id/path binding。
+- owner 才能 approve/curate/supersede/revoke/expire；CEO、worker 和 reviewer 不能自批。
+- authority receipt 使用 HMAC-SHA256，对 principal、owner、action、transition、target、scope、project、有效期、nonce/sequence 生成精确 proof。
+- rehydrate 时重新计算 fingerprint、receipt id 和 proof，并验证 principal、owner、项目绑定、有效期、撤销和 supersede 状态。
+- target、action、scope 或 principal 任一变化都会使 replay 失败；无可信回执的 legacy current 记录降级为 review，不修改原存储。
+
+签名 key 位于应用拥有的私有状态目录，进程内读取，首次写入采用独占创建和限制权限；diagnostics、IPC 和 helper 均不返回 key 或 trust context id。Windows 上该实现当前依赖文件 ACL/权限语义，DPAPI 属于 P3。
+
+### 3. ProjectBrain 14-slot continuity
+
+固定槽位如下：
+
+```text
+project_identity
+original_product_goal
+architecture_anchors
+standing_rules
+active_modules
+current_phase
+accepted_progress
+open_tasks
+open_blockers
+latest_failures
+next_actions
+thread_lineage
+canonical_docs
+last_valid_checkpoint
+```
+
+ledger 只把 `accepted` / `curated`、direct-source-backed、exact-project 记录计入 filled。非权威记录进入 `reviewItems`；过期/currentness 不足进入 stale；单值槽出现多个不同 current 值或记录显式 conflict 时进入 conflict。
+
+`buildProjectContinuityPacket()` 将 mandatory/no-decay 项组成稳定 manifest：
+
+- manifest fingerprint 绑定完整 mandatory 描述符序列。
+- cursor 同时包含 fingerprint 和 offset；重复 cursor 调用结果确定，manifest 变化会使旧 cursor 无效。
+- 每页受 token、character、item 三重预算约束；过大的 mandatory 项降级为 pointer-only，但仍向前推进。
+- `nextCursor` 持续到全部 mandatory id 无重复、无遗漏返回。
+- app 侧 `getContinuityStatus()` 会循环读取所有 mandatory 页，受 `MAX_CONTINUITY_PAGES` 和 `MAX_CONTINUITY_MANDATORY_ITEMS` 硬上限保护。
+- `recoveryReady = pagination.complete && page.recoveryReady && unsatisfiedSlots.length === 0`。
+
+首屏 continuity packet 可以用于 UI 摘要，但不能替代完整分页状态。
+
+### 4. 两阶段 Episode Formation
+
+形成流程为：
+
+```text
+normalize lifecycle event
+  -> phase 1 buildMemoryFormationPlan(authorityOutcome=null)
+  -> deterministic preview + targetFingerprint
+  -> app-owned low-risk gate
+  -> exact signed memory_formation receipt
+  -> trusted verifier checks receipt binding
+  -> phase 2 buildMemoryFormationPlan(authorityOutcome=verified)
+  -> append receipt + upsert episode/decision/constraint/checkpoint
+```
+
+自动 accepted 只允许同时满足：app-owned provenance、deterministic、low risk、允许的事件类型、同 project/module direct source refs、material evidence、语义一致、无 review signal。renderer/公开 IPC 调用即使构造同形输入，也只能得到 review 且无 receipt。
+
+相同事件 fingerprint 使用稳定 nonce/sequence 生成同一 receipt id；receipt 和 episode 写入均支持 noop 幂等。revise、block、user correction、test failure、install/release 风险事件或来源不足不会自动成为 current truth。
+
+### 5. Sidecar 表与迁移
+
+文件：应用私有 Memory Runtime 目录下的 `memory-runtime-index.sqlite`。打开参数：WAL、`synchronous=NORMAL`、100ms busy timeout。
+
+基础表：
+
+- `memory_search_items` + `memory_search_fts`：compact FTS5 索引。
+- `memory_runtime_trigger_receipts`：hook/query/project/thread、返回数、token、耗时、partial、warnings、source refs。
+- `memory_facts`：typed temporal fact、valid time、confidence、source refs、`supersededBy`。
+
+Memory Core sidecar 表：
+
+- `memory_principals`
+- `memory_project_bindings`
+- `memory_standing_rules`
+- `memory_authority_receipts`
+- `memory_project_brains`
+- `memory_project_anchors`
+- `memory_modules`
+- `memory_episodes`
+- `memory_decisions`
+- `memory_constraints`
+- `memory_project_checkpoints`
+
+所有 Memory Core 表共用 compact metadata 列：`id`、`projectId`、`scopeKey`、`status`、`type`、`updatedAt`、`validFrom`、`validTo`、`createdAt`、`fingerprint`、`payloadJson`、`contentHash`。payload 最大 64 KiB，禁止 raw/body/content/transcript/session/blob/base64/secret/credential 等字段，结构遍历超限也 fail closed。
+
+迁移策略：
+
+- 缺表直接创建；缺列使用 `ALTER TABLE ADD COLUMN`；索引幂等创建。
+- `id` 不是唯一 TEXT primary key 时拒绝 destructive rebuild。
+- authority receipt legacy migration 在 `BEGIN IMMEDIATE` 内解析 compact payload、验证 exact receipt proof、检查重复 proof、回填 fingerprint，再建立 partial unique index。
+- 迁移中发现重复 proof、不明 fingerprint、不安全 payload 或超限 payload 时回滚，不留下半迁移状态。
+
+### 6. 现有 Memory Runtime 生命周期与 IPC
+
+preload 已暴露并由主进程注册：
+
+- `memoryRuntime:retrieveContext`
+- `memoryRuntime:retrievePrecedent`
+- `memoryRuntime:recoverThread`
+- `memoryRuntime:observeEvent`
+- `memoryRuntime:writebackEvidence`
+- `memoryRuntime:upsertWorkingMemory` / `listWorkingMemory` / `closeWorkingMemory`
+- `memoryRuntime:listFacts` / `listTriggerReceipts`
+- `memoryRuntime:evaluateBenchmark`
+- `memoryRuntime:getCoreDiagnostics`
+- `memoryRuntime:listCoreReviewQueue`
+- `memoryRuntime:getContinuityStatus` / `getProjectContinuity`
+- `memoryRuntime:promoteMemory`
+
+读取路径使用 `getExistingMemoryCoreRuntime()`：如果私有状态尚未初始化，返回 `not_ready`，不创建 key、sidecar 或项目记录。写入/显式 seed 路径才调用 composition root 初始化。
+
+hybrid retrieval 顺序为 authority filter -> bounded FTS5/BM25F/graph relevance -> packet decoration。Memory Core、MemoryFact、Hot/Warm/Skill/Cold 路由和现有 RuntimeContextPacket 保持兼容。
+
+### 7. 显式扫描 backfill
+
+`codex:scanWorkspace` 是 Memory Core 项目 seed 的显式入口，调用 `scanCodexWorkspacePath(..., { seedMemoryCore: true })`。文件 watcher 的后续扫描不会传入该标志，因此不会在后台自动创建或提升 ProjectBrain。
+
+seed 输入只包含原始文档 metadata：绝对 source path、content hash、artifact type、mtime。排除生成的 `.codex-knowledge`、raw/vault/session/JSONL、图片、解析失败文件和正文。时间使用最新原始文件 mtime，不使用扫描时钟；未人工确认时 phase 为 null、modules 为空，只建立 ProjectBrain 和 identity anchor。稳定 id 使重复扫描 noop、源变化 update。
+
+### 8. Packaged helper
+
+helper 模式包括：普通 query、`--runtime-context`、`--precedent`、`--recover-thread`、`--ceo-takeover`、`--thread-pressure`、`--writeback-dry-run`、`--continuity-status`、`--memory-review-queue` 和 `--memory-diagnostics`。
+
+helper 对 sidecar 只读：不修改 schema、主数据库或 WAL，不携带 receipt proof/trust context，不读取 raw session body。continuity cursor 带 manifest digest，可检测篡改并顺序分页；每表读取和页大小有硬上限。
+
+关键限制：helper 无法调用 app 内部 authority verifier，所以从 sidecar 读出的 current record 统一标为 `authorityVerification=unavailable` / advisory。helper continuity 的 `recoveryReady` 固定为 `false`；`pagination.complete=true` 只表示 helper 已读完其 bounded manifest，不表示完整恢复已经认证。
+
+### 9. CEO Flow Continuity Gate
+
+CEO Flow 负责触发时机，知匣负责 continuity 数据与验证。触发事件包括 bootstrap/takeover/recovery、新模块/波次/writer lane、改变原始目标/架构/阶段/发布方向的重大 accept，以及用户报告方向漂移或错误恢复信心。
+
+该 gate 不在每回合、普通 callback polling 或 heartbeat 中运行。CEO 完整恢复必须读取 14 槽 mandatory manifest 的所有页；worker/reviewer 使用角色子集。分页提前停止、cursor 无效、source 截断、schema/provider 失败时必须返回 partial，并禁止 full-recovery claim。
+
+### 10. 性能和隐私不变量
+
+- 无 Memory Core heartbeat、分钟级定时检索或常驻 embedding。
+- 只读 diagnostics/continuity 在未初始化时不创建私有状态。
+- 应用启动不扫描全部 Memory Core 表、不重建图、不读取 vault/raw history。
+- 默认召回不读取 raw session、完整聊天、巨型 Markdown、图片/base64、凭据或长日志。
+- Cold 层默认只返回 source refs，正文读取需要显式窄范围 recovery/evidence gate。
+- 所有检索和写入保持 bounded；sidecar 锁失败不应拖垮主检索结果。
+
+### 11. 当前 UI
+
+项目记忆页已实现只读集成：首次打开项目时并行读取 diagnostics、完整 continuity status、continuity 首屏和 8 条 review queue；展示覆盖率、恢复状态、14 槽、可信摘要、待复核预览和一次性 bounded recall reason。智能优化页展示 trigger receipts、MemoryFact 当前/历史数量和本次检索性能。
+
+项目记忆页不直接 approve/reject/merge，也不展示 signing key、trust context、真实本机内部路径或 helper 的伪 recovery-ready。人工治理继续由专门治理入口承担。
+
+### 12. 已知 P3
+
+- `node:sqlite` 仍是 experimental API。
+- Windows key protection 当前为私有目录 + ACL/权限模式，未使用 DPAPI。
+- packaged helper 无法独立认证完整 continuity recovery。
+- 大型 continuity 已 bounded，但仍需把完整分页延迟稳定到更低产品目标。
+
 ## 架构
 
 知匣采用 Electron + React + Vite：
@@ -100,6 +286,7 @@
 - `codexGuardian:autoIngestHistory`：启动后和一键安全减负前可运行 preservation-only 自动入库。启动自动入库使用 `startupBounded`，按最近目录优先、限制目录读取和 file stat 数量，并在达到批次上限后提前停止，避免为了启动小批次遍历/排序整棵 `.codex\sessions` 历史树；用户主动的一键安全减负仍可请求更大批次。该流程只扫描本机 `.codex\sessions` 元数据路径、复制 session 到知匣 Thread History Vault、校验 SHA-256、写 `latest.json` / hot-warm-cold manifest / memory pointer / auto-ingest index；不会 compact、archive、move、delete、restore 或修改 Codex session 文件。未变化的 threadId/source path/size/mtime/hash 会返回 already-preserved，最近写入的线程只标记 `preserved_not_archive_ready`，不能进入归档队列。
 - Memory Runtime contract IPC 已作为主进程薄层接入：`memoryRuntime:retrieveContext` 先用 `MemoryRouterPlan` 判断 `project_resume / task_dispatch / review_gate / thread_recovery / runtime_diagnosis / tool_skill_lookup` 等任务类型，再把现有 `retrieveAgentContext` 限制到小 `topK`、小 `tokenBudget`、`timeBudgetMs` 和允许的 compact kinds，最后包装为 RuntimeContextPacket。返回包现在包含 `memoryMode=layered`、`routerPlan`、`hotState`、`memoryLayers`、`recallPlan`、`memoryGraph`、`activatedMemory`、`performance`、`cacheKey` 和 `expiresAt`。分层语义固定为 Hot 短期工作记忆、Warm 项目长期摘要记忆、Skill 程序性经验/工具记忆、Cold 长历史/Thread History Vault/raw session 指针。普通产品任务默认只读 Hot/Warm/Skill；Cold 只在 `thread_recovery`、`archive_candidate` 或显式恢复/证据门禁中作为 sourceRefs 返回，raw/vault 正文仍默认不读。`memoryGraph` 由两部分合并：packet-local sourceRef 小图，以及 `memory_graph_nodes` / `memory_graph_edges` 持久关系表的 bounded activation 结果。持久节点/边从 `knowledge_items`、`experience_cards`、`thread_lineage_index` 派生，按 project/thread/sourceRef upsert；`memoryRuntime:activateMemory` 可显式按 taskGoal/projectPath/threadId 激活相关节点并做一跳邻居扩散。`memoryRuntime:observeEvent` 是事件触发的短期热记忆入口：主进程把 `broken_thread / heartbeat_fuse / thread_takeover / stale_lane_reference / task_checkpoint / user_rule_update / runtime_diagnosis` 写入 `memory-runtime\runtime-events` JSON，并同步 upsert `WorkingMemoryRecord`；`retrieve_context` 会在普通 retrieval 前读取匹配 project/thread 的最近 runtime events 与 working memory，转换为 `runtime_event` hot items 合并进 packet。闭环接入点现在包括：`recoverMemoryRuntimeThread` 生成恢复包后写入恢复/接管事件并返回 `runtimeEventWriteback`，`getRuntimeMonitorSnapshot` 从已计算的 recommendations 写入 bounded 运行诊断事件并返回 `runtimeEventWriteback`；两者都不新增扫描，可用 `observeRuntimeEvent=false` 或 `observeRuntimeEvents=false` 做 dry-run。该图谱和事件层都不启动后台定时器、不扫描 Vault、不读取全文/raw body、不运行 AI 摘要、不在启动时重建全图；底层允许 metadata-first bounded row reads，因此不能宣传成“绝对不读数据库 metadata”。如果检索耗时超过 `timeBudgetMs`，packet 会标记 `partial=true` 并附 `memory_router_time_budget_exceeded_partial` warning。`memoryRuntime:retrievePrecedent` 只从 accepted/reviewable KnowledgeItem、ExperienceCard、ProjectArtifact、ToolSkillRecord、SkillCandidate 和 hot/warm thread-history pointer metadata 中取 bounded precedent；默认不读取 raw session body、巨型 Markdown、截图或 base64；即使 allowed kind 携带 raw-session/secret sourceRef，也会 fail-closed 丢弃该 item。`memoryRuntime:writebackEvidence` 只把 compact evidence JSON 写入应用自有 `memory-runtime\evidence-writeback` inbox 并返回 hash receipt；无 sourceRefs 会降级为 candidate/review，raw-session、secret、archive/compact/delete/move/restore、install/execute/public-export 意图会 fail-closed。accepted 且 source-backed 的 reusablePattern / `writeback.flowSkillCandidate` 现在会生成私有 `memory-runtime\flowskill-candidates` review-only FlowSkill-ready packet，可通过 `memoryRuntime:listFlowSkillCandidates` 只读检查；该队列幂等按 task/input hash 覆盖，不运行 FlowSkill capture/promote/export/install，不公开导出，也不授权安装/执行。`WorkingMemoryRecord` 通过 `upsert/list/close` IPC 保存短期任务状态，`memoryRuntime:promoteMemory` 只排队 Memory/Experience/FlowSkill candidate metadata，不安装、导出或执行 FlowSkill。
 - Memory Runtime lifecycle probe：`tests/memory-runtime-lifecycle-e2e.test.cjs` 使用 policy helpers 和临时 app-owned storage 证明上述合同能串成单个本地循环；probe 覆盖 context / precedent / runtime event / working memory / writeback / private FlowSkill candidate listing / duplicate-safe writeback / no-source candidate downgrade，并断言默认输出不包含 raw_session item、raw session path 或巨型 Markdown 尾部。
+- CEO Memory Runtime Guard：`electron/ceoMemoryRuntimeGuardPolicy.cjs` 提供纯策略 `evaluateCeoThreadPressure`、`buildCeoLifecycleWritebackPacket` 和 `buildCeoTakeoverBootstrapPacket`。它只消费 caller-supplied metadata（sessionBytes、lineCount、maxLineChars、linesOver100k、dataImageHits、base64Hits、toolOutputLikeHits、visibleThreadCount、activeWorkerCount、longTitleCount），输出 `continue / writeback_required / harvest_only / takeover_recommended / freeze_risk_stop_dispatch`。该层不启动后台定时器、不扫描 Vault、不读取 raw session body、不做 archive/compact/delete/move/restore；当压力过高时，CEO Flow 应先写 compact evidence / WorkingMemory / runtime event，再生成 Hot/Warm/Skill 默认读取、Cold pointer-only 的接管启动包。
 - Large-library startup performance：主进程默认 `documents:list` 只返回 metadata 和 `contentLength`，renderer 首屏不再接收所有文档正文；`documents:get` 负责按选中文档读取完整正文。启动 Codex history auto-ingest 改为首屏后延迟执行，使用 daily cadence 和 tiny bounded batch，仍只做 copy/hash/vault preservation。自动来源检测和递归 watcher 经过 performance-safe migration 默认关闭；用户开启 watcher 后，文件事件只围绕变更路径/根做 debounce 后轻量检查，不扫描全部 workspace roots。项目卡片由 `documentsByProject` map 派生，避免项目数乘文档数的重复过滤。
 - Project IA classifier：renderer 在已有 metadata/snippet 上对 workspace 分组做 deterministic classification：`project`、`lead`、`non_project`。高置信项目需要核心项目文档、多条 Codex 历史、知识/记忆或多个相关来源；依赖目录、构建产物、备份/vault、生成知识索引、截图/剪贴板/视频链接、单条导入资料和孤立工具记录会被降级。项目页只把 `project` 渲染成顶层卡片，`lead` 进入“待整理线索”折叠区，避免资料噪声污染项目 IA。
 - 启动流程会读取 `autoInstallSkill` 设置，默认关闭；只有用户在安装向导中勾选安装 Skill 或在设置页主动开启后，才会自动安装/更新。
@@ -110,7 +297,7 @@
 - 项目知识约定：扫描、知识整理或 AutoFlow 导入后自动写入分层 `.codex-knowledge/` bundle：`project-resume.md`、`retrieval-packet.md/json`、`project-index.md/json`、`project-chunks.jsonl`、兼容短索引 `project-knowledge.md`、`project-sources.json`、`project-artifacts.json/md`、`knowledge-items.json/md`、`experience-cards.json/md` 和 `skill-candidates.md`。Codex Skill 优先读取 `project-resume.md` 和 `retrieval-packet.md/json`，再按 query 读取 project index/chunks、ProjectArtifact、任务级 `context.md`、知识条目、经验卡片和 Skill 候选；`project-knowledge.md` 不再承载完整历史或长摘录。
 - 工具资产导出约定：项目知识导出会写入 `.codex-knowledge/tool-skill-inventory.json` 和 `tool-skill-inventory.md`，内容只包含 compact 摘要、路径/source hash、用途、风险边界和确认状态，不包含 API key、token、完整环境变量或敏感配置正文。
 - 打包配置包含 `codex-skills/**/*`，确保 portable 和目录包都带有配套 Skill。
-- Skill 检索脚本：`codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs` 可从工作区读取 `.codex-knowledge/`，支持 `--query <text>`、`--limit <n>`、`--json`，默认优先返回 resume、retrieval packet、project index、知识/记忆/工具短项，只输出短摘录，供 Codex 低 token 调用。该 helper 也提供 Codex/CEO Flow lifecycle 模式：`--runtime-context` 生成 layered RuntimeContextPacket-shaped JSON，`--precedent` 生成 metadata-first precedent packet，`--writeback-dry-run --evidence-json` 生成 EvidenceWritebackPacket-like 预览；输出仍只使用 compact sourceRefs，默认不读取 raw session、巨型 Markdown 尾部、截图/base64 或凭据，也不运行 FlowSkill capture/promote/export/install。普通产品查询会提升 accepted product/project progress，降权 Guardian/归档/老线程优化等维护记录，避免维护日志盖过项目主线。
+- Skill 检索脚本：`codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs` 可从工作区读取 `.codex-knowledge/`，支持 `--query <text>`、`--limit <n>`、`--json`，默认优先返回 resume、retrieval packet、project index、知识/记忆/工具短项，只输出短摘录，供 Codex 低 token 调用。该 helper 也提供 Codex/CEO Flow lifecycle 模式：`--runtime-context` 生成 layered RuntimeContextPacket-shaped JSON，`--precedent` 生成 metadata-first precedent packet，`--writeback-dry-run --evidence-json` 生成 EvidenceWritebackPacket-like 预览，`--thread-pressure` 从显式指标生成 metadata-only CEO pressure report，`--ceo-takeover` 生成一行新 CEO 接管启动包；输出仍只使用 compact sourceRefs，默认不读取 raw session、巨型 Markdown 尾部、截图/base64 或凭据，也不运行 FlowSkill capture/promote/export/install。普通产品查询会提升 accepted product/project progress，降权 Guardian/归档/老线程优化等维护记录，避免维护日志盖过项目主线。
 
 ## 知识条目和 AI 整理
 
@@ -282,7 +469,7 @@ MVP 规则：
 - NSIS 显式使用 `assets/icon.ico` 作为安装器、卸载器和安装头部图标，避免只配置应用图标时安装向导仍显示默认 Electron 图标。
 - 当前机器无法解压 `winCodeSign` 包中的 macOS 符号链接，因此不能直接让 electron-builder 执行 exe 资源编辑。
 - 打包流程采用两段式：先用 `signAndEditExecutable=false` 生成目录包，再通过 `scripts/apply-windows-icon.cjs` 调用缓存中的 `rcedit-x64.exe` 写入主 exe 图标，最后用 `--prepackaged release/win-unpacked` 生成安装器和 portable。
-- `build/installer.nsh` 接入 `customUnInstall`，正常卸载时删除知匣 local app data、本地缓存和自动安装的 `zhixia-local-docs` Skill。
+- `build/installer.nsh` 接入 `customUnInstall`，正常卸载时删除知匣应用私有数据、本地缓存和自动安装的 `zhixia-local-docs` Skill。
 - `build/installer.nsh` 还接入安装向导自定义页，默认不勾选 Skill 安装；用户勾选后安装阶段调用 `--install-skill-and-quit`。
 - 升级安装时 electron-builder 会给旧卸载器传 `/KEEP_APP_DATA`，自定义卸载脚本检测到该参数后保留用户知识库数据。
 - 当前未做代码签名，分发到新机器时需要接受 Windows 安全提示。
@@ -299,6 +486,27 @@ MVP 规则：
 - Memory Runtime 图谱是 bounded metadata activation，不是云端神经网络或无限召回系统；它默认优先 Hot/Warm/Skill，Cold 长历史必须通过恢复/审计等显式门禁读取 source pointer。
 - 公开仓库不应宣称完整解决大型团队知识图谱、跨端同步、自动归档闭环或国际化产品化。当前定位是可运行、本地优先、可审计的 CEO Flow 记忆运行时和个人知识库底座。
 
+## Memory Intelligence Sidecar
+
+2026-07-15 起，Memory Runtime 的智能召回和时序事实不再继续堆入 `knowledge-store.sqlite`：
+
+- `electron/hybridMemoryRetrievalPolicy.cjs` 是无外部依赖的纯策略 BM25F 排序器，处理中文字符片段、英文 token、字段权重、scope、状态、新鲜度、时间和图激活信号。
+- `electron/memoryFactPolicy.cjs` 定义 typed temporal MemoryFact、安全检查、确定性 ID、幂等合并、冲突和 supersession 计划。
+- `electron/memoryRuntimeIndexStore.cjs` 使用 Electron/Node 内置 `node:sqlite` 创建 app-owned `memory-runtime/memory-runtime-index.sqlite`，包含 compact search items、FTS5、MemoryFact 和 lifecycle trigger receipt。数据库使用 WAL + NORMAL synchronous + 100ms busy timeout，所有 open/prepare/BEGIN/reconcile/upsert/search/receipt 路径都在 `finally` 关闭句柄；所有写入均为显式事件触发和 bounded batch。
+- `retrieveMemoryRuntimeContext` / `retrieveMemoryRuntimePrecedent` 读取现有 metadata candidate pool、当前 MemoryFact 和 FTS sidecar 候选，再由 hybrid policy 统一 rerank。索引失败时返回 warning 并回退现有候选，不阻断 Memory Runtime。
+- `writebackMemoryRuntimeEvidence` 先保存原有 evidence receipt，再把 accepted source-backed evidence 写成 MemoryFact；不读取 raw body，也不调用 AI 抽取。
+- rejected evidence 永远不进入 MemoryFact；裸 token/PEM/AWS key、raw-session content signal、base64 和巨型字段会 fail-closed，并且 rejected JSON 只保留脱敏占位符。
+- fail-closed 检查覆盖结构化持久化字段，包括 MemoryFact 的 id/projectPath/scope/status/tags/sourceRef metadata、writeback task.domain/evidence.memoryFacts、runtime-event id/automationId/sourceRefs、promotion id/actions/sourceRefs 和 trigger-receipt identifiers/hash/ref/warnings；任一危险兄弟字段都会拒绝整包，不能从同包的安全 summary 派生 accepted fact。
+- 普通项目检索只接收项目归属明确、fresh、无需人工确认且状态为 authoritative 的 active/current/accepted/curated/ready-equivalent 条目；global draft、candidate/review、`freshness=review` 和 `ready + requiresHumanConfirmation` 仅在显式 review mode 返回。
+- FTS sidecar 在项目范围内对当前 authoritative candidate snapshot 做 reconciliation；已经从来源候选集中消失的非事实条目会从 FTS cache 删除，MemoryFact 则由时序事实表单独管理。
+- `MemoryRuntimeTriggerReceipt` 为 retrieve/writeback/promote 提供可审计调用记录；它不承担 heartbeat、调度或自动重试。
+- trigger receipt 是 best-effort：sidecar 锁或不可用时返回 `storageUnavailable` warning，但不得把已经完成的检索变成失败。
+- `electron/memoryEvaluationPolicy.cjs` 提供固定指标和脱敏 fixture，用于比较 keyword、FTS/hybrid 和未来可选 embedding。
+
+Sidecar 的目的不是立即替换整个文档主库，而是把新增事实和检索索引从 sql.js 整库 export 路径中隔离。现有文档 CRUD 仍使用 sql.js；后续原生 SQLite 迁移必须另做备份、迁移和 installed-build 验证。
+
+下一阶段总架构见 `docs/MEMORY_CORE_INTEGRATED_UPGRADE_STRATEGY.md`，项目关联召回细节见 `docs/PROJECT_NATIVE_ASSOCIATIVE_MEMORY_PLAN.md`。升级会在现有 sidecar 之上先增加 Principal/Owner、scope/capability、standing rule、approve/revoke/expire/supersede 和审计门禁，再增加 ProjectBrain、ModuleMemory、EpisodeMemory、ProjectAnchor 和 ProjectContinuityLedger。CueSet、bounded spreading activation 和 slot-aware rerank 只能在已通过 Authority Core 的合法、有效记忆中排序。可选 embedding 只索引 compact accepted engram，必须位于独立 sidecar/worker，不能进入 sql.js 主库、启动全量流程或默认 raw-history 路径。
+
 ## 支持格式
 
 - 直接文本：`.txt`、`.md`、`.markdown`、`.csv`、`.json`、`.html`、`.htm`
@@ -308,9 +516,9 @@ MVP 规则：
 
 ## 当前限制
 
-- 搜索索引仍是前端内存评分，不适合十万级文档。
+- 文档库 UI 搜索仍有前端预览评分路径；Memory Runtime 已使用独立 FTS5/BM25F sidecar，但尚未把全部人类 UI 全文搜索迁入 sidecar。
 - `sql.js` 避免了原生依赖风险，但大库写入会有整库导出成本。
-- 没有 OCR、语义向量检索和问答。
+- 没有 OCR、默认语义向量检索和联网问答；当前 hybrid 是可解释 lexical/BM25F + scope/status/time/graph rerank，不应宣传为神经 embedding。
 - AI 整理只是可选摘要器，不是联网问答；用户必须显式配置和触发。
 - 后台监听已接入，但网络盘、同步盘、极大目录和系统 watcher 丢事件场景仍需要手动检测兜底。
 - 万级文档库已避免 watcher 全量正文读取，但前端搜索仍基于列表预览文本，后续需要更强本地索引或按需正文加载。

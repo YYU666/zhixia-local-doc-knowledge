@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { scanPersistenceStructure } = require("./memoryFactPolicy.cjs");
 
 const MEMORY_RUNTIME_SCHEMA_VERSION = 1;
 const MEMORY_RUNTIME_STORAGE_SCHEMA = "zhixia.memory_runtime_store.v1";
@@ -11,6 +12,7 @@ const DEFAULT_RUNTIME_ALLOWED_KINDS = [
   "thread_lineage_index",
   "runtime_event",
   "project_artifact",
+  "memory_fact",
   "knowledge_item",
   "experience_card",
   "skill_candidate",
@@ -20,6 +22,7 @@ const DEFAULT_PRECEDENT_ALLOWED_KINDS = [
   "knowledge_item",
   "experience_card",
   "project_artifact",
+  "memory_fact",
   "tool_skill_record",
   "skill_candidate",
   "thread_lineage_index",
@@ -41,19 +44,19 @@ const MEMORY_ROUTER_TASK_TYPES = [
   "retrieve_precedent",
 ];
 const MEMORY_ROUTER_KIND_PROFILES = {
-  project_resume: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "thread_lineage_index", "project_artifact", "knowledge_item", "experience_card"],
-  task_dispatch: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "knowledge_item", "experience_card", "tool_skill_record", "skill_candidate"],
-  review_gate: ["project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "knowledge_item", "experience_card", "tool_skill_record"],
-  bug_repair: ["experience_card", "knowledge_item", "project_artifact", "tool_skill_record", "project_record"],
-  architecture: ["project_record", "project_resume_packet", "project_artifact", "knowledge_item", "experience_card", "tool_skill_record"],
-  release: ["project_record", "project_resume_packet", "project_artifact", "experience_card", "tool_skill_record", "knowledge_item"],
-  thread_recovery: ["runtime_event", "thread_lineage_index", "ceo_flow_record", "project_record", "project_resume_packet", "experience_card", "knowledge_item", "project_artifact"],
+  project_resume: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "thread_lineage_index", "project_artifact", "memory_fact", "knowledge_item", "experience_card"],
+  task_dispatch: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "memory_fact", "knowledge_item", "experience_card", "tool_skill_record", "skill_candidate"],
+  review_gate: ["project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "memory_fact", "knowledge_item", "experience_card", "tool_skill_record"],
+  bug_repair: ["experience_card", "memory_fact", "knowledge_item", "project_artifact", "tool_skill_record", "project_record"],
+  architecture: ["project_record", "project_resume_packet", "project_artifact", "memory_fact", "knowledge_item", "experience_card", "tool_skill_record"],
+  release: ["project_record", "project_resume_packet", "project_artifact", "memory_fact", "experience_card", "tool_skill_record", "knowledge_item"],
+  thread_recovery: ["runtime_event", "thread_lineage_index", "ceo_flow_record", "project_record", "project_resume_packet", "memory_fact", "experience_card", "knowledge_item", "project_artifact"],
   archive_candidate: ["thread_lineage_index", "ceo_flow_record", "experience_card", "knowledge_item", "project_artifact", "project_record"],
   runtime_diagnosis: ["runtime_event", "experience_card", "tool_skill_record", "project_artifact", "knowledge_item", "project_record"],
   tool_skill_lookup: ["tool_skill_record", "skill_candidate", "experience_card", "knowledge_item", "project_artifact"],
   workflow_reuse: ["experience_card", "skill_candidate", "tool_skill_record", "knowledge_item", "project_artifact"],
-  handoff: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "thread_lineage_index", "experience_card", "knowledge_item"],
-  memory_writeback: ["runtime_event", "project_record", "experience_card", "knowledge_item", "project_artifact", "thread_lineage_index"],
+  handoff: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "thread_lineage_index", "memory_fact", "experience_card", "knowledge_item"],
+  memory_writeback: ["runtime_event", "project_record", "memory_fact", "experience_card", "knowledge_item", "project_artifact", "thread_lineage_index"],
   retrieve_precedent: DEFAULT_PRECEDENT_ALLOWED_KINDS,
 };
 const MEMORY_ROUTER_DEFAULT_TTL_MS = 90 * 1000;
@@ -78,17 +81,22 @@ const WRITEBACK_DECISIONS = ["accept", "revise", "block", "supersede"];
 const SAFE_MEMORY_TARGETS = ["knowledge_item", "experience_card", "memory_card", "project_update", "lineage_update", "flowskill_candidate"];
 const DANGEROUS_ACTION_RE = /\b(archive|compact|delete|move|restore|install|enable|execute|publish|export public|host archive|set thread archived)\b/i;
 const RAW_SESSION_KIND_RE = /\b(raw[_ -]?session|codex[_ -]?session|thread[_ -]?session|session[_ -]?jsonl)\b/i;
-const RAW_SESSION_PATH_RE = /(?:^|[\\/])\.codex[\\/]sessions[\\/]|(?:^|[\\/])sessions[\\/][^\\/]*(?:session|thread)[^\\/]*\.jsonl$/i;
+const RAW_SESSION_PATH_RE = /(?:^|[\\/])\.codex[\\/](?:archived_)?sessions[\\/]|(?:^|[\\/])sessions[\\/][^\\/]*(?:session|thread)[^\\/]*\.jsonl$/i;
 const SECRET_REF_RE = /(?:^|[\\/])\.env(?:$|[\\/._-])|\b(api key|auth token|bearer token|credential|credentials|secret|secrets|private key|id rsa|oauth|cookie|password)\b/i;
+const SECRET_VALUE_RE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+/=-]{12,}|\bsk-[A-Za-z0-9_-]{12,}|\b(?:ghp|gho|github_pat)_[A-Za-z0-9_]{12,}|\bAKIA[0-9A-Z]{16}\b|\b(?:api[_ -]?key|auth[_ -]?token|access[_ -]?token|password|passwd|secret|private[_ -]?key)\s*[:=]\s*[^\s,;]{4,}/i;
 const BASE64_RE = /\bdata:[^;,\s]+;base64,[A-Za-z0-9+/=]{80,}|\b[A-Za-z0-9+/]{180,}={0,2}\b/g;
+const BASE64_VALUE_RE = /\bdata:[^;,\s]+;base64,[A-Za-z0-9+/=]{80,}|\b[A-Za-z0-9+/]{180,}={0,2}\b/i;
 
 function redactCompactText(value) {
   return String(value || "")
+    .replace(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/gi, "[private-key-omitted]")
     .replace(/(?:[A-Za-z]:)?[\\/][^\s"'<>|]*\.codex[\\/]sessions[\\/][^\s"'<>|]+/gi, "[raw-session-pointer-omitted]")
     .replace(/(?:[A-Za-z]:)?[\\/][^\s"'<>|]*\.env(?:\.[^\s"'<>|]+)?/gi, "[secret-pointer-omitted]")
     .replace(/\b(?:api[_-]?key|auth[_-]?token|bearer[_-]?token|password|secret)\s*[:=]\s*[^\s,;]+/gi, "$1=[secret-omitted]")
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/gi, "Bearer [secret-omitted]")
     .replace(/\bsk-[A-Za-z0-9]{12,}\b/gi, "[secret-omitted]")
+    .replace(/\b(?:ghp|gho|github_pat)_[A-Za-z0-9_]{12,}\b/gi, "[secret-omitted]")
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, "[secret-omitted]")
     .replace(BASE64_RE, "[base64-payload-omitted]");
 }
 
@@ -106,6 +114,25 @@ function compactText(value, maxChars = 600) {
   const text = redactCompactText(value).replace(/\s+/g, " ").trim();
   if (text.length <= maxChars) return text;
   return `${text.slice(0, Math.max(0, maxChars - 1)).trim()}…`;
+}
+
+function inspectPersistenceInput(value = {}) {
+  const scan = scanPersistenceStructure(value);
+  const text = scan.signal;
+  const metadataText = scan.metadataValueSignal;
+  return {
+    text,
+    containsRawSession: RAW_SESSION_KIND_RE.test(text) || RAW_SESSION_PATH_RE.test(text),
+    containsSecrets: SECRET_REF_RE.test(normalizeSignalTextForPolicy(metadataText)) || SECRET_VALUE_RE.test(text) || scan.strongSplitSecret,
+    containsBase64: BASE64_VALUE_RE.test(text),
+    containsGiantBody: scan.giantBody,
+    structureTruncated: scan.structureTruncated,
+    scanStats: scan.stats,
+  };
+}
+
+function hasUnsafePersistenceInput(inspection = {}) {
+  return inspection.containsRawSession || inspection.containsSecrets || inspection.containsBase64 || inspection.containsGiantBody || inspection.structureTruncated;
 }
 
 function normalizeSignalTextForPolicy(value) {
@@ -135,6 +162,7 @@ function normalizeFreshness(value) {
 }
 
 function normalizeRuntimeStatus(value) {
+  if (value === "accepted" || value === "current") return "active";
   return ["active", "curated", "ready", "candidate", "review", "stale", "superseded", "blocked"].includes(value)
     ? value
     : "review";
@@ -146,6 +174,7 @@ function normalizeSourceRef(ref = {}) {
   const kind = compactText(ref.kind || ref.sourceType || "source", 80) || "source";
   return {
     kind,
+    id: ref.id || ref.sourceId ? compactText(ref.id || ref.sourceId, 160) : null,
     path: pathValue,
     title: ref.title ? compactText(ref.title, 180) : null,
     hash: ref.hash || ref.sha256 || ref.sourceHash || null,
@@ -159,9 +188,14 @@ function normalizeSourceRef(ref = {}) {
 function redactSourceRef(ref = {}) {
   if (!ref || typeof ref !== "object") return ref;
   return {
-    ...ref,
-    path: ref.path ? compactText(ref.path, 320) : ref.path,
-    title: ref.title ? compactText(ref.title, 180) : ref.title,
+    kind: "unsafe_source",
+    id: null,
+    path: null,
+    title: "[unsafe-source-ref-omitted]",
+    hash: null,
+    updatedAt: null,
+    artifactType: null,
+    sourceType: null,
   };
 }
 
@@ -303,6 +337,7 @@ function memoryLayerForRuntimeItem(item = {}, routerPlan = {}) {
   if (item.kind === "runtime_event") return "hot";
   if (["project_record", "project_resume_packet", "ceo_flow_record"].includes(item.kind)) return "hot";
   if (["tool_skill_record", "skill_candidate", "experience_card"].includes(item.kind)) return "skill";
+  if (item.kind === "memory_fact") return "warm";
   if (item.kind === "thread_lineage_index") return routerPlan.layers?.cold?.enabled ? "cold" : "warm";
   const text = [item.title, item.summary].filter(Boolean).join(" ");
   if (MAINTENANCE_MEMORY_RE.test(text)) return COLD_MEMORY_QUERY_TYPES.has(routerPlan.queryType) ? "cold" : "warm";
@@ -346,6 +381,8 @@ function normalizeRuntimeItem(item = {}) {
   return {
     id: compactText(item.id || `${kind}:${title}`, 220),
     kind,
+    projectPath: item.projectPath || item.rootPath || item.workspacePath || null,
+    scope: item.scope || null,
     title,
     summary,
     status: normalizeRuntimeStatus(item.status),
@@ -1022,6 +1059,39 @@ function actionSignalParts(value) {
   ].filter(Boolean);
 }
 
+function privacyContentSignalParts(value) {
+  const raw = value && typeof value === "object" ? value : {};
+  return [
+    raw.summary,
+    raw.body,
+    raw.message,
+    raw.goal,
+    raw.title,
+    raw.nextAction,
+    raw.value,
+    raw.object,
+    raw.evidence?.summary,
+    raw.evidence?.residualRisk,
+    ...safeArray(raw.evidence?.reusablePattern),
+    ...safeArray(raw.evidence?.failurePattern),
+    ...safeArray(raw.evidence?.tests),
+    ...safeArray(raw.evidence?.artifacts),
+    ...safeArray(raw.observedSignals || raw.signals),
+    ...safeArray(raw.decisions),
+    ...safeArray(raw.openRisks || raw.risks),
+  ].filter(Boolean);
+}
+
+function contentFieldsContainRawSession(value) {
+  const text = privacyContentSignalParts(value).map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(" ");
+  return RAW_SESSION_KIND_RE.test(text) || RAW_SESSION_PATH_RE.test(text);
+}
+
+function contentFieldsContainSecrets(value) {
+  const text = privacyContentSignalParts(value).map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(" ");
+  return SECRET_VALUE_RE.test(text);
+}
+
 function containsDangerousIntent(value) {
   const actionText = normalizeSignalTextForPolicy(
     actionSignalParts(value).map((item) => (typeof item === "string" ? item : JSON.stringify(item))).join(" "),
@@ -1032,8 +1102,10 @@ function containsDangerousIntent(value) {
 function sourceRefSignalText(ref = {}) {
   return [
     ref.kind,
+    ref.id,
     ref.path,
     ref.title,
+    ref.hash,
     ref.artifactType,
     ref.sourceType,
   ].filter(Boolean).join(" ");
@@ -1050,8 +1122,10 @@ function sourceRefsContainSecrets(refs = []) {
   return safeArray(refs).some((ref) => {
     const fields = [
       ref.kind,
+      ref.id,
       ref.path,
       ref.title,
+      ref.hash,
       ref.artifactType,
       ref.sourceType,
     ].filter(Boolean);
@@ -1072,44 +1146,58 @@ function actionFieldsContainSecrets(value) {
 }
 
 function inferContainsRawSession(value, sourceRefs = []) {
-  return sourceRefsContainRawSession(sourceRefs) || actionFieldsContainRawSession(value);
+  return sourceRefsContainRawSession(sourceRefs) || actionFieldsContainRawSession(value) || contentFieldsContainRawSession(value);
 }
 
 function inferContainsSecrets(value, sourceRefs = []) {
-  return sourceRefsContainSecrets(sourceRefs) || actionFieldsContainSecrets(value);
+  return sourceRefsContainSecrets(sourceRefs) || actionFieldsContainSecrets(value) || contentFieldsContainSecrets(value);
 }
 
 function compactEvidencePacket(packet = {}) {
   const evidence = packet.evidence && typeof packet.evidence === "object" ? packet.evidence : {};
   const sourceRefs = normalizeSourceRefs(evidence.sourceRefs, 20);
-  const inferredContainsRawSession = inferContainsRawSession(packet, sourceRefs);
-  const inferredContainsSecrets = inferContainsSecrets(packet, sourceRefs);
-  const sourceRefsForStorage = inferredContainsRawSession || inferredContainsSecrets ? redactSourceRefs(sourceRefs) : sourceRefs;
+  const persistenceInspection = inspectPersistenceInput(packet);
+  const inferredContainsRawSession = persistenceInspection.containsRawSession || inferContainsRawSession(packet, sourceRefs);
+  const inferredContainsSecrets = persistenceInspection.containsSecrets || inferContainsSecrets(packet, sourceRefs);
+  const inferredContainsBase64 = persistenceInspection.containsBase64;
+  const inferredContainsGiantBody = persistenceInspection.containsGiantBody;
+  const inferredStructureTruncated = persistenceInspection.structureTruncated;
+  const unsafeContent = inferredContainsRawSession || inferredContainsSecrets || inferredContainsBase64 || inferredContainsGiantBody || inferredStructureTruncated;
+  const sourceRefsForStorage = unsafeContent ? redactSourceRefs(sourceRefs).slice(0, 1) : sourceRefs;
+  const compactFlowSkillCandidate = packet.writeback?.flowSkillCandidate && typeof packet.writeback.flowSkillCandidate === "object"
+    ? {
+      reusablePattern: unsafeContent ? [] : safeArray(packet.writeback.flowSkillCandidate.reusablePattern).map((item) => compactText(item, 360)).filter(Boolean).slice(0, 12),
+      doNotApplyTo: unsafeContent ? [] : safeArray(packet.writeback.flowSkillCandidate.doNotApplyTo).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 12),
+    }
+    : null;
   return {
     schemaVersion: 1,
     decision: WRITEBACK_DECISIONS.includes(packet.decision) ? packet.decision : "block",
     task: {
-      id: compactText(packet.task?.id || packet.taskId || "unknown-task", 140),
-      goal: compactText(packet.task?.goal || packet.goal || "", 360),
-      domain: safeArray(packet.task?.domain || packet.domain).map((item) => compactText(item, 80)).filter(Boolean).slice(0, 12),
-      projectPath: packet.task?.projectPath || packet.projectPath || null,
-      threadId: packet.task?.threadId || packet.threadId || null,
-      parentCeoThreadId: packet.task?.parentCeoThreadId || packet.parentCeoThreadId || null,
+      id: unsafeContent ? "unsafe-task-input" : compactText(packet.task?.id || packet.taskId || "unknown-task", 140),
+      goal: unsafeContent ? "[unsafe-evidence-content-omitted]" : compactText(packet.task?.goal || packet.goal || "", 360),
+      domain: unsafeContent ? [] : safeArray(packet.task?.domain || packet.domain).map((item) => compactText(item, 80)).filter(Boolean).slice(0, 12),
+      projectPath: unsafeContent ? null : packet.task?.projectPath || packet.projectPath || null,
+      threadId: unsafeContent ? null : packet.task?.threadId || packet.threadId || null,
+      parentCeoThreadId: unsafeContent ? null : packet.task?.parentCeoThreadId || packet.parentCeoThreadId || null,
     },
     evidence: {
-      summary: compactText(evidence.summary || packet.summary || "", 1000),
-      changedFiles: safeArray(evidence.changedFiles).map((item) => compactText(item, 260)).filter(Boolean).slice(0, 40),
-      artifacts: safeArray(evidence.artifacts).map((item) => compactText(item, 260)).filter(Boolean).slice(0, 40),
-      tests: safeArray(evidence.tests).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 40),
-      reusablePattern: safeArray(evidence.reusablePattern).map((item) => compactText(item, 360)).filter(Boolean).slice(0, 12),
-      failurePattern: safeArray(evidence.failurePattern).map((item) => compactText(item, 360)).filter(Boolean).slice(0, 12),
-      residualRisk: compactText(evidence.residualRisk || "", 700),
+      summary: unsafeContent ? "[unsafe-evidence-content-omitted]" : compactText(evidence.summary || packet.summary || "", 1000),
+      changedFiles: unsafeContent ? [] : safeArray(evidence.changedFiles).map((item) => compactText(item, 260)).filter(Boolean).slice(0, 40),
+      artifacts: unsafeContent ? [] : safeArray(evidence.artifacts).map((item) => compactText(item, 260)).filter(Boolean).slice(0, 40),
+      tests: unsafeContent ? [] : safeArray(evidence.tests).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 40),
+      reusablePattern: unsafeContent ? [] : safeArray(evidence.reusablePattern).map((item) => compactText(item, 360)).filter(Boolean).slice(0, 12),
+      failurePattern: unsafeContent ? [] : safeArray(evidence.failurePattern).map((item) => compactText(item, 360)).filter(Boolean).slice(0, 12),
+      residualRisk: unsafeContent ? "" : compactText(evidence.residualRisk || "", 700),
       sourceRefs: sourceRefsForStorage,
     },
-    writeback: packet.writeback && typeof packet.writeback === "object" ? packet.writeback : {},
+    writeback: compactFlowSkillCandidate ? { flowSkillCandidate: compactFlowSkillCandidate } : {},
     privacy: {
       containsRawSession: packet.privacy?.containsRawSession === true || inferredContainsRawSession,
       containsSecrets: packet.privacy?.containsSecrets === true || inferredContainsSecrets,
+      containsBase64: inferredContainsBase64,
+      containsGiantBody: inferredContainsGiantBody,
+      structureTruncated: inferredStructureTruncated,
       publicCandidateAllowed: packet.privacy?.publicCandidateAllowed === true,
     },
   };
@@ -1123,6 +1211,9 @@ function evaluateWritebackEvidence(packet = {}) {
   if (!WRITEBACK_DECISIONS.includes(packet.decision)) safetyBlockers.push("invalid_decision");
   if (compact.privacy.containsRawSession) safetyBlockers.push("contains_raw_session");
   if (compact.privacy.containsSecrets) safetyBlockers.push("contains_secrets");
+  if (compact.privacy.containsBase64) safetyBlockers.push("contains_base64");
+  if (compact.privacy.containsGiantBody) safetyBlockers.push("contains_giant_body");
+  if (compact.privacy.structureTruncated) safetyBlockers.push("structure_truncated");
   if (containsDangerousIntent(packet)) safetyBlockers.push("destructive_or_executable_intent");
   if (compact.privacy.publicCandidateAllowed) warnings.push("public_export_requires_explicit_user_review");
   if (compact.evidence.sourceRefs.length === 0) warnings.push("missing_source_refs_candidate_only");
@@ -1286,7 +1377,7 @@ function defaultWorkingMemoryStatusForRuntimeEvent(eventType) {
 }
 
 function filterDefaultSafeSourceRefs(sourceRefs = []) {
-  return safeArray(sourceRefs).filter((ref) => !sourceRefsContainRawSession([ref]) && !sourceRefsContainSecrets([ref]));
+  return safeArray(sourceRefs).filter((ref) => !hasUnsafePersistenceInput(inspectPersistenceInput(ref)) && !sourceRefsContainRawSession([ref]) && !sourceRefsContainSecrets([ref]));
 }
 
 function runtimeEventTaskId(event) {
@@ -1304,40 +1395,52 @@ function normalizeRuntimeEventMemory(event = {}) {
   const now = new Date().toISOString();
   const eventType = inferRuntimeEventType(event);
   const inputSourceRefs = normalizeSourceRefs(event.sourceRefs || event.evidence?.sourceRefs, 20);
+  const persistenceInspection = inspectPersistenceInput(event);
+  const unsafeContentRaw = persistenceInspection.containsRawSession || contentFieldsContainRawSession(event);
+  const unsafeContentSecret = persistenceInspection.containsSecrets || contentFieldsContainSecrets(event);
+  const unsafeContentBase64 = persistenceInspection.containsBase64;
+  const unsafeContentGiant = persistenceInspection.containsGiantBody;
+  const unsafeContentStructure = persistenceInspection.structureTruncated;
+  const unsafeContent = unsafeContentRaw || unsafeContentSecret || unsafeContentBase64 || unsafeContentGiant || unsafeContentStructure;
   const defaultSourceRefs = filterDefaultSafeSourceRefs(inputSourceRefs).slice(0, 12);
   const unsafeSourceRefCount = Math.max(
-    0,
-    inputSourceRefs.length - defaultSourceRefs.length,
+    inputSourceRefs.filter((ref) => hasUnsafePersistenceInput(inspectPersistenceInput(ref))).length,
     clampNumber(event.unsafeSourceRefCount, 0, 0, 1000),
   );
   const warnings = [
     ...(unsafeSourceRefCount > 0 ? ["unsafe_source_refs_pointer_omitted_from_runtime_event_storage"] : []),
-    ...safeArray(event.warnings).map((warning) => compactText(warning, 180)).filter(Boolean),
+    ...(unsafeContentRaw ? ["unsafe_history_content_omitted_from_runtime_event_storage"] : []),
+    ...(unsafeContentSecret ? ["sensitive_content_omitted_from_runtime_event_storage"] : []),
+    ...(unsafeContentBase64 ? ["encoded_payload_omitted_from_runtime_event_storage"] : []),
+    ...(unsafeContentGiant ? ["oversized_content_omitted_from_runtime_event_storage"] : []),
+    ...(unsafeContentStructure ? ["bounded_structure_scan_truncated_runtime_event_rejected"] : []),
+    ...(unsafeContent ? [] : safeArray(event.warnings).map((warning) => compactText(warning, 180)).filter(Boolean)),
   ].filter((warning, index, array) => array.indexOf(warning) === index);
   const normalized = {
     schemaVersion: RUNTIME_EVENT_SCHEMA,
     eventType,
     severity: normalizeRuntimeEventSeverity(event.severity),
-    projectPath: event.projectPath || event.project?.path || null,
-    threadId: event.threadId || event.thread?.id || null,
-    parentCeoThreadId: event.parentCeoThreadId || event.ceoThreadId || null,
-    replacementThreadId: event.replacementThreadId || event.takeoverThreadId || null,
-    automationId: event.automationId || event.heartbeatId || null,
-    taskId: compactText(event.taskId || "", 160),
-    title: compactText(event.title || event.name || eventType, 180),
-    summary: compactText(event.summary || event.message || "", 900),
-    observedSignals: safeArray(event.observedSignals || event.signals).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 24),
-    decisions: safeArray(event.decisions).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 24),
-    openRisks: safeArray(event.openRisks || event.risks).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 24),
-    nextAction: compactText(event.nextAction || "", 360),
+    projectPath: hasUnsafePersistenceInput(inspectPersistenceInput({ projectPath: event.projectPath || event.project?.path })) ? null : event.projectPath || event.project?.path || null,
+    threadId: hasUnsafePersistenceInput(inspectPersistenceInput({ threadId: event.threadId || event.thread?.id })) ? null : event.threadId || event.thread?.id || null,
+    parentCeoThreadId: hasUnsafePersistenceInput(inspectPersistenceInput({ parentCeoThreadId: event.parentCeoThreadId || event.ceoThreadId })) ? null : event.parentCeoThreadId || event.ceoThreadId || null,
+    replacementThreadId: hasUnsafePersistenceInput(inspectPersistenceInput({ replacementThreadId: event.replacementThreadId || event.takeoverThreadId })) ? null : event.replacementThreadId || event.takeoverThreadId || null,
+    automationId: hasUnsafePersistenceInput(inspectPersistenceInput({ automationId: event.automationId || event.heartbeatId })) ? null : event.automationId || event.heartbeatId || null,
+    taskId: hasUnsafePersistenceInput(inspectPersistenceInput({ taskId: event.taskId })) ? "" : compactText(event.taskId || "", 160),
+    title: unsafeContent ? `${eventType} [unsafe-content-omitted]` : compactText(event.title || event.name || eventType, 180),
+    summary: unsafeContent ? "[unsafe-runtime-event-content-omitted]" : compactText(event.summary || event.message || "", 900),
+    observedSignals: unsafeContent ? [] : safeArray(event.observedSignals || event.signals).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 24),
+    decisions: unsafeContent ? [] : safeArray(event.decisions).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 24),
+    openRisks: unsafeContent ? [] : safeArray(event.openRisks || event.risks).map((item) => compactText(item, 220)).filter(Boolean).slice(0, 24),
+    nextAction: unsafeContent ? "" : compactText(event.nextAction || "", 360),
     sourceRefs: defaultSourceRefs,
     defaultSourceRefs,
     unsafeSourceRefCount,
-    status: WORKING_MEMORY_STATUSES.includes(event.status) ? event.status : defaultWorkingMemoryStatusForRuntimeEvent(eventType),
+    status: unsafeContent ? "blocked" : WORKING_MEMORY_STATUSES.includes(event.status) ? event.status : defaultWorkingMemoryStatusForRuntimeEvent(eventType),
     ttlDays: clampNumber(event.ttlDays, ["broken_thread", "heartbeat_fuse", "thread_takeover"].includes(eventType) ? 14 : 7, 1, 90),
     warnings,
     createdAt: event.createdAt || now,
     updatedAt: event.updatedAt || now,
+    rejected: unsafeContent,
   };
   const idHash = hashJson({
     eventType: normalized.eventType,
@@ -1349,7 +1452,9 @@ function normalizeRuntimeEventMemory(event = {}) {
   }).slice(0, 16);
   return {
     ...normalized,
-    id: compactText(event.id || `runtime-event-${safeIdPart(normalized.eventType)}-${idHash}`, 180),
+    id: hasUnsafePersistenceInput(inspectPersistenceInput({ id: event.id }))
+      ? `runtime-event-rejected-${idHash}`
+      : compactText(event.id || `runtime-event-${safeIdPart(normalized.eventType)}-${idHash}`, 180),
     taskId: runtimeEventTaskId({ ...normalized, taskId: normalized.taskId }),
     expiresAt: addMillisecondsToIso(normalized.updatedAt, normalized.ttlDays * 86_400_000),
     safety: {
@@ -1395,6 +1500,7 @@ function runtimeEventToRuntimeItem(event = {}) {
   return {
     id: event.id,
     kind: "runtime_event",
+    projectPath: event.projectPath || null,
     title,
     summary: compactText(summaryParts.join(" | "), 700),
     status: event.status === "blocked" ? "blocked" : "ready",
@@ -1416,6 +1522,7 @@ function workingMemoryToRuntimeItem(record = {}) {
   return {
     id: `working-memory:${safeIdPart(record.taskId)}`,
     kind: "runtime_event",
+    projectPath: record.projectPath || null,
     title: compactText(`工作记忆：${record.taskId || "task"}`, 180),
     summary: compactText([record.currentGoal, record.nextAction].filter(Boolean).join(" | "), 700),
     status: record.status === "blocked" ? "blocked" : "ready",
@@ -1600,30 +1707,41 @@ async function listWorkingMemoryRecords(storeRoot, options = {}) {
 
 function evaluatePromotionCandidate(candidate = {}) {
   const privacy = candidate.privacy && typeof candidate.privacy === "object" ? candidate.privacy : {};
+  const persistenceInspection = inspectPersistenceInput(candidate);
   const requestedTarget = compactText(candidate.target || candidate.kind || "experience_card", 80);
   const target = SAFE_MEMORY_TARGETS.includes(requestedTarget) ? requestedTarget : "experience_card";
   const sourceRefs = normalizeSourceRefs(candidate.sourceRefs || candidate.evidence?.sourceRefs, 12);
-  const containsRawSession = privacy.containsRawSession === true || candidate.containsRawSession === true || inferContainsRawSession(candidate, sourceRefs);
-  const containsSecrets = privacy.containsSecrets === true || candidate.containsSecrets === true || inferContainsSecrets(candidate, sourceRefs);
-  const sourceRefsForStorage = containsRawSession || containsSecrets ? redactSourceRefs(sourceRefs) : sourceRefs;
+  const containsRawSession = privacy.containsRawSession === true || candidate.containsRawSession === true || persistenceInspection.containsRawSession || inferContainsRawSession(candidate, sourceRefs);
+  const containsSecrets = privacy.containsSecrets === true || candidate.containsSecrets === true || persistenceInspection.containsSecrets || inferContainsSecrets(candidate, sourceRefs);
+  const containsBase64 = persistenceInspection.containsBase64;
+  const containsGiantBody = persistenceInspection.containsGiantBody;
+  const structureTruncated = persistenceInspection.structureTruncated;
   const blockers = [];
   const warnings = [];
   if (containsRawSession) blockers.push("contains_raw_session");
   if (containsSecrets) blockers.push("contains_secrets");
+  if (containsBase64) blockers.push("contains_base64");
+  if (containsGiantBody) blockers.push("contains_giant_body");
+  if (structureTruncated) blockers.push("structure_truncated");
   if (privacy.publicExportRequested === true || candidate.publicExportRequested === true) blockers.push("public_export_requires_confirmation");
   if (containsDangerousIntent(candidate)) blockers.push("install_execute_archive_or_destructive_intent");
   if (sourceRefs.length === 0) warnings.push("missing_source_refs_candidate_only");
-  const status = blockers.length > 0 ? "review" : warnings.length > 0 ? "candidate_review" : "queued_candidate";
-  return {
-    schemaVersion: MEMORY_RUNTIME_STORAGE_SCHEMA,
-    id: candidate.id || `promotion-${hashJson(candidate).slice(0, 16)}`,
+  const status = blockers.length > 0 ? "rejected" : warnings.length > 0 ? "candidate_review" : "queued";
+  const unsafeContent = blockers.length > 0;
+  const sourceRefsForStorage = unsafeContent ? redactSourceRefs(sourceRefs).slice(0, 1) : sourceRefs;
+  const safeCore = {
     target,
-    title: compactText(candidate.title || candidate.name || target, 180),
-    summary: compactText(candidate.summary || candidate.body || "", 800),
+    title: unsafeContent ? `${target} [unsafe-content-omitted]` : compactText(candidate.title || candidate.name || target, 180),
+    summary: unsafeContent ? "[unsafe-promotion-content-omitted]" : compactText(candidate.summary || candidate.body || "", 800),
     status,
     sourceRefs: sourceRefsForStorage,
     blockers,
     warnings,
+  };
+  return {
+    schemaVersion: MEMORY_RUNTIME_STORAGE_SCHEMA,
+    id: unsafeContent ? `promotion-rejected-${hashJson(safeCore).slice(0, 16)}` : compactText(candidate.id || `promotion-${hashJson(safeCore).slice(0, 16)}`, 180),
+    ...safeCore,
     requiresHumanConfirmation: true,
     effects: {
       installsOrExecutes: false,

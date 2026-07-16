@@ -295,10 +295,6 @@ async function main() {
       evidence: {
         summary: [
           "Integrated probe retrieved compact context and precedent, closed working memory, and queued private source-backed FlowSkill candidate metadata.",
-          `api_key=${SENTINELS.secretToken}`,
-          `data:text/plain;base64,${SENTINELS.base64Payload}`,
-          `${"writeback log line ".repeat(120)}${SENTINELS.longLog}`,
-          SENTINELS.rawSessionBody,
         ].join(" "),
         reusablePattern: [
           "Use pure Memory Runtime policy helpers with temp app-owned storage to verify the contract loop end to end.",
@@ -326,6 +322,24 @@ async function main() {
     assertNoUnsafePayload(receipt, giantTail);
     const writtenWriteback = JSON.parse(await fs.readFile(receipt.storagePath, "utf8"));
     assertNoUnsafePayload(writtenWriteback, giantTail);
+
+    const unsafeRejectedReceipt = await writeEvidenceWriteback(storeRoot, {
+      ...safeAcceptedWriteback,
+      task: { ...safeAcceptedWriteback.task, id: "ZHIXIA-LIFECYCLE-UNSAFE-PROBE" },
+      evidence: {
+        ...safeAcceptedWriteback.evidence,
+        summary: [
+          `api_key=${SENTINELS.secretToken}`,
+          `data:text/plain;base64,${SENTINELS.base64Payload}`,
+          `${"writeback log line ".repeat(120)}${SENTINELS.longLog}`,
+          SENTINELS.rawSessionBody,
+        ].join(" "),
+      },
+    });
+    assert.equal(unsafeRejectedReceipt.status, "rejected", "unsafe content must fail closed even when caller privacy flags are false");
+    assert.equal(unsafeRejectedReceipt.flowSkillCandidateCount, 0);
+    const unsafeStoredWriteback = JSON.parse(await fs.readFile(unsafeRejectedReceipt.storagePath, "utf8"));
+    assertNoUnsafePayload(unsafeStoredWriteback, giantTail);
 
     const repeatedReceipt = await writeEvidenceWriteback(storeRoot, safeAcceptedWriteback);
     assert.equal(repeatedReceipt.id, receipt.id, "repeated writeback should be idempotent by receipt id");

@@ -775,6 +775,319 @@ summary:focus-visible {
   padding: 16px;
 }
 
+.memory-core-overview-card {
+  align-content: start;
+}
+
+.memory-core-inline-note,
+.memory-core-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(214, 214, 220, 0.82);
+  border-radius: 8px;
+  background: rgba(248, 249, 250, 0.88);
+  color: var(--text-muted);
+}
+
+.memory-core-inline-note svg,
+.memory-core-state svg {
+  flex: 0 0 auto;
+  color: var(--teal);
+}
+
+.memory-core-inline-note span,
+.memory-core-state span {
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.memory-core-state > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.memory-core-state strong {
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.memory-core-state.compact {
+  align-items: center;
+  padding: 9px 10px;
+}
+
+.memory-core-state.tone-error {
+  border-color: rgba(184, 72, 72, 0.24);
+  background: rgba(255, 244, 244, 0.86);
+}
+
+.memory-core-state.tone-error svg {
+  color: #b84848;
+}
+
+.memory-core-overview-metrics,
+.memory-core-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(214, 214, 220, 0.82);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.memory-core-overview-metrics > div,
+.memory-core-summary-grid > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 11px 12px;
+}
+
+.memory-core-overview-metrics > div + div,
+.memory-core-summary-grid > div + div {
+  border-left: 1px solid rgba(222, 222, 228, 0.82);
+}
+
+.memory-core-overview-metrics span,
+.memory-core-summary-grid span,
+.memory-core-next-link span,
+.memory-core-next-action span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.memory-core-overview-metrics strong,
+.memory-core-summary-grid strong {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.memory-core-next-link,
+.memory-core-next-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid rgba(10, 127, 114, 0.18);
+  border-radius: 8px;
+  background: rgba(10, 127, 114, 0.06);
+  color: var(--text-main);
+  text-align: left;
+}
+
+.memory-core-next-link > div,
+.memory-core-next-action > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.memory-core-next-link strong,
+.memory-core-next-action strong {
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.memory-core-next-link svg,
+.memory-core-next-action svg {
+  flex: 0 0 auto;
+  color: var(--teal);
+}
+
+.memory-core-page {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  padding: 4px 2px 16px;
+}
+
+.memory-core-page-heading {
+  padding: 8px 2px 16px;
+}
+
+.memory-core-section {
+  display: grid;
+  gap: 13px;
+  min-width: 0;
+  padding: 18px 2px;
+  border-top: 1px solid rgba(210, 210, 216, 0.86);
+}
+
+.memory-core-section-heading,
+.memory-core-issue-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.memory-core-section-heading h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.memory-core-section-heading p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.memory-core-section-heading > span {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.memory-core-progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #e8eaec;
+}
+
+.memory-core-progress span {
+  display: block;
+  height: 100%;
+  background: var(--teal);
+}
+
+.memory-core-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 22px;
+  min-width: 0;
+}
+
+.memory-core-slot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  min-height: 62px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(222, 222, 228, 0.82);
+}
+
+.memory-core-slot > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.memory-core-slot strong,
+.memory-core-row strong,
+.memory-core-recall-row strong {
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.memory-core-slot > div > span,
+.memory-core-row > div > span,
+.memory-core-recall-row > div > span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.memory-core-issue-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.memory-core-issue-group {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+  min-height: 84px;
+  padding: 11px 12px;
+  border: 1px solid rgba(214, 214, 220, 0.82);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.memory-core-issue-group > span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.memory-core-row-list,
+.memory-core-recall-list {
+  display: grid;
+  min-width: 0;
+  border-top: 1px solid rgba(222, 222, 228, 0.82);
+}
+
+.memory-core-row,
+.memory-core-recall-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(222, 222, 228, 0.82);
+}
+
+.memory-core-row > div,
+.memory-core-recall-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.memory-core-row > span,
+.memory-core-recall-meta span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.memory-core-recall-meta {
+  width: min(280px, 30vw);
+  text-align: right;
+}
+
+.memory-core-empty-row {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(222, 222, 228, 0.82);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.spin {
+  animation: memory-core-spin 900ms linear infinite;
+}
+
+@keyframes memory-core-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .overview-card-header,
 .section-heading,
 .inspector-header,
@@ -2656,8 +2969,15 @@ mark {
 }
 
 @media (max-width: 1480px) {
-  .project-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  .project-layout,
+  .project-layout--inspector-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-layout .inspector-panel {
+    position: relative;
+    top: auto;
+    max-height: none;
   }
 
   .split-panel {
@@ -2733,6 +3053,40 @@ mark {
   .runtime-monitor-row-end {
     justify-content: flex-start;
   }
+
+  .memory-core-overview-metrics,
+  .memory-core-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .memory-core-overview-metrics > div + div,
+  .memory-core-summary-grid > div + div {
+    border-left: 0;
+  }
+
+  .memory-core-overview-metrics > div:nth-child(even),
+  .memory-core-summary-grid > div:nth-child(even) {
+    border-left: 1px solid rgba(222, 222, 228, 0.82);
+  }
+
+  .memory-core-overview-metrics > div:nth-child(n + 3),
+  .memory-core-summary-grid > div:nth-child(n + 3) {
+    border-top: 1px solid rgba(222, 222, 228, 0.82);
+  }
+
+  .memory-core-slot-grid,
+  .memory-core-issue-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .memory-core-recall-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .memory-core-recall-meta {
+    width: auto;
+    text-align: left;
+  }
 }
 
 @media (max-width: 760px) {
@@ -2740,6 +3094,25 @@ mark {
   .one-click-rules,
   .vault-stats,
   .vault-section-tabs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .memory-core-overview-metrics,
+  .memory-core-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .memory-core-overview-metrics > div:nth-child(even),
+  .memory-core-summary-grid > div:nth-child(even) {
+    border-left: 0;
+  }
+
+  .memory-core-overview-metrics > div + div,
+  .memory-core-summary-grid > div + div {
+    border-top: 1px solid rgba(222, 222, 228, 0.82);
+  }
+
+  .memory-core-row {
     grid-template-columns: minmax(0, 1fr);
   }
 }

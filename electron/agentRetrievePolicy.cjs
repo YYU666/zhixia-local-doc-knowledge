@@ -240,7 +240,7 @@ function filterColdLayerForQueryType(items, request) {
   return safeArray(items).filter((item) => item.memoryLayer !== "cold");
 }
 
-function assembleAgentRetrieveContractResult(request, contractSources = {}, deps = {}) {
+function buildAgentRetrieveCandidatePool(request, contractSources = {}, deps = {}) {
   const allItems = [];
   const pushBuiltItems = (records, buildItem, options = {}) => {
     if (typeof buildItem !== "function") return;
@@ -302,7 +302,11 @@ function assembleAgentRetrieveContractResult(request, contractSources = {}, deps
     }
   }
 
-  const sortedItems = filterColdLayerForQueryType(sortAndStripAgentRetrieveItems(allItems), request);
+  return filterColdLayerForQueryType(sortAndStripAgentRetrieveItems(allItems), request);
+}
+
+function assembleAgentRetrieveContractResult(request, contractSources = {}, deps = {}) {
+  const sortedItems = buildAgentRetrieveCandidatePool(request, contractSources, deps);
   const trimmed = trimAgentResultsToBudget(sortedItems, request.tokenBudget, request.maxResults);
   return {
     items: trimmed.items,
@@ -343,6 +347,7 @@ module.exports = {
   AGENT_RETRIEVE_DEFAULT_TOKEN_BUDGET,
   AGENT_RETRIEVE_MAX_RESULTS,
   assembleAgentRetrieveContractResult,
+  buildAgentRetrieveCandidatePool,
   buildAgentRetrieveCacheKey,
   collectAgentRetrieveContractSources,
   buildAgentRetrieveReadPlan,

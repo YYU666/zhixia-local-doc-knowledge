@@ -153,6 +153,29 @@ function cleanupTempRoot() {
         "ThreadLineage e2e items must preserve no-mutation provenance",
       );
     }
+    assert.equal(result.memoryRuntime.writebackStatus, "queued", "accepted source-backed evidence should queue through real Electron IPC");
+    assert.equal(result.memoryRuntime.factWriteCount >= 1, true, "accepted evidence should create temporal MemoryFact rows");
+    assert.equal(result.memoryRuntime.factCount >= 1, true, "current MemoryFact should be readable from the sidecar");
+    assert.equal(result.memoryRuntime.contextFactCount >= 1, true, "retrieve_context should recall MemoryFact through the hybrid path");
+    assert.equal(result.memoryRuntime.authorityBypassExcluded, true, "normal project retrieval must exclude global draft and review-required ready candidates");
+    assert.equal(result.memoryRuntime.reviewModeCandidateReturned, true, "explicit review mode should be able to retrieve project review candidates");
+    assert.equal(result.memoryRuntime.explicitGlobalScopeTruthful, true, "explicit global retrieval must expose legacy mixed rows only as sanitized global review material");
+    assert.equal(result.memoryRuntime.contextMode, "bm25f_compact_metadata_v1", "retrieve_context should report hybrid BM25F retrieval");
+    assert.equal(result.memoryRuntime.sidecarWholeDatabaseExport, false, "sidecar retrieval must not use whole-database export");
+    assert.equal(result.memoryRuntime.triggerReceiptCount >= 2, true, "writeback and retrieve_context should leave trigger receipts");
+    assert.equal(result.memoryRuntime.triggerHooks.includes("writeback_evidence"), true, "writeback trigger receipt should be present");
+    assert.equal(result.memoryRuntime.triggerHooks.includes("retrieve_context"), true, "retrieve_context trigger receipt should be present");
+    assert.equal(result.memoryRuntime.benchmarkPassed, true, "bounded synthetic memory benchmark should pass in Electron");
+    assert.equal(result.memoryRuntime.benchmarkRecallAtK, 1, "synthetic Electron benchmark should retain all anchors");
+    assert.equal(result.memoryRuntime.rejectedWritebackStatus, "rejected", "unsafe evidence should be rejected in the real Electron main process");
+    assert.equal(result.memoryRuntime.rejectedWritebackFactCountUnchanged, true, "rejected evidence must not create current MemoryFact rows");
+    assert.equal(result.memoryRuntime.rejectedStoredPayloadSanitized, true, "rejected evidence storage must not retain credential values");
+    assert.equal(result.memoryRuntime.rejectedKeyWritebackStatus, "rejected", "dangerous object keys must reject the real Electron writeback packet");
+    assert.equal(result.memoryRuntime.rejectedKeyWritebackFactCountUnchanged, true, "dangerous object keys must not create accepted sibling facts");
+    assert.equal(result.memoryRuntime.rejectedKeyStoredPayloadSanitized, true, "dangerous object keys must not persist in rejected payloads");
+    assert.equal(result.memoryRuntime.unsafeRuntimeEventRejected, true, "unsafe runtime events must not create accepted facts from a safe sibling summary");
+    assert.equal(result.memoryRuntime.unsafeRuntimeEventFactCountUnchanged, true, "unsafe runtime events must leave current fact count unchanged");
+    assert.equal(result.memoryRuntime.unsafeRuntimeEventStoredPayloadSanitized, true, "unsafe runtime event storage must omit unsafe identifiers");
     console.log("Electron governance e2e tests passed.");
   } finally {
     cleanupTempRoot();

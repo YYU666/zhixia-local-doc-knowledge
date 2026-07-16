@@ -1,6 +1,6 @@
 # Public Staging Manifest
 
-Generated at: 2026-07-07T15:49:10.586Z
+Generated at: 2026-07-16T14:04:48.024Z
 
 Source app root: canonical app source directory
 Staging path: public-staging/zhixia-local-doc-knowledge
@@ -58,7 +58,7 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 
 ## File Count
 
-- 72 files
+- 96 files
 
 ## Manifest Hash Sample
 
@@ -68,37 +68,37 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - assets/icon.svg sha256=8c0af5d51c379b71
 - codex-skills/zhixia-local-docs/agents/openai.yaml sha256=90c5530730f02678
 - codex-skills/zhixia-local-docs/references/context-bundle.md sha256=6bb6756ca36f9f66
-- codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=1b0f3d6e9e625515
-- codex-skills/zhixia-local-docs/SKILL.md sha256=f084fbdaf1ef1335
-- CONTRIBUTING.md sha256=c7022f052c7acffa
-- docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=6105cc0663cc2641
+- codex-skills/zhixia-local-docs/references/memory-core-lifecycle.md sha256=1fb5ba5117372a92
+- codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=4b646e1107f3b094
+- codex-skills/zhixia-local-docs/SKILL.md sha256=613f3a39b38e8ce6
+- CONTRIBUTING.md sha256=7b777bd01d6faec6
+- docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=8ae4a5c22f0c5696
 - docs/EXTERNAL_AUDIT_REQUIREMENTS.md sha256=c0ae0f4d4090ce2f
-- docs/PRD.md sha256=d7cb1580545b7640
+- docs/PRD.md sha256=64a75b3f6bf5a5a4
 - docs/PUBLIC_REPO_LAYOUT.md sha256=6cfba0f1ede9f423
 - docs/PUBLICATION_CHECKLIST.md sha256=0168c827bd88d36f
-- docs/RELEASE_NOTES.md sha256=1d39e98758bf57ae
-- docs/TECHNICAL_DESIGN.md sha256=6f36c03125682d8e
-- docs/TEST_PLAN.md sha256=b6c9d65afd65df2a
-- electron/agentRetrievePolicy.cjs sha256=222a9541d46b6341
+- docs/RELEASE_NOTES.md sha256=aaa50fc8d90a994c
+- docs/TECHNICAL_DESIGN.md sha256=d8c3a6dbbac8ffc8
+- docs/TEST_PLAN.md sha256=97f84252956f0a85
+- electron/agentRetrievePolicy.cjs sha256=7b7397d96d50f602
 - electron/agentRuntimeMonitorPolicy.cjs sha256=0a7051c8e3745c5e
 - electron/archiveCandidatePolicy.cjs sha256=14f2eef707fac6df
+- electron/ceoMemoryRuntimeGuardPolicy.cjs sha256=7d37d35a328832e2
 - electron/codexGuardianPolicy.cjs sha256=3bd63511b4c23853
 - electron/codexThreadHistoryAutoIngestPolicy.cjs sha256=1af4dfc2c135d468
+- electron/databaseStartupPolicy.cjs sha256=2cdf7273a0572801
 - electron/documentMetadataPolicy.cjs sha256=7be0330b6d7d3f0c
-- electron/main.cjs sha256=85fbd105f6a3c710
-- electron/memoryRuntimePolicy.cjs sha256=6ac787ed6f99ab1f
-- electron/preload.cjs sha256=f9a6e793e5e3a33a
+- electron/hybridMemoryRetrievalPolicy.cjs sha256=fcdb9863de0670e3
+- electron/main.cjs sha256=25e573dd32cd127a
+- electron/memoryAuthorityPolicy.cjs sha256=e0346a8f677e8ece
+- electron/memoryCoreRuntime.cjs sha256=6076543218119ca0
+- electron/memoryEvaluationPolicy.cjs sha256=f7a38275d53957e9
+- electron/memoryFactPolicy.cjs sha256=40d687232a7258a8
+- electron/memoryFormationPolicy.cjs sha256=b72a52ad297c2874
+- electron/memoryRuntimeIndexStore.cjs sha256=7e324904c35654ed
+- electron/memoryRuntimePolicy.cjs sha256=36f45d720d37b7da
+- electron/preload.cjs sha256=2cb4df5fa73041ea
 - electron/projectArtifactPolicy.cjs sha256=a40a16e6c8259ddd
+- electron/projectBrainPolicy.cjs sha256=08d0587d73186389
 - electron/projectMemoryBackfillPolicy.cjs sha256=e25fbc89abf8b889
 - electron/projectResumePolicy.cjs sha256=e28ac4a7d2083e98
-- electron/runtimeMonitorAdapter.cjs sha256=618aafa1d919f708
-- electron/securityPolicy.cjs sha256=0d60e7f2b812fb03
-- electron/toolSkillInventoryPolicy.cjs sha256=2fc7219a4bb32acc
-- index.html sha256=5e0d01703eb6a2c9
-- LICENSE sha256=707456d8b1206c93
-- package-lock.json sha256=bd7046189a93f2cf
-- package.json sha256=63b56afe249d0f61
-- README.md sha256=52ce716b47582ab0
-- samples/api-metadata.json sha256=6b94d04228006d59
-- samples/budget.csv sha256=d4f040e9fd169e79
-- samples/contract-note.txt sha256=b981247bc99d4ca9

@@ -2,6 +2,118 @@
 
 Zhixia is the official local-first Memory Runtime for CEO Flow. It gives CEO Flow a compact, source-backed way to retrieve project context, find precedent, track short-term working state, and write back accepted evidence without dumping raw sessions or giant Markdown.
 
+## Integrated Contract Status
+
+截至 2026-07-16，App 端 Memory Core 和 CEO Flow 端触发合同均已交付。职责边界如下：
+
+- Zhixia App 负责 authority verifier、ProjectBrain/14-slot ledger、完整 mandatory pagination、Episode Formation signed receipt、sidecar 持久化和 IPC。
+- CEO Flow 负责何时触发 Memory Trigger Gate / Project Continuity Gate、角色所需槽位、事件预算、task-card/result 字段和 accept/revise/block 决策。
+- packaged `zhixia-local-docs` helper 是 IPC 不可用时的只读 adapter，不是第二个 authority root。
+
+## Project Continuity Gate
+
+Continuity Gate 是事件触发的生命周期 gate，不是每回合 recall，也不是 heartbeat、timer 或后台扫描。
+
+触发事件：
+
+- bootstrap、CEO takeover、broken-thread takeover 或 recovery；
+- 开始新 module、wave 或 writer lane；
+- 重大 `accept` 改变原始产品目标、架构锚点、当前阶段、完成/就绪声明、发布方向或其他长期锚点；
+- 用户指出方向漂移、遗忘上下文、冲突方向或错误恢复信心。
+
+不触发：
+
+- 普通状态更新、callback polling、等待 worker/reviewer；
+- 同一 module/wave 内未改变 authority/coverage 的连续工作；
+- 每回合对话、分钟级 heartbeat、启动时巡检或后台 raw-history embedding。
+
+固定 14 槽：
+
+```text
+project_identity
+original_product_goal
+architecture_anchors
+standing_rules
+active_modules
+current_phase
+accepted_progress
+open_tasks
+open_blockers
+latest_failures
+next_actions
+thread_lineage
+canonical_docs
+last_valid_checkpoint
+```
+
+角色覆盖：
+
+- CEO full recovery：全部 14 槽，mandatory manifest 必须完整分页。
+- Worker：项目身份/目标/相关架构与规则、当前阶段、选中模块，以及任务相关的 task/blocker/failure/next/checkpoint/canonical docs。
+- Reviewer：目标、相关架构、standing rules、accepted progress、当前阶段、canonical docs、checkpoint 和 acceptance-risk precedent。
+
+分页合同：
+
+1. 使用精确 project path/id 调用 `memoryRuntime:getContinuityStatus` 或等价 provider capability。
+2. 持续读取 `nextCursor`，直到 `pagination.complete=true` 且 `mandatoryReturned=mandatoryTotal`。
+3. 第一页、top-K、slot count 或 embedded recovery preview 不构成 full recovery。
+4. cursor 无效、manifest 改变、source truncated、schema/provider failure 或达到 page/token bound 时停止并记录 partial；不得声称 full recovery。
+5. `review` / `conflict` / `stale` 槽进入 bounded review queue/canonical-source review，不自动升级 authority。
+6. 只有 App verifier 可以返回 `recoveryReady=true`。packaged helper 没有 trust context，固定返回 `authorityVerification=unavailable`、advisory 和 `recoveryReady=false`，即使它已经读取完 bounded manifest。
+
+精确任务卡字段：
+
+```text
+Project Continuity requirement:
+  triggered: yes | no
+  trigger reason:
+  role coverage: ceo_project | worker_module | reviewer_acceptance
+  required slots:
+  project path/id:
+  module scope:
+  precedent query:
+  page size:
+  max pages:
+  token budget:
+  full recovery claim allowed: no unless app result.recoveryReady=true
+```
+
+精确结果字段：
+
+```text
+Project Continuity result:
+  schema/version:
+  project path/id:
+  role coverage:
+  covered/missing/conflict/stale/review slots:
+  pages read:
+  pagination complete:
+  mandatory returned/total:
+  bounded stop/failure reason:
+  recoveryReady:
+  sourceRefs:
+  review queue consulted:
+  diagnostics consulted:
+```
+
+Cold/raw escalation 只能用于：角色必需槽在 compact continuity 和其 canonical source refs 后仍缺失，且调用方声明精确缺失槽、1-3 个 source refs/一个窄范围、300-800 token 预算。conflict/stale/review 本身不授权读取 raw history。
+
+## App IPC Mapping
+
+- `memoryRuntime:retrieveContext` / `retrievePrecedent`
+- `memoryRuntime:recoverThread`
+- `memoryRuntime:observeEvent`
+- `memoryRuntime:writebackEvidence`
+- `memoryRuntime:upsertWorkingMemory` / `listWorkingMemory` / `closeWorkingMemory`
+- `memoryRuntime:listFacts` / `listTriggerReceipts`
+- `memoryRuntime:evaluateBenchmark`
+- `memoryRuntime:getCoreDiagnostics`
+- `memoryRuntime:listCoreReviewQueue`
+- `memoryRuntime:getContinuityStatus` / `getProjectContinuity`
+- `memoryRuntime:promoteMemory`
+
+所有读取遵守 metadata-first、bounded、no raw session body、no startup full scan、no Memory Core heartbeat。只读 continuity/diagnostics 在私有状态未初始化时返回 `not_ready`，不得创建 signing key 或 sidecar。
+
 ## Lifecycle Mapping
 
 | CEO Flow moment | Zhixia hook | Purpose |
@@ -15,6 +127,12 @@ Zhixia is the official local-first Memory Runtime for CEO Flow. It gives CEO Flo
 | Promotion review | `promote_memory(candidate)` | Queue safe, source-backed memory or FlowSkill-ready candidate metadata for private review. |
 | Handoff | `retrieve_context("handoff")` | Build a compact continuation packet for the next CEO Flow turn. |
 | Old-thread recovery | `recover_thread(threadId/title/projectPath)` then `retrieve_context("thread_recovery")` | Build a compact ThreadRecoveryPacket from lineage, vault manifests, project docs, and cold-history pointers; raw session bodies remain excluded by default. |
+
+CEO Flow 已将 Memory Runtime 定义为 continuity 场景的默认生命周期动作，而不是可选工具。知匣 2026-07-15 起会为 `retrieve_context`、`retrieve_precedent`、`writeback_evidence` 和 `promote_memory` 写入轻量 `MemoryRuntimeTriggerReceipt`，因此可以从 `memoryRuntime:listTriggerReceipts` 核验某个项目是否真实触发、返回了多少记忆、耗时/token 以及是否 partial。
+
+accepted 且 source-backed 的 writeback 还会进入 typed temporal MemoryFact：同一 subject/predicate 的新值不会删除旧值，而是建立 `supersededBy` 和 valid-time 边界。CEO Flow 不需要在任务卡中粘贴这些事实正文；下一次 bootstrap/dispatch 会由 `retrieve_context` 通过 FTS5/BM25F sidecar 和现有 Hot/Warm/Skill/Cold 路由召回。
+| CEO pressure guard | `evaluate_ceo_thread_pressure(metadata)` | Stop bloated visible CEO threads from accepting new dispatch when size, image/base64 payloads, long lines, or multi-thread churn predict Codex UI freezes. |
+| CEO takeover bootstrap | `build_ceo_takeover_bootstrap(...)` | Generate a one-line replacement-thread startup packet with Hot/Warm/Skill default recall and Cold pointer-only history. |
 
 ## Provider Modes
 
@@ -244,6 +362,22 @@ node codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs <workspac
 ```
 
 The helper fallback is workspace-metadata-only. It can recommend project docs and compact `.codex-knowledge` sourceRefs, but it does not walk Thread History Vault and does not read raw/vault session bodies.
+
+## CEO Pressure Guard And Takeover
+
+Long-running CEO threads can become unusable before project memory is lost: giant visible JSONL files, `data:image`/base64 payloads, long tool-output lines, and many visible worker lanes can freeze Codex even when background work is still running. Zhixia treats this as a Memory Runtime lifecycle problem, not as automatic cleanup.
+
+Pressure evaluation is metadata-only. The caller supplies known metrics such as `sessionBytes`, `lineCount`, `maxLineChars`, `linesOver100k`, `dataImageHits`, `base64Hits`, `toolOutputLikeHits`, `visibleThreadCount`, `activeWorkerCount`, and `longTitleCount`. Zhixia returns one of `continue`, `writeback_required`, `harvest_only`, `takeover_recommended`, or `freeze_risk_stop_dispatch`.
+
+The guard does not start timers, scan the Vault, read raw session bodies, archive, compact, delete, move, restore, or mutate Codex sessions. When it returns `harvest_only` or stronger, CEO Flow should stop dispatching new lanes, harvest current callbacks, write compact evidence, and create a takeover bootstrap packet.
+
+Takeover bootstrap gives the replacement CEO a short prompt:
+
+```text
+你是 <project> 的新 CEO 接管线程。请使用知匣 Memory Runtime 恢复当前项目状态：先读 Hot/Warm/Skill 记忆和 canonical docs，Cold/raw 历史只看 sourceRefs，不默认加载旧线程全文、图片/base64 或完整工具日志。
+```
+
+The bootstrap packet includes `retrieve_context(project_resume)`, `retrieve_precedent(thread_recovery)`, and `writeback_evidence(handoff)` as recommended hooks. Cold history remains `readByDefault=false`; long-term anchors should come from Warm memory and canonical docs before any raw-history hard gate.
 - `routerPlan` is advisory for CEO Flow dispatch. It explains the chosen task profile, retrieval budget, hot/warm/cold policy, and performance boundaries.
 - `hotState` is the short-lived project/task continuity seed; `memoryGraph` is a bounded association graph derived only from returned compact items and sourceRefs.
 - Include sourceRefs whenever possible.
@@ -306,24 +440,25 @@ Request shape:
 
 ```json
 {
-  "schemaVersion": "zhixia.evidence_writeback.v1",
+  "schemaVersion": 1,
   "task": {
     "id": "task-id",
     "goal": "short goal"
   },
-  "decision": "accepted",
-  "summary": "Compact result summary.",
-  "sourceRefs": [
-    {
-      "kind": "document",
-      "path": "docs/TECHNICAL_DESIGN.md",
-      "title": "Technical Design",
-      "hash": "source-hash"
-    }
-  ],
-  "writeback": {
-    "reusablePattern": "Pattern worth reviewing later.",
-    "flowSkillCandidate": true
+  "decision": "accept",
+  "evidence": {
+    "summary": "Compact result summary.",
+    "reusablePattern": [
+      "Pattern worth reviewing later."
+    ],
+    "sourceRefs": [
+      {
+        "kind": "document",
+        "path": "docs/TECHNICAL_DESIGN.md",
+        "title": "Technical Design",
+        "hash": "source-hash"
+      }
+    ]
   },
   "privacy": {
     "containsRawSession": false,
@@ -340,7 +475,7 @@ Receipt shape:
   "id": "stable receipt id",
   "hash": "stable input hash",
   "createdAt": "ISO-8601 timestamp",
-  "status": "accepted",
+  "status": "queued",
   "flowSkillCandidateCount": 1,
   "warnings": []
 }
@@ -384,7 +519,7 @@ Response shape:
 
 ```json
 {
-  "status": "candidate_review",
+  "status": "queued",
   "blockers": [],
   "candidate": {
     "schemaVersion": "zhixia.flowskill_candidate.v1",
@@ -398,6 +533,8 @@ Response shape:
   }
 }
 ```
+
+Promotion/writeback receipt status is limited to `queued | candidate_review | rejected`: source-backed safe input is `queued`, missing-source advisory input is `candidate_review`, and any raw-session, secret, base64, giant-body, public-export, executable, or destructive signal is `rejected`.
 
 Fail-closed blockers:
 

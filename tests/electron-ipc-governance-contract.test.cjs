@@ -7,6 +7,9 @@ const main = fs.readFileSync(path.join(root, "electron", "main.cjs"), "utf8");
 const preload = fs.readFileSync(path.join(root, "electron", "preload.cjs"), "utf8");
 const archiveCandidatePolicy = fs.readFileSync(path.join(root, "electron", "archiveCandidatePolicy.cjs"), "utf8");
 const agentRetrievePolicy = fs.readFileSync(path.join(root, "electron", "agentRetrievePolicy.cjs"), "utf8");
+const hybridMemoryRetrievalPolicy = fs.readFileSync(path.join(root, "electron", "hybridMemoryRetrievalPolicy.cjs"), "utf8");
+const memoryFactPolicy = fs.readFileSync(path.join(root, "electron", "memoryFactPolicy.cjs"), "utf8");
+const memoryRuntimeIndexStore = fs.readFileSync(path.join(root, "electron", "memoryRuntimeIndexStore.cjs"), "utf8");
 const viteEnv = fs.readFileSync(path.join(root, "src", "vite-env.d.ts"), "utf8");
 const appTsx = fs.readFileSync(path.join(root, "src", "App.tsx"), "utf8");
 
@@ -36,10 +39,18 @@ const makeLineageItem = extractFunctionSource(main, "makeAgentRetrieveThreadLine
 assert.match(preload, /confirmToolSkillInventory:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("tools:confirmInventory",\s*options\)/, "preload must expose Tool/Skill snapshot confirmation IPC");
 assert.match(preload, /updateToolSkillRecordGovernance:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("tools:updateRecordGovernance",\s*options\)/, "preload must expose per-record Tool/Skill governance IPC");
 assert.match(preload, /retrieveAgentContext:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("agent:retrieveContext",\s*options\)/, "preload must pass retrieval options through to main");
+assert.match(preload, /listMemoryFacts:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("memoryRuntime:listFacts",\s*options\)/, "preload must expose temporal MemoryFact listing");
+assert.match(preload, /listMemoryRuntimeTriggerReceipts:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("memoryRuntime:listTriggerReceipts",\s*options\)/, "preload must expose lifecycle trigger receipts");
 
 assert.match(main, /ipcMain\.handle\("tools:confirmInventory"/, "main must register Tool/Skill snapshot confirmation handler");
 assert.match(main, /ipcMain\.handle\("tools:updateRecordGovernance"/, "main must register per-record Tool/Skill governance handler");
 assert.match(main, /ipcMain\.handle\("agent:retrieveContext"/, "main must register agent retrieval handler");
+assert.match(main, /ipcMain\.handle\("memoryRuntime:listFacts"/, "main must register MemoryFact list handler");
+assert.match(main, /ipcMain\.handle\("memoryRuntime:listTriggerReceipts"/, "main must register trigger receipt handler");
+assert.match(main, /ipcMain\.handle\("memoryRuntime:evaluateBenchmark"/, "main must register bounded memory evaluation handler");
+assert.doesNotMatch(main, /memoryRuntime:listCoreReviewItems|listMemoryCoreReviewItems|\.listReviewItems\(/, "main must not retain the duplicate Memory Core review-items API");
+assert.doesNotMatch(preload, /memoryRuntime:listCoreReviewItems|listMemoryCoreReviewItems/, "preload must not retain the duplicate Memory Core review-items API");
+assert.doesNotMatch(viteEnv, /listMemoryCoreReviewItems/, "renderer types must not retain the duplicate Memory Core review-items API");
 
 assert.match(confirmInventory, /requestedHash[\s\S]*requestedHash !== result\.snapshotHash[\s\S]*snapshot hash changed before confirmation/i, "Tool/Skill snapshot confirmation must reject stale snapshot hashes");
 assert.match(updateRecordGovernance, /requestedHash[\s\S]*requestedHash !== result\.snapshotHash[\s\S]*snapshot hash changed before per-record governance update/i, "per-record governance updates must reject stale snapshot hashes");
@@ -63,5 +74,12 @@ assert.match(buildLineageRecord, /read_only_no_archive_compact_restore_delete/, 
 assert.match(buildLineageRecord, /evaluateArchiveCandidate/, "ThreadLineageIndex records must attach archive candidate blockers through the existing fail-closed policy");
 assert.match(makeLineageItem, /requiresHumanConfirmation:\s*true/, "ThreadLineageIndex retrieval must remain human-review material");
 assert.match(makeLineageItem, /policy:no-archive-compact-restore-delete/, "ThreadLineageIndex retrieval must preserve no-mutation provenance");
+assert.match(hybridMemoryRetrievalPolicy, /bm25f_compact_metadata_v1/, "hybrid retrieval must use the deterministic compact BM25F strategy");
+assert.match(hybridMemoryRetrievalPolicy, /startsTimers:\s*false[\s\S]*invokesModels:\s*false/, "hybrid retrieval must not start timers or invoke models");
+assert.match(memoryFactPolicy, /supersededBy/, "MemoryFact policy must preserve temporal supersession lineage");
+assert.match(memoryFactPolicy, /missing_source_ref/, "MemoryFact policy must keep no-source facts out of current memory");
+assert.match(memoryRuntimeIndexStore, /CREATE VIRTUAL TABLE IF NOT EXISTS memory_search_fts USING fts5/, "Memory Runtime sidecar must use FTS5");
+assert.match(memoryRuntimeIndexStore, /PRAGMA journal_mode = WAL/, "Memory Runtime sidecar must use incremental WAL persistence");
+assert.doesNotMatch(memoryRuntimeIndexStore, /db\.export\(|rawSessionBodyRead:\s*true|setInterval\(|setTimeout\(/, "Memory Runtime sidecar must not export a whole database, read raw bodies, or start timers");
 
 console.log("Electron IPC governance contract tests passed.");

@@ -19,7 +19,7 @@ import {
   Trash2,
   Wrench,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   AgentRuntimeAction,
@@ -50,7 +50,13 @@ import type {
   KnowledgeDocument,
   KnowledgeItem,
   KnowledgeOverview,
+  MemoryCoreContinuityPage,
+  MemoryCoreContinuityStatus,
+  MemoryCoreDiagnostics,
+  MemoryCoreReviewQueue,
   MemoryOverview,
+  MemoryFact,
+  MemoryRuntimeTriggerReceipt,
   ParseStatus,
   SkillCandidate,
   SkillCandidateStatus,
@@ -59,6 +65,7 @@ import type {
   ToolSkillInventoryResult,
   ToolSkillRecord,
   ThreadRecoveryPacket,
+  RuntimeContextPacket,
   WatchStatus,
   ZhixiaSkillDefinition,
 } from "./vite-env";
@@ -103,6 +110,91 @@ type ScanActivity = {
   projects?: number;
   errors?: number;
 };
+
+type ProjectMemoryCoreSnapshot = {
+  diagnostics: MemoryCoreDiagnostics | null;
+  continuityStatus: MemoryCoreContinuityStatus | null;
+  continuityPage: MemoryCoreContinuityPage | null;
+  reviewQueue: MemoryCoreReviewQueue | null;
+  errors: string[];
+};
+
+const projectContinuitySlots = [
+  "project_identity",
+  "original_product_goal",
+  "architecture_anchors",
+  "standing_rules",
+  "active_modules",
+  "current_phase",
+  "accepted_progress",
+  "open_tasks",
+  "open_blockers",
+  "latest_failures",
+  "next_actions",
+  "thread_lineage",
+  "canonical_docs",
+  "last_valid_checkpoint",
+] as const;
+
+const projectContinuitySlotLabels: Record<(typeof projectContinuitySlots)[number], string> = {
+  project_identity: "项目身份",
+  original_product_goal: "最初目标",
+  architecture_anchors: "架构锚点",
+  standing_rules: "长期规则",
+  active_modules: "活跃模块",
+  current_phase: "当前阶段",
+  accepted_progress: "已验收进展",
+  open_tasks: "未完成任务",
+  open_blockers: "当前阻塞",
+  latest_failures: "最近失败",
+  next_actions: "下一步",
+  thread_lineage: "线程接续",
+  canonical_docs: "权威资料",
+  last_valid_checkpoint: "最近有效检查点",
+};
+
+function projectContinuitySlotLabel(slot: string) {
+  return projectContinuitySlotLabels[slot as keyof typeof projectContinuitySlotLabels] || "项目记忆";
+}
+
+function projectContinuityStatusLabel(status: string) {
+  if (status === "filled") return "已建立";
+  if (status === "conflict") return "有冲突";
+  if (status === "stale") return "需更新";
+  return "待补全";
+}
+
+function projectContinuityStatusTone(status: string): Tone {
+  if (status === "filled") return "teal";
+  if (status === "conflict") return "red";
+  if (status === "stale") return "amber";
+  return "slate";
+}
+
+function memoryCoreReasonLabel(reason: string) {
+  const normalized = String(reason || "").toLowerCase();
+  if (normalized.includes("exact_project") || normalized.includes("project")) return "与当前项目直接相关";
+  if (normalized.includes("title")) return "标题与当前目标相符";
+  if (normalized.includes("summary")) return "摘要与当前目标相符";
+  if (normalized.includes("source")) return "来自当前项目来源";
+  if (normalized.includes("fresh")) return "内容仍然新鲜";
+  if (normalized.includes("status")) return "当前状态可供参考";
+  if (normalized.includes("layer")) return "位于优先记忆层";
+  if (normalized.includes("authority")) return "符合当前项目的来源范围";
+  return "与当前项目记忆查询相符";
+}
+
+function memoryCoreKindLabel(kind: string | null | undefined) {
+  if (kind === "project_brain") return "项目身份";
+  if (kind === "project_anchor") return "项目锚点";
+  if (kind === "module_memory") return "模块记忆";
+  if (kind === "memory_episode") return "项目事件";
+  if (kind === "project_checkpoint") return "项目检查点";
+  if (kind === "memory_fact") return "长期事实";
+  if (kind === "knowledge_item") return "知识条目";
+  if (kind === "experience_card") return "经验记忆";
+  return "项目来源";
+}
 
 type HistoryOptimizeProgress = {
   active: boolean;
@@ -1107,6 +1199,8 @@ function retrieveKindLabel(kind: string) {
   if (kind === "ceo_flow_record") return "CEO Flow";
   if (kind === "thread_lineage_index") return "线程族谱";
   if (kind === "document") return "历史";
+  if (kind === "memory_fact") return "长期事实";
+  if (kind === "runtime_event") return "运行记忆";
   if (kind === "knowledge_item") return "知识条目";
   if (kind === "experience_card") return "经验卡";
   if (kind === "skill_candidate") return "Skill 候选";
@@ -1447,6 +1541,18 @@ function App() {
   const [agentRetrieveLogs, setAgentRetrieveLogs] = useState<AgentRetrieveLogEntry[]>([]);
   const [selectedAgentRetrieveLogId, setSelectedAgentRetrieveLogId] = useState<string | null>(null);
   const [agentRetrieveLogError, setAgentRetrieveLogError] = useState<string | null>(null);
+  const [memoryRuntimePacket, setMemoryRuntimePacket] = useState<RuntimeContextPacket | null>(null);
+  const [memoryRuntimeFacts, setMemoryRuntimeFacts] = useState<MemoryFact[]>([]);
+  const [memoryRuntimeTriggerReceipts, setMemoryRuntimeTriggerReceipts] = useState<MemoryRuntimeTriggerReceipt[]>([]);
+  const [memoryRuntimeBusy, setMemoryRuntimeBusy] = useState(false);
+  const [memoryRuntimeError, setMemoryRuntimeError] = useState<string | null>(null);
+  const [projectMemoryCoreByPath, setProjectMemoryCoreByPath] = useState<Record<string, ProjectMemoryCoreSnapshot>>({});
+  const [projectMemoryCoreLoadingPaths, setProjectMemoryCoreLoadingPaths] = useState<string[]>([]);
+  const [projectMemoryRecallByPath, setProjectMemoryRecallByPath] = useState<Record<string, RuntimeContextPacket>>({});
+  const [projectMemoryRecallLoadingPaths, setProjectMemoryRecallLoadingPaths] = useState<string[]>([]);
+  const [projectMemoryRecallErrors, setProjectMemoryRecallErrors] = useState<Record<string, true>>({});
+  const projectMemoryCoreStartedRef = useRef(new Set<string>());
+  const projectMemoryRecallStartedRef = useRef(new Set<string>());
   const [historyQuery, setHistoryQuery] = useState("CEO Flow");
   const [historyEnvelope, setHistoryEnvelope] = useState<CodexGuardianHistoryEnvelope | null>(null);
   const [selectedHistoryThreadId, setSelectedHistoryThreadId] = useState<string | null>(null);
@@ -1594,6 +1700,45 @@ function App() {
       setAgentRetrieveLogs([]);
       setSelectedAgentRetrieveLogId(null);
       setAgentRetrieveLogError(`检索日志读取失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function loadMemoryRuntimeDiagnostics(projectPath = effectiveProjectPath) {
+    if (typeof window.docKnowledge.listMemoryFacts !== "function" || typeof window.docKnowledge.listMemoryRuntimeTriggerReceipts !== "function") {
+      setMemoryRuntimeFacts([]);
+      setMemoryRuntimeTriggerReceipts([]);
+      return;
+    }
+    const [factsResult, receiptsResult] = await Promise.all([
+      window.docKnowledge.listMemoryFacts({ projectPath: projectPath || null, limit: 120 }),
+      window.docKnowledge.listMemoryRuntimeTriggerReceipts({ projectPath: projectPath || null, limit: 20 }),
+    ]);
+    setMemoryRuntimeFacts(factsResult.facts);
+    setMemoryRuntimeTriggerReceipts(receiptsResult.receipts);
+  }
+
+  async function runMemoryRuntimeProbe() {
+    if (typeof window.docKnowledge.retrieveMemoryRuntimeContext !== "function") {
+      setMemoryRuntimeError("当前安装版未暴露 Memory Runtime 检索接口。");
+      return;
+    }
+    if (memoryRuntimeBusy) return;
+    setMemoryRuntimeBusy(true);
+    setMemoryRuntimeError(null);
+    try {
+      const packet = await window.docKnowledge.retrieveMemoryRuntimeContext({
+        taskGoal: query.trim() || `恢复 ${effectiveProjectPath ? projectLabel(effectiveProjectPath) : "当前项目"} 的当前状态、长期设计和下一步`,
+        queryType: "project_resume",
+        projectPath: effectiveProjectPath,
+        tokenBudget: 1200,
+        maxResults: 8,
+      });
+      setMemoryRuntimePacket(packet);
+      await Promise.all([loadMemoryRuntimeDiagnostics(effectiveProjectPath), loadRetrieveLogs()]);
+    } catch (error) {
+      setMemoryRuntimeError(`Memory Runtime 检索失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setMemoryRuntimeBusy(false);
     }
   }
 
@@ -1843,6 +1988,14 @@ function App() {
     try {
       const result = await window.docKnowledge.scanCodexWorkspace();
       setDocuments(result.documents);
+      for (const projectPath of result.projects || []) {
+        projectMemoryCoreStartedRef.current.delete(projectPath);
+        projectMemoryRecallStartedRef.current.delete(projectPath);
+      }
+      const scannedProjects = new Set(result.projects || []);
+      setProjectMemoryCoreByPath((current) => Object.fromEntries(Object.entries(current).filter(([projectPath]) => !scannedProjects.has(projectPath))));
+      setProjectMemoryRecallByPath((current) => Object.fromEntries(Object.entries(current).filter(([projectPath]) => !scannedProjects.has(projectPath))));
+      setProjectMemoryRecallErrors((current) => Object.fromEntries(Object.entries(current).filter(([projectPath]) => !scannedProjects.has(projectPath))));
       await loadMemory();
       await loadKnowledge();
       if (result.imported.length > 0) setSelectedId(result.imported[0].id);
@@ -3610,6 +3763,72 @@ function App() {
   );
 
   useEffect(() => {
+    if (view !== "project" || !activeProject || projectMemoryCoreStartedRef.current.has(activeProject)) return;
+    const projectPath = activeProject;
+    projectMemoryCoreStartedRef.current.add(projectPath);
+    setProjectMemoryCoreLoadingPaths((current) => (current.includes(projectPath) ? current : [...current, projectPath]));
+
+    Promise.allSettled([
+      window.docKnowledge.getMemoryCoreDiagnostics({ projectPath }),
+      window.docKnowledge.getMemoryCoreContinuityStatus({
+        projectPath,
+        projectName: projectName(projectPath),
+        tokenBudget: 1800,
+        maxPacketItems: 24,
+        maxPacketChars: 10000,
+      }),
+      window.docKnowledge.getProjectContinuity({
+        projectPath,
+        projectName: projectName(projectPath),
+        taskGoal: "查看当前项目的身份、来源锚点和续接状态",
+        tokenBudget: 1800,
+        maxPacketItems: 24,
+        maxPacketChars: 10000,
+      }),
+      window.docKnowledge.listMemoryCoreReviewQueue({ projectPath, limit: 8 }),
+    ]).then((results) => {
+      const errors = results
+        .filter((result) => result.status === "rejected")
+        .map((result) => String((result as PromiseRejectedResult).reason || "项目记忆读取失败"));
+      setProjectMemoryCoreByPath((current) => ({
+        ...current,
+        [projectPath]: {
+          diagnostics: results[0].status === "fulfilled" ? results[0].value : null,
+          continuityStatus: results[1].status === "fulfilled" ? results[1].value : null,
+          continuityPage: results[2].status === "fulfilled" ? results[2].value : null,
+          reviewQueue: results[3].status === "fulfilled" ? results[3].value : null,
+          errors,
+        },
+      }));
+    }).finally(() => {
+      setProjectMemoryCoreLoadingPaths((current) => current.filter((item) => item !== projectPath));
+    });
+  }, [activeProject, view]);
+
+  useEffect(() => {
+    if (view !== "project" || projectTab !== "memory" || !activeProject || projectMemoryRecallStartedRef.current.has(activeProject)) return;
+    const projectPath = activeProject;
+    const coreState = projectMemoryCoreByPath[projectPath];
+    if (!coreState?.diagnostics?.privateStateReady || !coreState.diagnostics.sidecarReady) return;
+    projectMemoryRecallStartedRef.current.add(projectPath);
+    setProjectMemoryRecallLoadingPaths((current) => (current.includes(projectPath) ? current : [...current, projectPath]));
+    window.docKnowledge.retrieveMemoryRuntimeContext({
+      projectPath,
+      taskGoal: "说明当前项目记忆为什么会被想起",
+      query: "当前目标 项目身份 架构约束 已验收进展 未完成任务 下一步",
+      queryType: "project_resume",
+      maxResults: 4,
+      tokenBudget: 700,
+    }).then((packet) => {
+      setProjectMemoryRecallByPath((current) => ({ ...current, [projectPath]: packet }));
+    }).catch(() => {
+      setProjectMemoryRecallErrors((current) => ({ ...current, [projectPath]: true }));
+    }).finally(() => {
+      setProjectMemoryRecallLoadingPaths((current) => current.filter((item) => item !== projectPath));
+    });
+  }, [activeProject, projectMemoryCoreByPath, projectTab, view]);
+
+  useEffect(() => {
     loadToolSkillInventory(effectiveProjectPath).catch(() => {
       setToolSkillInventory(null);
       setToolSkillInventoryError("Tool/Skill inventory 读取失败。");
@@ -3945,6 +4164,68 @@ function App() {
   }, [activeProjectInfo?.updatedAt, projectDocuments, projectKnowledgeItems, projectSkillCandidates, watchStatus?.lastRunAt]);
 
   const projectTitle = effectiveProjectPath ? readableProjectDisplayName(effectiveProjectPath, projectDocuments) : "知匣项目知识库";
+  const projectMemoryCoreSnapshot = effectiveProjectPath ? projectMemoryCoreByPath[effectiveProjectPath] || null : null;
+  const projectMemoryCoreLoading = Boolean(effectiveProjectPath && projectMemoryCoreLoadingPaths.includes(effectiveProjectPath));
+  const projectMemoryRecallPacket = effectiveProjectPath ? projectMemoryRecallByPath[effectiveProjectPath] || null : null;
+  const projectMemoryRecallLoading = Boolean(effectiveProjectPath && projectMemoryRecallLoadingPaths.includes(effectiveProjectPath));
+  const projectMemoryRecallError = Boolean(effectiveProjectPath && projectMemoryRecallErrors[effectiveProjectPath]);
+  const projectMemoryCoreInitialized = Boolean(
+    projectMemoryCoreSnapshot?.diagnostics?.initialized ??
+      (projectMemoryCoreSnapshot?.diagnostics?.privateStateReady && projectMemoryCoreSnapshot?.diagnostics?.sidecarReady) ??
+      projectMemoryCoreSnapshot?.continuityPage?.continuityPacket,
+  );
+  const projectContinuityPacket = projectMemoryCoreSnapshot?.continuityPage?.continuityPacket || null;
+  const projectContinuityCoverageRaw =
+    projectMemoryCoreSnapshot?.continuityStatus?.coverage ?? projectContinuityPacket?.continuity.coverage ?? 0;
+  const projectContinuityCoverage = Math.max(
+    0,
+    Math.min(100, Math.round(projectContinuityCoverageRaw <= 1 ? projectContinuityCoverageRaw * 100 : projectContinuityCoverageRaw)),
+  );
+  const projectContinuityMissing =
+    projectMemoryCoreSnapshot?.continuityStatus?.missingSlots || projectMemoryCoreSnapshot?.continuityPage?.missing || [];
+  const projectContinuityStale =
+    projectMemoryCoreSnapshot?.continuityStatus?.staleSlots || projectMemoryCoreSnapshot?.continuityPage?.stale || [];
+  const projectContinuityConflict =
+    projectMemoryCoreSnapshot?.continuityStatus?.conflictSlots || projectMemoryCoreSnapshot?.continuityPage?.conflict || [];
+  const projectMemoryReviewItems = projectMemoryCoreSnapshot?.reviewQueue?.items || [];
+  const projectMemoryReviewCount = projectMemoryCoreSnapshot?.reviewQueue?.count ?? projectMemoryCoreSnapshot?.diagnostics?.reviewQueueCount ?? 0;
+  const projectMemoryRecoveryLabel = !projectMemoryCoreSnapshot || projectMemoryCoreLoading
+    ? "读取中"
+    : !projectMemoryCoreInitialized
+      ? "未初始化"
+      : projectMemoryCoreSnapshot.continuityStatus?.recoveryReady || projectMemoryCoreSnapshot.continuityPage?.recoveryReady
+        ? "可恢复"
+        : "需要补全";
+  const projectMemoryRecoveryTone: Tone = projectMemoryRecoveryLabel === "可恢复"
+    ? "teal"
+    : projectMemoryRecoveryLabel === "未初始化" || projectMemoryRecoveryLabel === "读取中"
+      ? "slate"
+      : "amber";
+  const projectMemoryNextAction = !projectMemoryCoreSnapshot || projectMemoryCoreLoading
+    ? "正在读取项目记忆，请稍候。"
+    : !projectMemoryCoreInitialized
+      ? "先扫描并整理项目，建立项目身份和来源锚点。"
+      : projectContinuityConflict.length > 0
+        ? `先核对${projectContinuitySlotLabel(projectContinuityConflict[0])}中的冲突来源。`
+        : projectContinuityMissing.length > 0
+          ? `先补全${projectContinuitySlotLabel(projectContinuityMissing[0])}。`
+          : projectContinuityStale.length > 0
+            ? `先更新${projectContinuitySlotLabel(projectContinuityStale[0])}。`
+            : projectMemoryReviewCount > 0
+              ? "到记忆治理页复核待确认内容。"
+              : "当前项目记忆可以直接用于续接。";
+  const projectContinuityAnchorItems = useMemo(() => {
+    const seen = new Set<string>();
+    return projectContinuitySlots.flatMap((slot) => projectContinuityPacket?.continuity.slots[slot]?.items || [])
+      .filter((item) => item.authorityStatus === "accepted" || item.authorityStatus === "curated")
+      .filter((item) => {
+        const key = `${item.title}|${item.summary || ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 8);
+  }, [projectContinuityPacket]);
 
   const coreDocuments = useMemo(() => {
     const ranked = [...projectDocuments].sort((a, b) => documentSortValue(a) - documentSortValue(b));
@@ -4186,6 +4467,9 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
+    if (view !== "agent") return () => {
+      cancelled = true;
+    };
 
     async function loadAgentContext() {
       if (typeof window.docKnowledge.retrieveAgentContext !== "function") {
@@ -4219,11 +4503,21 @@ function App() {
       }
     }
 
-    loadAgentContext();
+    const timer = window.setTimeout(() => {
+      loadAgentContext();
+    }, 350);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [documents.length, effectiveProjectPath, experienceCards.length, knowledgeItems.length, query, skillCandidates.length]);
+  }, [documents.length, effectiveProjectPath, experienceCards.length, knowledgeItems.length, query, skillCandidates.length, view]);
+
+  useEffect(() => {
+    if (view !== "agent") return;
+    loadMemoryRuntimeDiagnostics(effectiveProjectPath).catch((error) => {
+      setMemoryRuntimeError(`记忆运行状态读取失败：${error instanceof Error ? error.message : String(error)}`);
+    });
+  }, [effectiveProjectPath, view]);
 
   const retrievalResult = agentRetrieveMode === "local_contract" && agentRetrieveResult ? agentRetrieveResult : fallbackRetrievalResult;
   const topRetrievalItems = retrievalResult.items.slice(0, 3);
@@ -5248,6 +5542,239 @@ function App() {
     );
   }
 
+  function renderProjectMemoryCore() {
+    const issueGroups = [
+      { label: "待补全", slots: projectContinuityMissing, tone: "slate" as Tone },
+      { label: "需更新", slots: projectContinuityStale, tone: "amber" as Tone },
+      { label: "有冲突", slots: projectContinuityConflict, tone: "red" as Tone },
+    ];
+    const recallItems = projectMemoryRecallPacket?.items.slice(0, 4) || [];
+
+    return (
+      <div className="memory-core-page" data-e2e="project-memory-core">
+        <div className="section-heading memory-core-page-heading">
+          <div>
+            <span className="section-kicker">项目记忆</span>
+            <h3>项目身份、来源锚点与续接状态</h3>
+            <p>这里汇总项目当前可以依赖的记忆、仍需补全的部分，以及本次为什么会想起相关内容。</p>
+          </div>
+          {renderTonePill(projectMemoryRecoveryLabel, projectMemoryRecoveryTone)}
+        </div>
+
+        {projectMemoryCoreLoading && !projectMemoryCoreSnapshot ? (
+          <div className="memory-core-state" role="status">
+            <RefreshCw size={20} className="spin" />
+            <div>
+              <strong>正在读取项目记忆</strong>
+              <span>诊断、续接状态、首屏来源和待复核内容正在并行加载。</span>
+            </div>
+          </div>
+        ) : null}
+
+        {projectMemoryCoreSnapshot?.errors.length ? (
+          <div className="memory-core-state tone-error" role="alert">
+            <AlertTriangle size={20} />
+            <div>
+              <strong>部分项目记忆暂时无法读取</strong>
+              <span>已显示可用内容；其余内容可在重新打开项目后再试。</span>
+            </div>
+          </div>
+        ) : null}
+
+        {projectMemoryCoreSnapshot && !projectMemoryCoreInitialized ? (
+          <div className="memory-core-state">
+            <Database size={20} />
+            <div>
+              <strong>项目记忆尚未初始化</strong>
+              <span>扫描并整理项目后，知匣会建立项目身份和来源锚点。</span>
+            </div>
+          </div>
+        ) : null}
+
+        <section className="memory-core-section" aria-label="项目记忆概览">
+          <div className="memory-core-summary-grid">
+            <div>
+              <span>连续性覆盖</span>
+              <strong>{projectMemoryCoreSnapshot ? `${projectContinuityCoverage}%` : "--"}</strong>
+              <div className="memory-core-progress" aria-hidden="true"><span style={{ width: `${projectContinuityCoverage}%` }} /></div>
+            </div>
+            <div>
+              <span>恢复状态</span>
+              <strong>{projectMemoryRecoveryLabel}</strong>
+            </div>
+            <div>
+              <span>待补全 / 冲突</span>
+              <strong>{projectContinuityMissing.length} / {projectContinuityConflict.length}</strong>
+            </div>
+            <div>
+              <span>待复核</span>
+              <strong>{projectMemoryReviewCount}</strong>
+            </div>
+          </div>
+          <div className="memory-core-next-action">
+            <Brain size={18} />
+            <div>
+              <span>最重要的下一步</span>
+              <strong>{projectMemoryNextAction}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section className="memory-core-section" aria-label="连续性槽位">
+          <div className="memory-core-section-heading">
+            <div>
+              <h4>连续性概览</h4>
+              <p>14 个固定位置帮助新线程恢复项目身份、目标、约束、进度和下一步。</p>
+            </div>
+            <span>{projectContinuitySlots.length} 项</span>
+          </div>
+          <div className="memory-core-slot-grid">
+            {projectContinuitySlots.map((slot) => {
+              const packetSlot = projectContinuityPacket?.continuity.slots[slot];
+              const status = packetSlot?.status || (projectContinuityConflict.includes(slot)
+                ? "conflict"
+                : projectContinuityStale.includes(slot)
+                  ? "stale"
+                  : projectContinuityMissing.includes(slot)
+                    ? "missing"
+                    : "filled");
+              const firstItem = packetSlot?.items[0];
+              return (
+                <div key={slot} className={`memory-core-slot status-${status}`}>
+                  <div>
+                    <strong>{projectContinuitySlotLabel(slot)}</strong>
+                    <span>{firstItem?.summary || firstItem?.title || (status === "filled" ? "已建立当前来源" : "等待补充当前来源")}</span>
+                  </div>
+                  {renderTonePill(projectContinuityStatusLabel(status), projectContinuityStatusTone(status))}
+                </div>
+              );
+            })}
+          </div>
+          <div className="memory-core-issue-grid">
+            {issueGroups.map((group) => (
+              <div key={group.label} className="memory-core-issue-group">
+                <div className="memory-core-issue-title">
+                  <strong>{group.label}</strong>
+                  {renderTonePill(String(group.slots.length), group.tone)}
+                </div>
+                <span>{group.slots.length > 0 ? group.slots.map(projectContinuitySlotLabel).join("、") : "当前没有"}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="memory-core-section" aria-label="当前可信来源">
+          <div className="memory-core-section-heading">
+            <div>
+              <h4>当前可信来源摘要</h4>
+              <p>只显示首屏续接结果中已经接受或精选的项目锚点，不展开内部编号和文件路径。</p>
+            </div>
+          </div>
+          <div className="memory-core-row-list">
+            {projectContinuityAnchorItems.length === 0 ? (
+              <div className="memory-core-empty-row">当前还没有可显示的已接受来源摘要。</div>
+            ) : projectContinuityAnchorItems.map((item) => (
+              <div key={`${item.title}-${item.summary || ""}`} className="memory-core-row">
+                <div>
+                  <strong>{item.title || "项目来源"}</strong>
+                  <span>{item.summary || "当前来源已建立，但首屏只返回了来源指针。"}</span>
+                </div>
+                <span>{item.authorityStatus === "curated" ? "已精选" : "已接受"}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="memory-core-section" aria-label="待复核项目记忆">
+          <div className="memory-core-section-heading">
+            <div>
+              <h4>待复核内容</h4>
+              <p>这里是最多 8 条只读预览；确认、拒绝和合并仍在专门的记忆治理页完成。</p>
+            </div>
+            <span>{projectMemoryReviewCount} 条</span>
+          </div>
+          <div className="memory-core-row-list">
+            {projectMemoryReviewItems.length === 0 ? (
+              <div className="memory-core-empty-row">当前没有待复核的项目记忆。</div>
+            ) : projectMemoryReviewItems.map((item) => (
+              <div key={item.id} className="memory-core-row">
+                <div>
+                  <strong>{item.title || memoryCoreKindLabel(item.kind)}</strong>
+                  <span>{item.summary || "等待人工复核后再作为当前项目依据。"}</span>
+                </div>
+                <span>{memoryCoreKindLabel(item.kind)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="memory-core-section" aria-label="召回原因">
+          <div className="memory-core-section-heading">
+            <div>
+              <h4>为什么会想起这些内容</h4>
+              <p>打开本页时只检索一次，最多返回 4 条，并限制在 700 个令牌以内。</p>
+            </div>
+          </div>
+          {projectMemoryRecallLoading ? (
+            <div className="memory-core-state compact" role="status">
+              <RefreshCw size={18} className="spin" />
+              <span>正在整理本次召回原因。</span>
+            </div>
+          ) : projectMemoryRecallError ? (
+            <div className="memory-core-state compact tone-error" role="alert">
+              <AlertTriangle size={18} />
+              <span>本次召回原因暂时无法读取。</span>
+            </div>
+          ) : recallItems.length === 0 ? (
+            <div className="memory-core-empty-row">当前没有找到与项目续接直接相关的记忆。</div>
+          ) : (
+            <div className="memory-core-recall-list">
+              {recallItems.map((item) => {
+                const reasons = Array.from(new Set([...(item.whyRecalled || []), ...(item.whyMatched || [])].map(memoryCoreReasonLabel))).slice(0, 3);
+                const sources = item.sourceRefs.slice(0, 2).map((ref) => ref.title || memoryCoreKindLabel(ref.kind)).filter(Boolean);
+                return (
+                  <div key={item.id} className="memory-core-recall-row">
+                    <div>
+                      <strong>{item.title}</strong>
+                      <span>{item.summary}</span>
+                    </div>
+                    <div className="memory-core-recall-meta">
+                      <span>{reasons.join("；") || "与当前项目记忆查询相符"}</span>
+                      <span>来源：{sources.join("、") || memoryCoreKindLabel(item.kind)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="memory-core-section" aria-label="已有经验记忆">
+          <div className="memory-core-section-heading">
+            <div>
+              <h4>已有经验记忆</h4>
+              <p>保留原有项目经验，供续接时参考；本页只读展示，不在这里做治理操作。</p>
+            </div>
+            <span>{filteredExperienceCards.length} 条</span>
+          </div>
+          <div className="memory-core-row-list">
+            {filteredExperienceCards.length === 0 ? (
+              <div className="memory-core-empty-row">当前项目还没有经验记忆。</div>
+            ) : filteredExperienceCards.map((item) => (
+              <div key={item.id} className="memory-core-row">
+                <div>
+                  <strong>{displayMemoryTitle(item)}</strong>
+                  <span>{item.summary || item.body}</span>
+                </div>
+                <span>{memorySourceTypeLabel(item.sourceType)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   function renderMemoryCollection(cards: typeof filteredExperienceCards, title: string, description: string) {
     const groups = view === "project" ? [] : memoryProjectGroups;
     return (
@@ -5972,7 +6499,7 @@ function App() {
               { key: "overview", label: "总览" },
               { key: "documents", label: "历史" },
               { key: "knowledge", label: "知识条目" },
-              { key: "memory", label: "经验记忆" },
+              { key: "memory", label: "项目记忆" },
               { key: "handoff", label: "决策与交接" },
             ].map((tab) => (
               <button
@@ -6020,10 +6547,40 @@ function App() {
                 </div>
               </section>
 
+              <section className="overview-card memory-core-overview-card" data-e2e="project-memory-core-overview">
+                <div className="overview-card-header">
+                  <div>
+                    <span className="section-kicker">1. 项目记忆核心</span>
+                    <h3>项目是否能被完整接续</h3>
+                    <p>查看项目身份、来源锚点、连续性覆盖和当前最需要补全的内容。</p>
+                  </div>
+                  {renderTonePill(projectMemoryRecoveryLabel, projectMemoryRecoveryTone)}
+                </div>
+                {projectMemoryCoreSnapshot && !projectMemoryCoreInitialized ? (
+                  <div className="memory-core-inline-note">
+                    <Database size={18} />
+                    <span>扫描并整理项目后，知匣会建立项目身份和来源锚点。</span>
+                  </div>
+                ) : null}
+                <div className="memory-core-overview-metrics">
+                  <div><span>连续性覆盖</span><strong>{projectMemoryCoreSnapshot ? `${projectContinuityCoverage}%` : "读取中"}</strong></div>
+                  <div><span>待补全</span><strong>{projectContinuityMissing.length}</strong></div>
+                  <div><span>冲突</span><strong>{projectContinuityConflict.length}</strong></div>
+                  <div><span>待复核</span><strong>{projectMemoryReviewCount}</strong></div>
+                </div>
+                <button className="memory-core-next-link" onClick={() => setProjectTab("memory")}>
+                  <div>
+                    <span>最重要的下一步</span>
+                    <strong>{projectMemoryNextAction}</strong>
+                  </div>
+                  <ChevronRight size={17} />
+                </button>
+              </section>
+
               <section className="overview-card">
                 <div className="overview-card-header">
                   <div>
-                    <span className="section-kicker">1. 续接摘要</span>
+                    <span className="section-kicker">2. 续接摘要</span>
                     <h3>新线程接手要看的摘要</h3>
                     <p>给 Codex 恢复上下文用：当前目标、关键决定、风险和下一步会被压成一份可检索摘要。</p>
                   </div>
@@ -6061,7 +6618,7 @@ function App() {
               <section className="overview-card">
                 <div className="overview-card-header">
                   <div>
-                    <span className="section-kicker">2. AI 可用资料</span>
+                    <span className="section-kicker">3. AI 可用资料</span>
                     <h3>哪些历史和资料可以放心调取</h3>
                     <p>这里记录项目历史、报告、发布记录等来源的状态；AI 检索会优先用当前有效资料，变化过的来源会提示复看。</p>
                   </div>
@@ -6135,7 +6692,7 @@ function App() {
               <section className="overview-card">
                 <div className="overview-card-header">
                   <div>
-                    <span className="section-kicker">3. 工具与 Skill 资产</span>
+                    <span className="section-kicker">4. 工具与 Skill 资产</span>
                     <h3>工具资产目录</h3>
                     <p>只读候选资产目录，展示 `.codex-knowledge/tool-skill-inventory.md/json` 导出证据；资产目录和单条治理都只写人工复核记录，不会安装、启用、执行或提升候选状态。</p>
                   </div>
@@ -6202,7 +6759,7 @@ function App() {
               <section className="overview-card">
                 <div className="overview-card-header">
                   <div>
-                    <span className="section-kicker">4. 当前有效历史</span>
+                    <span className="section-kicker">5. 当前有效历史</span>
                     <h3>按当前项目可直接引用的来源排序</h3>
                   </div>
                 </div>
@@ -6233,7 +6790,7 @@ function App() {
               <section className="overview-card">
                 <div className="overview-card-header">
                   <div>
-                    <span className="section-kicker">5. 待整理队列</span>
+                    <span className="section-kicker">6. 待整理队列</span>
                     <h3>用现有数据推断的可审阅事项</h3>
                   </div>
                 </div>
@@ -6256,7 +6813,7 @@ function App() {
               <section className="overview-card">
                 <div className="overview-card-header">
                   <div>
-                    <span className="section-kicker">6. 项目记忆</span>
+                    <span className="section-kicker">7. 经验与交接</span>
                     <h3>经验、决策、交接和 worker 写回</h3>
                   </div>
                 </div>
@@ -6279,7 +6836,7 @@ function App() {
               <section className="overview-card">
                 <div className="overview-card-header">
                   <div>
-                    <span className="section-kicker">7. 下一次 Codex 会使用</span>
+                    <span className="section-kicker">8. 下一次 Codex 会使用</span>
                     <h3>面向可验证检索的预览骨架</h3>
                   </div>
                 </div>
@@ -6299,7 +6856,7 @@ function App() {
 
           {projectTab === "documents" ? renderDocumentCollection(projectDocumentCards, "项目历史", `${projectDocumentCards.length} 条项目来源仍可直接查看和导出。`) : null}
           {projectTab === "knowledge" ? renderKnowledgeCollection(filteredKnowledgeItems, "项目知识条目", `${filteredKnowledgeItems.length} 条整理结果，保留来源路径和提供者信息。`) : null}
-          {projectTab === "memory" ? renderMemoryCollection(filteredExperienceCards, "项目经验记忆", `${filteredExperienceCards.length} 条经验卡片，可辅助下次任务启动。`) : null}
+          {projectTab === "memory" ? renderProjectMemoryCore() : null}
 
           {projectTab === "handoff" ? (
             <section className="collection-shell">
@@ -7152,6 +7709,9 @@ function App() {
   }
 
   function renderAgentWorkspace() {
+    const latestMemoryTrigger = memoryRuntimeTriggerReceipts[0] || null;
+    const activeMemoryFactCount = memoryRuntimeFacts.filter((fact) => ["active", "accepted"].includes(fact.status)).length;
+    const historicalMemoryFactCount = memoryRuntimeFacts.filter((fact) => fact.status === "superseded").length;
     return (
       <div
         className={inspectorCollapsed ? "project-layout agent-layout project-layout--inspector-collapsed" : "project-layout agent-layout"}
@@ -7201,6 +7761,67 @@ function App() {
                       <span>{retrievalResult.freshness === "fresh" ? "当前结果来源较新，Codex 可优先使用。" : "存在待确认或源文件变化，Codex 会提示复核。"}</span>
                     </div>
                   </div>
+                </div>
+              </section>
+
+              <section className="overview-card" data-e2e="memory-runtime-diagnostics">
+                <div className="overview-card-header">
+                  <div>
+                    <span className="section-kicker">记忆运行状态</span>
+                    <h3>主动触发、长期事实和召回结果</h3>
+                  </div>
+                  <button className="ghost-button" onClick={runMemoryRuntimeProbe} disabled={memoryRuntimeBusy}>
+                    <Brain size={15} /> {memoryRuntimeBusy ? "检索中" : "运行记忆检索"}
+                  </button>
+                </div>
+
+                {memoryRuntimeError && <div className="inspector-note">{memoryRuntimeError}</div>}
+
+                <div className="overview-list">
+                  <div className="overview-row static-row">
+                    <div>
+                      <strong>最近触发</strong>
+                      <span>
+                        {latestMemoryTrigger
+                          ? `${latestMemoryTrigger.hook} · ${latestMemoryTrigger.queryType || "未分类"} · ${formatDate(latestMemoryTrigger.createdAt)}`
+                          : "尚无触发回执。CEO Flow 调用或手动运行检索后会在这里出现。"}
+                      </span>
+                    </div>
+                    {latestMemoryTrigger && renderTonePill(latestMemoryTrigger.partial ? "部分结果" : "已完成", latestMemoryTrigger.partial ? "amber" : "teal")}
+                  </div>
+                  <div className="overview-row static-row">
+                    <div>
+                      <strong>时序事实</strong>
+                      <span>{activeMemoryFactCount} 条当前事实 · {historicalMemoryFactCount} 条已替换历史 · 总计 {memoryRuntimeFacts.length} 条</span>
+                    </div>
+                  </div>
+                  <div className="overview-row static-row">
+                    <div>
+                      <strong>召回引擎</strong>
+                      <span>
+                        {memoryRuntimePacket?.hybridRetrieval
+                          ? `FTS5 + BM25F · ${memoryRuntimePacket.items.length} 条 · ${memoryRuntimePacket.tokenEstimate} tokens`
+                          : "本地 FTS5 + BM25F，按需运行；不使用心跳、后台全库扫描或默认 embedding。"}
+                      </span>
+                    </div>
+                  </div>
+                  {memoryRuntimePacket?.triggerReceipt && (
+                    <div className="overview-row static-row">
+                      <div>
+                        <strong>本次性能</strong>
+                        <span>{memoryRuntimePacket.triggerReceipt.durationMs} ms · {memoryRuntimePacket.triggerReceipt.returnedCount} 条 · {memoryRuntimePacket.triggerReceipt.tokenEstimate} tokens</span>
+                      </div>
+                    </div>
+                  )}
+                  {memoryRuntimePacket?.items.slice(0, 3).map((item) => (
+                    <div key={`memory-runtime-${item.id}`} className="overview-row static-row">
+                      <div>
+                        <strong>{item.title}</strong>
+                        <span>{item.summary || "暂无摘要"}</span>
+                      </div>
+                      {renderTonePill(retrieveKindLabel(item.kind), item.kind === "memory_fact" ? "teal" : "slate")}
+                    </div>
+                  ))}
                 </div>
               </section>
 

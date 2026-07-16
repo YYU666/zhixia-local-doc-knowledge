@@ -1,5 +1,75 @@
 # 测试计划
 
+## Memory Core closure 验收
+
+本节覆盖已实现完整 Memory Core。默认 `npm test` 已包含下列 focused tests；文档 smoke 可单独运行 `node tests/smoke-test.cjs`。
+
+### 自动化矩阵
+
+| 能力 | 主要测试 | 必须证明 |
+| --- | --- | --- |
+| Authority Core | `tests/memory-authority-policy.test.cjs` | caller 不能伪造 owner/trust；agent 不能自批；scope/project binding 精确；signed receipt 可重启 rehydrate；tamper/replay/revoke/expire/supersede fail closed；unsafe payload 拒绝 |
+| ProjectBrain | `tests/project-brain-policy.test.cjs` | 14 槽固定；filled/missing/stale/conflict；500 mandatory anchors 不丢失；cursor 确定且向前推进；全部 mandatory id 跨页无重复无遗漏；低预算降级 pointer-only |
+| Compound evaluation | `tests/memory-evaluation-policy.test.cjs` | retrieval、continuity、authority threat matrix、positive control、reuse/accept/revise/failure/correction、token/time saving、stale/maintenance cost 和 bounded net score |
+| Sidecar/migration | `tests/memory-core-index-store.test.cjs` | 11 张 Memory Core 表、公共列和索引；legacy schema 非破坏迁移；exact receipt proof unique migration；重复 proof 回滚；FTS 修复；1 万 episode reopen/query |
+| Episode Formation | `tests/memory-formation-policy.test.cjs` | event vocabulary、deterministic fingerprint、source/project/module binding、review downgrade、episode relations、checkpoint/continuity patch、secret/base64/giant/truncated fail closed |
+| Runtime composition | `tests/memory-core-runtime-lifecycle.test.cjs` | key 持久但不暴露；authority 在 relevance 前；公开 lifecycle 不能 mint accepted；phase-1 preview + phase-2 signed receipt；幂等写入；完整 continuity pagination；重启 receipt/fact rehydrate |
+| 显式 backfill | `tests/memory-core-project-backfill.test.cjs` | 构造 runtime/只读 helper 不创建私有状态；只有显式 seed 创建；排除生成包/raw/vault/JSONL/图片/正文；mtime 决定 updatedAt；重复 noop、变化 update；watcher 不 seed |
+| Helper | `tests/zhixia-local-docs-helper.test.cjs` | 所有 packaged modes；sidecar schema 兼容；bounded reads；cursor tamper evidence；current record 降级 advisory；`authorityVerification=unavailable`；`recoveryReady=false`；无 raw/secret/base64 泄漏 |
+| Lifecycle/IPC | `tests/memory-runtime-lifecycle-e2e.test.cjs`、`tests/electron-ipc-governance-contract.test.cjs`、`tests/electron-governance-e2e.test.cjs` | retrieve/precedent/event/writeback/working memory/facts/receipts/continuity/review/diagnostics IPC 串通；默认无 raw history；trigger receipts 和 formation diagnostics 可见 |
+| CEO Flow gate | `tests/ceo-memory-runtime-guard-policy.test.cjs` + CEO Flow `references/memory-runtime.md` | pressure metadata-only；takeover Hot/Warm/Skill + Cold pointer-only；Continuity Gate 仅由 bootstrap/takeover/new module/major accept/drift 等事件触发，不使用 heartbeat |
+| UI | `tests/electron-visual-behavior-e2e.test.cjs` + `tests/smoke-test.cjs` | 项目记忆页加载 diagnostics/status/page/review queue；展示 14 槽、覆盖率、恢复状态、可信摘要、待复核和 recall reason；智能优化页展示 trigger/fact/FTS 状态 |
+
+### 重点断言
+
+1. **Authority**
+   - JSON clone、caller-supplied resolver 或 fake receipt id 不能恢复 trust。
+   - 只有 app-owned composition root 能签名和注册回执。
+   - legacy `accepted` 无精确回执时降级 review；不得原地改写 legacy store。
+
+2. **完整 continuity**
+   - 完整恢复必须迭代 `nextCursor`，直到 `pagination.complete=true`、`mandatoryReturned=mandatoryTotal`、`unsatisfiedSlots=[]`。
+   - 第一页、top-K、槽位计数或 helper `pageComplete` 不能单独证明恢复完成。
+   - helper 即使分页完成也必须保持 `recoveryReady=false`。
+
+3. **形成与持久化**
+   - phase 1 始终是非提交 preview。
+   - 只有 app-owned deterministic low-risk direct-source-backed event 可进入 phase 2 accepted。
+   - 相同事件重复形成必须复用 receipt id，持久化动作是 `noop`。
+
+4. **性能边界**
+   - diagnostics 必须报告 `startupWholeTableScan=false`、`timers=false`、`watchers=false`、`embeddings=false`、`graphRebuild=false`。
+   - 1 万候选 authority filter 的 focused p95 上限为 2500ms；大 continuity focused case 上限为 5000ms；500 mandatory anchor traversal 上限为 8000ms。
+   - 上述是当前回归上限，不等于最终 P3 latency 产品目标。
+
+5. **隐私边界**
+   - 默认 packet、receipt、sidecar payload、review queue、helper 输出和 UI 不得出现 raw session body/path、真实 thread id、secret、private key、base64、巨型正文或内部 signing key。
+   - Cold/history 只返回 pointer/source refs；读取正文必须是显式窄范围 recovery gate。
+
+### 手动 UI 验收
+
+1. 选择一个尚未 seed 的项目，打开“项目记忆”：显示“未初始化”，只读查询不得创建 Memory Core 私有状态。
+2. 通过“扫描 Codex 工作区”显式扫描该项目；重新打开项目后应出现项目身份和 identity anchor，未确认 phase 不应被猜成 active。
+3. 打开项目记忆页：确认显示 14 个槽位、覆盖率、恢复状态、待补全/冲突/待复核数量和下一步。
+4. 确认“当前可信来源摘要”只显示 accepted/curated 首屏摘要，不显示内部编号和真实本机路径。
+5. 确认“待复核内容”最多显示 8 条只读预览，项目页没有直接 approve/reject/merge 按钮。
+6. 进入项目记忆页时，“为什么会想起这些内容”只触发一次、最多 4 条、700 tokens；切换普通项目 tab 不应持续轮询。
+7. 打开“智能优化”：手动运行一次记忆检索后，应显示最近 trigger receipt、当前/历史 MemoryFact 数量、本次耗时、返回数和 token。
+8. 不运行任何操作并观察空闲状态：不得出现 Memory Core heartbeat、后台 embedding、全库扫描或 raw-history 读取。
+
+### 文档与隐私 smoke
+
+- `node tests/smoke-test.cjs`：验证核心文档存在、Memory Runtime/IPC/UI/Skill 合同未回退。
+- 对本任务允许修改的文档执行只读隐私扫描：拒绝真实用户路径、真实 thread id、平台私有数据目录细节、secret/private key 和私有 runlog 内容。
+- 不通过 `prepare:public` 验证本任务，因为它会写 public staging；本任务只运行其等价的只读内容扫描。
+
+### P3 残余验证
+
+- 在目标 Electron/Node 升级时复测 experimental `node:sqlite` 行为和 WAL/FTS5 兼容性。
+- 增加 Windows DPAPI key wrapping 后，补迁移、回滚、旧 ACL key 兼容和不可导出测试。
+- helper 若未来取得独立 verifier，必须新增 proof/key isolation threat model；在此之前继续断言 `recoveryReady=false`。
+- 建立更大真实项目 continuity corpus，收紧完整分页 latency 目标，同时保留 mandatory 无遗漏证明。
+
 ## 自动验证
 
 Source-only public checks:
@@ -36,6 +106,8 @@ Maintainer release gates:
 
 2026-06-27 closed-loop wiring adds smoke coverage that `recover_thread` and `runtimeMonitor:getSnapshot` are real RuntimeEventMemory producers: thread recovery must write a recovery/takeover event and return `runtimeEventWriteback`; runtime monitor snapshots must convert already-computed recommendations into bounded runtime diagnosis events and expose an explicit `observeRuntimeEvents=false` dry-run switch. This is event-triggered only and must not reintroduce background polling or long-thread triage unless the caller explicitly requests long-thread metadata.
 
+2026-07 CEO Memory Runtime Guard adds `tests/ceo-memory-runtime-guard-policy.test.cjs` to default `npm test`: synthetic oversized CEO-thread metadata must produce `freeze_risk_stop_dispatch`, multi-thread visible churn must produce `harvest_only`, small threads must `continue`, lifecycle writeback must redact raw/base64/secret payloads, and takeover bootstrap must keep Hot/Warm/Skill default recall with Cold pointer-only history. The packaged helper test also covers `--thread-pressure` and `--ceo-takeover`.
+
 2026-07 external-audit security hardening adds `tests/security-policy.test.cjs` to default `npm test`: renderer settings patches must be key/type whitelisted; AI Provider URLs must normalize to trusted HTTPS hosts; untrusted HTTP/host values must be rejected before document text or API keys can be sent; renderer-controlled `projectPath` values must stay inside registered workspace paths. Smoke/source checks also guard CSP/header injection, navigation/window/permission denial, explicit Electron sandbox, Guardian destructive confirmation signals, app-owned Guardian default path, public staging privacy scan, and source-only staging behavior.
 
 2026-07 public staging verification requires both app-root and staging-root tests. From the app root, run `node scripts\prepare-public-repo.cjs`; then from `public-staging\zhixia-local-doc-knowledge`, run `npm test`. Staging is intentionally source-only: installer scripts, release artifacts, private runlogs, `.codex-knowledge`, local databases, vaults, backups, evidence, screenshots and user data must be absent. The staging script performs a content-level scan for private Windows user paths, private project/tool codenames and real-looking Codex thread IDs; a hit blocks publication.
@@ -58,6 +130,7 @@ Fresh-user / second-machine release signoff is intentionally outside default `np
 - Compact gate：模拟 Guardian receipt，验证缺少 Vault、`thread_store_compatible !== true`、threadId 不匹配、receipt 缺 hash 或备份路径时，Electron 主进程必须拒绝成功态。
 - Agent retrieval：用临时 SQLite/fixtures 验证 `project_record`、`ceo_flow_record`、SQLite-backed `thread_lineage_index`、`tool_skill_record`、`parentCeoThreadId`、topK、token budget、cache hit 和 metadata-only / compact-row reads；不能靠全量 `contentText`、敏感配置正文或 raw session 扫描通过。`thread_lineage_index` 必须声明 no raw session body 和 no archive/compact/restore/delete mutation boundary，并在 persisted lineage rows 改变时刷新 cache key；`tool_skill_record` 必须声明 advisory-only、human confirmation required 和 no install/enable/execute/active-promotion boundary。
 - Memory Runtime contract：用 policy fixtures 验证 `retrieve_context` 返回 RuntimeContextPacket-shaped result 和 sourceRefs / freshness / tokenEstimate，`retrieve_precedent` 只读取 metadata-first bounded kinds，`recover_thread` 返回 ThreadRecoveryPacket-shaped result 和 lineage/vault/project-doc/cold-history pointers，`MemoryRouterPlan` 会按 task goal/queryType 选择 hot/warm/skill/cold profile、夹住 topK/token/time budget，并在 packet 中返回 `memoryMode=layered`、`routerPlan`、`hotState`、bounded `memoryGraph`、`activatedMemory`、`memoryLayers`、`recallPlan`、`performance`、`cacheKey`、`expiresAt`；默认读取顺序必须是 Hot/Warm/Skill，Cold 只作为 sourceRefs pointer 且 `defaultRead=false`。该路由层不得启动后台定时器、不得扫描 Vault、不得运行 AI 摘要或全局图谱重建，默认不得读取全文/raw body。持久 `memory_graph_nodes` / `memory_graph_edges` 只能从 compact metadata 派生，`memoryRuntime:activateMemory` 必须按 taskGoal/projectPath/threadId 做 bounded activation、一跳邻居扩散和显式轻量缓存落盘；同名 Codex worktree alias 与精确 `threadId` 必须进入种子池，精确 threadId 召回优先级必须高于泛项目关键词。项目 fixture 必须能激活项目节点、CEO/thread lineage、Thread History Vault pointer 和经验卡，并声明 rawSessionBodyRead=false；维护者真实数据探针可另行证明指定旧 CEO 线程能按 canonical projectPath 召回，但不得把真实 thread id 写入公开测试计划。底层允许 metadata-first bounded row reads，不能用“完全不读数据库 metadata”作为验收口径。invalid-only allowedKinds 必须返回空 allowedKinds/partial/warning，不能回退到默认 broad retrieval；allowed kind 如果携带 raw-session/secret sourceRef，也必须 fail-closed 丢弃。`writeback_evidence` 持久化 compact receipt 并对 accepted source-backed reusablePattern 生成私有 review-only FlowSkill-ready candidate packet / queue item；重复相同 packet 必须 id/hash 稳定且不重复写多条；revise/block 默认只生成 MemoryCard/pitfall candidate；no-source / raw-session / secret / destructive intent 必须降级或拒绝。WorkingMemoryRecord 支持 active/waiting_review/blocked/accepted/superseded，`promote_memory` 对 FlowSkill/public-export/install/execute 路径保持 candidate/review 和 no-op effects。`tests/memory-runtime-lifecycle-e2e.test.cjs` 还会把这些 policy helpers 串成单个本地 lifecycle probe，确保 raw_session fixture、raw-backed allowed kind、巨型 Markdown 尾部、base64、credential/private-key、long-log 和无 sourceRefs reusable evidence 不会突破默认边界。
+- CEO Memory Runtime Guard：用纯 policy fixture 验证 oversized CEO thread metadata、multi-thread visible churn、small thread、compact lifecycle writeback 和 one-line takeover bootstrap。验收必须证明该 guard 只消费 caller metadata，不启动 timer、不扫描 Vault、不读取 raw session body、不触发 archive/compact/delete/move/restore；视觉证据只能以本地 path/hash/summary/sourceRef 进入记忆，不能把图片/base64 写入 chat 或 memory payload。
 - Codex Skill lifecycle helper：用临时 `.codex-knowledge` fixtures 验证 `read-project-knowledge.cjs` 的 legacy JSON、RuntimeContextPacket、RuntimePrecedentPacket 和 EvidenceWritebackPacket dry-run 输出；默认输出必须保留 sourceRefs、预算元数据和 warnings，同时排除 raw session 路径、base64 payload 和 giant Markdown 尾部。
 - Archive Candidate / Queue：用 fixtures 覆盖 `active/running`、最近写入、无 Vault、hash 失败、pinned/keep hot、已有 receipt、项目 paused/completed、CEO 创建线程 3 天冷却、CEO 主线程 30 天保留、归属不明线程先入库后归档；扫描入口必须覆盖 Guardian `largest_session_files` 和 inventory hot sessions，防止小型但过期的 CEO 子线程漏扫。回归测试必须防止主按钮重新退回只扫 20 条、防止归档队列重新退回 50 条截断、防止已入库候选缺少 vault manifest/session/hash 证据而无法排队。大库场景必须允许 old-thread knowledge item 走 Thread History Vault sidecar fallback，避免 512MB+ `sql.js` 整库导出触发 `memory access out of bounds`。归档队列必须要求 vault 等安全证据，并声明真实侧栏归档需要 Codex 宿主桥接；默认不得 delete/restore/raw-session mutation。大线程保留 compact receipt evidence，小型过期 CEO 子线程可在 vault/hash 通过后进队列。
 - UI 状态流：`tests/electron-visual-behavior-e2e.test.cjs` 已覆盖简化主导航、项目卡片总览、项目详情里的历史/知识/记忆、Tools 卡片安全边界、Memory/Experience curation、retrieval explanation、老线程自动体检入口和 archive candidate / host-bridge 边界文案的真实 Electron DOM 行为，并在默认桌面与 980px 窄桌面窗口检查主产品页面无横向溢出；source smoke 已覆盖 full backlog/remaining 文案，确保批次被截断时不得显示全量完成。后续仍需补真实一键安全减负成功/失败路径、宿主侧栏归档桥接回执、错误态不得显示“完成”等更完整 UI 行为。
@@ -114,7 +187,7 @@ Fresh-user / second-machine release signoff is intentionally outside default `np
 42. 导出知识库元数据 JSON。
 43. 关闭应用后重新打开，确认记录仍在。
 44. 通过 Windows“设置 > 应用”或开始菜单卸载知匣，确认安装目录、桌面快捷方式、开始菜单快捷方式被删除。
-45. 卸载后确认 `%APPDATA%\知匣 Local Doc Knowledge`、`%APPDATA%\local-doc-knowledge`、`%LOCALAPPDATA%\知匣 Local Doc Knowledge`、`%LOCALAPPDATA%\local-doc-knowledge` 不再存在。
+45. 卸载后确认知匣拥有的应用私有数据目录和本地缓存目录不再存在，不记录或展示真实用户路径。
 46. 卸载后确认 `%CODEX_HOME%\skills\zhixia-local-docs` 不再存在；如设置了 `CODEX_HOME`，确认 `%CODEX_HOME%\skills\zhixia-local-docs` 不再存在。
 47. 重新运行安装器，不勾选“安装 zhixia-local-docs Codex Skill”，确认首次启动后不会自动安装 Skill。
 48. 再次卸载后重新安装，勾选“安装 zhixia-local-docs Codex Skill”，确认安装完成后 Skill 已写入 `$CODEX_HOME/skills` 或 `$CODEX_HOME/skills`。
@@ -145,6 +218,17 @@ Fresh-user / second-machine release signoff is intentionally outside default `np
 - Codex 工具与 Skill 资产图谱 MVP 必须只读生成 ToolSkillRecord candidate，写出 `.codex-knowledge/tool-skill-inventory.md/json`，通过 IPC/UI 和一等工具页展示用途、触发条件、安装状态、适用项目、风险边界、safe/forbidden commands 和 source refs，支持 live inventory snapshot 级确认，支持 SQLite-backed 单条治理 metadata，并通过 `tool_skill_record` Agent retrieval 返回 compact advisory metadata；自动发现和检索不得安装、启用、执行工具，也不得保存凭据、读取敏感配置正文或 raw session。
 - 公开发布必须使用 `npm run prepare:public` 的 source-only staging；staging 的 `npm test` 必须通过，隐私扫描必须无命中，且不能包含本地数据库、vault、备份、release/dist、私有 runlog、真实 thread id、私有路径或私有项目代号。
 - Memory Runtime contract MVP 必须通过 preload/IPC 暴露 retrieve_context、retrieve_precedent、writeback_evidence、WorkingMemoryRecord、只读 FlowSkill candidate list 和 promote_memory；默认 compact/metadata-first，不读取 raw session 或巨型 Markdown，不自动归档/瘦身/删除/移动/恢复，不自动安装、执行或公开导出 FlowSkill。
+- Memory Intelligence 默认测试必须覆盖：BM25F 中文/英文召回、project/thread scope、status/freshness/recency/graph 信号、raw-session/secret/base64/giant-body fail-closed、topK/token budget 和确定性排序。
+- MemoryFact 测试必须覆盖：source-backed current、无来源降级、raw/secret rejection、同值幂等、不同值冲突、validFrom/validTo、supersededBy、current/historical 查询和旧事实不丢失。
+- MemoryFact 还必须覆盖 A -> B -> A recurrence：返回旧值时创建新 occurrence，不能重新打开第一条 A、不能让 A/B 同时 current，也不能抹掉第一段 validTo。
+- `memory-runtime-index.sqlite` 必须使用独立 `node:sqlite` FTS5/WAL 增量写入；测试必须证明不调用 sql.js whole-database export、重复内容不重复索引、raw/base64 不入索引、trigger receipt 可读取。
+- sidecar 锁测试必须持有独立 SQLite 写锁，证明 upsert 和 trigger receipt 在 100ms busy timeout 下于 250ms 检索预算附近快速失败、失败路径释放句柄、释放锁后可继续写入，并可删除 temp dir。
+- 对抗测试必须逐项覆盖 id/projectPath/scope/status/tags/sourceRef kind/id/path/hash、task.domain、evidence.memoryFacts、runtime-event automationId、promotion actions 和 trigger receipt query/hash/ref/warnings；任一 raw-session、GitHub/AWS/API/Bearer/PEM secret、base64 或 giant body 不得保留原值，也不得让安全 sibling summary 生成 accepted fact。
+- authority 回归必须证明普通项目检索排除 global draft、项目 candidate/review、`freshness=review` 和 `ready + requiresHumanConfirmation`，并证明显式 review mode 可读取项目 review candidate。
+- `tests/memory-runtime-hybrid-lifecycle.test.cjs` 必须用完全合成的游戏工作室场景串起架构锚点、UI 假死教训、部署约束、用户规则、事实替换和 trigger receipt，并输出 Recall@K、Precision@K、MRR、nDCG、stale-hit、P95 latency/token。
+- `tests/electron-governance-e2e.test.cjs` 必须在隔离 userData 的真实 Electron 主进程中执行 accepted writeback -> MemoryFact -> retrieve_context -> trigger receipt，并证明 hybrid strategy 生效、sidecar wholeDatabaseExport=false。
+- Memory Runtime 新增 `listFacts`、`listTriggerReceipts`、`evaluateBenchmark` preload/IPC/type；这些接口只读或纯评测，不得启动 timer、读取 raw session、执行 archive/compact/delete/move/restore 或安装/执行 FlowSkill。
+- `evaluateBenchmark` 只有在调用方提供已经真实执行的 query results 时才可标记 `caller_executed_results`；空 cases 必须失败，预填答案的 synthetic fixture 只能验证指标计算，不能作为产品召回证明。
 - `zhixia-local-docs` helper 必须能在 Codex/CEO Flow lane 中通过 `--runtime-context`、`--precedent` 和 `--writeback-dry-run` 输出 compact lifecycle JSON，保持 legacy `--query --limit --json` 兼容，并且不得读取 raw session、巨型 Markdown 尾部、base64 payload、凭据或自动运行 FlowSkill/归档/瘦身/安装/执行。
 - `codex-skills/zhixia-local-docs/SKILL.md` 和 `agents/openai.yaml` 存在且通过烟测。
 - 设置页 Skill 安装器可用，且打包产物包含 `codex-skills`。

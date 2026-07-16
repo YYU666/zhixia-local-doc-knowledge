@@ -15,6 +15,8 @@ const projectScriptsPath = path.join(projectPath, "scripts");
 const projectDocsPath = path.join(projectPath, "docs");
 const codexSessionsPath = path.join(codexHome, "sessions", "2026", "06", "01");
 const oldThreadId = "11111111-2222-7333-8444-555555555555";
+const captureVisuals = process.env.ZHIXIA_CAPTURE_VISUALS === "1";
+const visualOutputDir = path.join(root, "artifacts", "visual-checks", "memory-core-project-ui-01");
 
 function writeFixture() {
   fs.mkdirSync(projectSkillPath, { recursive: true });
@@ -171,7 +173,7 @@ function rendererScript() {
   await waitForText("project-alpha");
   clickButtonText("project-alpha");
   await waitForText("项目历史");
-  await waitForText("经验记忆");
+  await waitForText("项目记忆");
 
   clickButtonText("工具");
   await waitForText("这里只整理，不安装、不启用、不执行");
@@ -189,17 +191,28 @@ function rendererScript() {
   click('[data-e2e-nav="project"]');
   await waitForText("project-alpha");
   clickButtonText("project-alpha");
-  await waitForText("经验记忆");
-  clickButtonText("经验记忆");
-  await waitForText("项目历史记忆");
-  await waitForText("来源签名");
-  await waitForText("重复治理");
-  await waitForText("合并目标");
+  await waitForText("项目记忆");
+  clickButtonText("项目记忆");
+  await waitForSelector('[data-e2e="project-memory-core"]');
+  await waitForText("连续性概览");
+  await waitForText("项目身份");
+  await waitForText("最近有效检查点");
+  await waitForText("待复核内容");
+  await waitForText("为什么会想起这些内容");
+  await waitForText("已有经验记忆");
+  const projectLayout = document.querySelector(".project-layout--solo");
+  if (!projectLayout) throw new Error("Missing solo project detail layout");
+  if (window.innerWidth <= 1480 && getComputedStyle(projectLayout).gridTemplateColumns.trim().split(/\s+/).length !== 1) {
+    throw new Error("Project detail must use one full-width column in non-maximized desktop windows");
+  }
   const memoryText = bodyText();
   for (const label of ["保留", "合并", "拒绝", "归档", "重审"]) {
-    if (!memoryText.includes(label)) throw new Error("Memory curation action missing: " + label);
+    const action = Array.from(document.querySelectorAll('[data-e2e="project-memory-core"] button')).find((button) => button.innerText.trim() === label);
+    if (action) throw new Error("Project memory view must remain read-only: " + label);
   }
+  if (!memoryText.includes("最多返回 4 条") || !memoryText.includes("700 个令牌")) throw new Error("Project memory recall bounds were not shown");
   assertNoHorizontalOverflow("memory workspace");
+  if (${JSON.stringify(captureVisuals)}) await sleep(5000);
 
   clickButtonText("智能优化");
   await waitForText("一键优化规则");
@@ -208,6 +221,10 @@ function rendererScript() {
   await waitForText("超过冷却期的 CEO 子线程");
   await waitForText("归档队列生成");
   await waitForText("AI 调取规则");
+  await waitForText("记忆运行状态");
+  await waitForSelector('[data-e2e="memory-runtime-diagnostics"]');
+  clickButtonText("运行记忆检索");
+  await waitFor(() => document.querySelector('[data-e2e="memory-runtime-diagnostics"]')?.innerText.includes("FTS5 + BM25F"), "Memory Runtime diagnostics result", 30000);
   assertNoHorizontalOverflow("agent workspace");
   const advancedSummary = Array.from(document.querySelectorAll("summary")).find((summary) => summary.innerText.trim().includes("高级操作"));
   if (!advancedSummary) throw new Error("Missing old-thread advanced actions summary");
@@ -257,8 +274,83 @@ function rendererScript() {
 `;
 }
 
-function runElectronVisualProbe(viewport = {}) {
+async function waitForDevToolsTarget(port) {
+  const started = Date.now();
+  while (Date.now() - started < 15000) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`);
+      const targets = await response.json();
+      const target = targets.find((item) => item.type === "page" && item.webSocketDebuggerUrl);
+      if (target) return target;
+    } catch {
+      // Electron may still be starting.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for Electron DevTools target on ${port}`);
+}
+
+async function captureMemoryCoreScreenshot(port, filePath, viewport) {
+  const target = await waitForDevToolsTarget(port);
+  const socket = new WebSocket(target.webSocketDebuggerUrl);
+  const pending = new Map();
+  let nextId = 0;
+  await new Promise((resolve, reject) => {
+    socket.addEventListener("open", resolve, { once: true });
+    socket.addEventListener("error", reject, { once: true });
+  });
+  socket.addEventListener("message", (event) => {
+    const message = JSON.parse(String(event.data));
+    if (!message.id || !pending.has(message.id)) return;
+    const { resolve, reject } = pending.get(message.id);
+    pending.delete(message.id);
+    if (message.error) reject(new Error(message.error.message));
+    else resolve(message.result || {});
+  });
+  const send = (method, params = {}) => new Promise((resolve, reject) => {
+    const id = ++nextId;
+    pending.set(id, { resolve, reject });
+    socket.send(JSON.stringify({ id, method, params }));
+  });
+  try {
+    await send("Runtime.enable");
+    const started = Date.now();
+    let memoryCoreReady = false;
+    while (Date.now() - started < 20000) {
+      const result = await send("Runtime.evaluate", {
+        expression: `Boolean(document.querySelector('[data-e2e="project-memory-core"]')) && document.body.innerText.includes('为什么会想起这些内容')`,
+        returnByValue: true,
+      });
+      if (result.result?.value === true) {
+        memoryCoreReady = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+    if (!memoryCoreReady) throw new Error("Project Memory Core view was not ready for screenshot capture");
+    await send("Emulation.setDeviceMetricsOverride", {
+      width: viewport.captureWidth || viewport.width,
+      height: viewport.height,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    const page = await send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, Buffer.from(page.data, "base64"));
+    return filePath;
+  } finally {
+    socket.close();
+  }
+}
+
+function runElectronVisualProbe(viewport = {}, index = 0) {
   return new Promise((resolve, reject) => {
+    const port = 9320 + index;
+    const screenshotPath = path.join(
+      visualOutputDir,
+      `memory-core-project-${viewport.captureWidth || viewport.width}x${viewport.height}.png`,
+    );
     const child = spawn(electronExe, [
       root,
       "--user-data-dir=" + userData,
@@ -266,6 +358,7 @@ function runElectronVisualProbe(viewport = {}) {
       "--disable-dev-shm-usage",
       "--no-sandbox",
       "--ozone-platform=headless",
+      ...(captureVisuals ? [`--remote-debugging-port=${port}`] : []),
     ], {
       cwd: root,
       env: {
@@ -284,6 +377,7 @@ function runElectronVisualProbe(viewport = {}) {
 
     let stdout = "";
     let stderr = "";
+    const screenshotPromise = captureVisuals ? captureMemoryCoreScreenshot(port, screenshotPath, viewport) : Promise.resolve(null);
     const timer = setTimeout(() => {
       child.kill();
       reject(new Error(`Electron visual behavior e2e timed out.\nstdout:\n${stdout}\nstderr:\n${stderr}`));
@@ -299,7 +393,7 @@ function runElectronVisualProbe(viewport = {}) {
       clearTimeout(timer);
       reject(error);
     });
-    child.on("exit", (code) => {
+    child.on("exit", async (code) => {
       clearTimeout(timer);
       const matches = [...stdout.matchAll(/ZHIXIA_E2E_RESULT (.+)/g)];
       const match = matches[matches.length - 1];
@@ -308,7 +402,9 @@ function runElectronVisualProbe(viewport = {}) {
         return;
       }
       try {
-        resolve(JSON.parse(match[1]));
+        const result = JSON.parse(match[1]);
+        result.screenshotPath = await screenshotPromise;
+        resolve(result);
       } catch (error) {
         reject(new Error(`Electron visual behavior e2e returned invalid JSON: ${error.message}\n${match[1]}`));
       }
@@ -327,8 +423,9 @@ function cleanupTempRoot() {
   try {
     writeFixture();
     const results = [
-      await runElectronVisualProbe(),
-      await runElectronVisualProbe({ width: 980, height: 720 }),
+      await runElectronVisualProbe({ width: 1920, height: 1080 }, 0),
+      await runElectronVisualProbe({ width: 1366, height: 768 }, 1),
+      await runElectronVisualProbe({ width: 960, captureWidth: 960, height: 640 }, 2),
     ];
     for (const result of results) {
       assert.equal(result.ok, true, "Electron visual behavior probe should complete");

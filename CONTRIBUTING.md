@@ -1,5 +1,7 @@
 # Contributing
 
+Development requires Node.js 24 or newer because the local Memory Runtime sidecar uses the built-in `node:sqlite` FTS5 runtime shipped with Electron 41.
+
 Thank you for helping make Zhixia a dependable local Memory Runtime for CEO Flow.
 
 ## Development Setup

@@ -749,7 +749,21 @@ export type KnowledgeGenerateResult = {
   usedNetwork: boolean;
   items: KnowledgeItem[];
   errors: Array<{ filePath: string; message: string }>;
+  memoryCoreSeeds?: MemoryCoreProjectSeedSummary[];
   overview: KnowledgeOverview;
+};
+
+export type MemoryCoreProjectSeedSummary = {
+  status: "ready" | "noop" | "skipped" | string;
+  projectId?: string | null;
+  projectPath: string | null;
+  updatedAt?: string | null;
+  sourceRefCount?: number;
+  brainCount?: number;
+  identityAnchorCount?: number;
+  moduleCount?: number;
+  actions?: Record<string, number>;
+  reason?: string;
 };
 
 export type AiProviderTestResult = {
@@ -764,6 +778,8 @@ export type AgentRetrieveKind =
   | "thread_lineage_index"
   | "project_artifact"
   | "document"
+  | "memory_fact"
+  | "runtime_event"
   | "knowledge_item"
   | "experience_card"
   | "skill_candidate"
@@ -784,6 +800,45 @@ export type SourceRef = {
   updatedAt: string | null;
   artifactType?: string | null;
   sourceType?: string | null;
+};
+
+export type MemoryFactStatus = "active" | "accepted" | "candidate" | "review" | "superseded" | "rejected";
+
+export type MemoryFact = {
+  id: string;
+  projectPath?: string | null;
+  scope: "project" | "global" | string;
+  subject: string;
+  predicate: string;
+  object: unknown;
+  value: unknown;
+  factType: string;
+  status: MemoryFactStatus;
+  confidence: number;
+  validFrom: string;
+  validTo?: string | null;
+  observedAt: string;
+  sourceRefs: SourceRef[];
+  supersededBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MemoryRuntimeTriggerReceipt = {
+  schemaVersion: "zhixia.memory_runtime_index.v1" | string;
+  id: string;
+  hook: "retrieve_context" | "retrieve_precedent" | "writeback_evidence" | "promote_memory" | string;
+  queryType?: string | null;
+  projectPath?: string | null;
+  threadId?: string | null;
+  returnedCount: number;
+  tokenEstimate: number;
+  durationMs: number;
+  partial: boolean;
+  warnings: string[];
+  sourceRefs: SourceRef[];
+  createdAt: string;
+  storageUnavailable?: boolean;
 };
 
 export type MemoryRouterTaskType =
@@ -950,11 +1005,211 @@ export type RuntimeMemoryItem = {
   status: "active" | "curated" | "ready" | "candidate" | "review" | "stale" | "superseded" | "blocked" | string;
   freshness: "fresh" | "review" | "stale" | "unknown" | "conflict" | string;
   whyMatched: string[];
+  whyRecalled?: string[];
   sourceRefs: SourceRef[];
   tokenEstimate: number;
   requiresHumanConfirmation: boolean;
   rawSessionPolicy: "not_allowed" | "explicit_only";
   memoryLayer?: MemoryLayerName | string;
+};
+
+export type MemoryCoreFormationDiagnostics = {
+  schemaVersion: "zhixia.memory_core_runtime.v1" | string;
+  hook: "writeback_evidence" | "observe_event" | "close_working_memory" | string;
+  status: "accepted" | "review" | "rejected" | string;
+  accepted: boolean;
+  reviewRequired: boolean;
+  planId?: string | null;
+  eventFingerprint?: string | null;
+  idempotencyKey?: string | null;
+  reasonCodes: string[];
+  warnings?: string[];
+  receipt?: { receiptId: string; receiptProof?: string; decisionFingerprint?: string; action: "memory_formation" | string; transition: string; persistedAction: string | null } | null;
+  preview?: { status: string; planId?: string | null; targetFingerprint?: string | null };
+  writes: Array<{ kind: string; action: string; id?: string | null; status?: string | null; reasonCodes?: string[] }>;
+  continuityPatch?: { patchId: string; touchedSlots: string[] } | null;
+  performance: {
+    startsTimers: false;
+    scansFiles: false;
+    rawSessionBodyRead: false;
+    backgroundGraphRebuild?: false;
+    boundedWrites?: true;
+  };
+};
+
+export type MemoryCoreAuthorityDiagnostics = {
+  schemaVersion?: "zhixia.memory_core_runtime.v1" | string;
+  authorityFilterOrder: "before_relevance_ranking";
+  candidatesReceived?: number;
+  candidatesAuthorized?: number;
+  candidatesExcluded?: number;
+  excludedReasonCounts?: Record<string, number>;
+  projectId?: string | null;
+  projectPath?: string | null;
+  reviewMode?: boolean;
+  compactPacket?: true;
+  whyRecalledIncluded?: true;
+};
+
+export type MemoryCoreContinuityStatus = {
+  schemaVersion: "zhixia.memory_core_runtime.v1" | string;
+  projectId?: string | null;
+  projectPath?: string | null;
+  recoveryReady: boolean;
+  resolutionStatus: string;
+  mandatorySlots: string[];
+  filledSlots?: string[];
+  missingSlots?: string[];
+  staleSlots?: string[];
+  conflictSlots?: string[];
+  unsatisfiedSlots: string[];
+  coverage?: number;
+  pagination: {
+    complete: boolean;
+    pagesRead: number;
+    mandatoryTotal: number;
+    mandatoryReturned: number;
+    manifestFingerprint?: string | null;
+    capped: boolean;
+    nextCursor?: string | null;
+    cursorInvalid?: boolean;
+  };
+  sourceRefs: SourceRef[];
+  warnings: string[];
+  performance?: { startupFullScan: false; startsTimers: false; rawSessionBodyRead: false; boundedPagination: true };
+};
+
+export type MemoryCoreContinuityPacketItem = {
+  id: string;
+  type: string;
+  title: string;
+  summary?: string;
+  authorityStatus?: string;
+  mandatory?: boolean;
+  noDecay?: boolean;
+  sourceRefCount: number;
+  sourcePointers: Array<{
+    kind?: string | null;
+    id?: string | null;
+    path?: string | null;
+    hash?: string | null;
+  }>;
+  pointerOnly?: boolean;
+};
+
+export type MemoryCoreContinuityPacket = {
+  schemaVersion: "zhixia.project_continuity_packet.v1" | string;
+  project: {
+    projectId: string;
+    canonicalPath: string;
+    aliases: string[];
+    productSummary: string;
+    phase?: string | null;
+    authorityStatus?: string | null;
+  };
+  continuity: {
+    coverage: number;
+    filledSlots: string[];
+    missingSlots: string[];
+    staleSlots: string[];
+    conflictSlots: string[];
+    unsatisfiedSlots: string[];
+    slots: Record<string, {
+      status: "filled" | "missing" | "stale" | "conflict" | string;
+      required: boolean;
+      itemCount: number;
+      reviewCandidateCount: number;
+      staleItemCount: number;
+      items: MemoryCoreContinuityPacketItem[];
+      omittedForPage: number;
+    }>;
+  };
+  recommendedReadOrder: string[];
+  sourceRefs: SourceRef[];
+  mandatoryTotal: number;
+  mandatoryReturned: number;
+  mandatoryRemaining: number;
+  manifestFingerprint?: string;
+  mandatoryCursor?: string | null;
+  nextCursor: string | null;
+  requiresContinuation: boolean;
+  mandatoryManifest?: {
+    fingerprint: string;
+    mandatoryTotal: number;
+    mandatoryReturned: number;
+    mandatoryRemaining: number;
+    mandatoryCursor: string | null;
+    nextCursor: string | null;
+    requiresContinuation: boolean;
+    complete: boolean;
+    cursorInvalid: boolean;
+    pageStart: number;
+    pageEndExclusive: number;
+  };
+  tokenBudget: number;
+  tokenEstimate: number;
+  characterEstimate: number;
+};
+
+export type MemoryCoreReviewQueue = {
+  schemaVersion: "zhixia.memory_core_runtime.v1" | string;
+  projectId?: string | null;
+  projectPath?: string | null;
+  items: RuntimeMemoryItem[];
+  count: number;
+  readOnly: true;
+};
+
+export type MemoryCoreContinuityPage = {
+  schemaVersion: "zhixia.memory_core_runtime.v1" | string;
+  projectId: string;
+  projectPath: string;
+  principal: { principalId: string; role: string; principalType?: string; owner: false } | null;
+  authority: {
+    mode: "normal" | "review";
+    standingRuleCount: number;
+    authorizedCurrentFacts: number;
+    downgradedLegacyFacts: number;
+    rejectedLegacyFacts: number;
+  } | null;
+  continuityPacket: MemoryCoreContinuityPacket | null;
+  recoveryReady: boolean;
+  missing: string[];
+  stale: string[];
+  conflict: string[];
+  unsatisfied?: string[];
+  nextCursor: string | null;
+  mandatoryComplete: boolean;
+  warnings: string[];
+};
+
+export type MemoryCoreDiagnostics = {
+  schemaVersion: "zhixia.memory_core_runtime.v1" | string;
+  projectId?: string | null;
+  projectPath?: string | null;
+  privateStateReady: boolean;
+  sidecarReady: boolean;
+  counts: Record<string, number>;
+  reviewQueueCount: number;
+  availability?: "ready" | "not_ready" | string;
+  reasonCodes?: string[];
+  authorityFilterOrder: "before_relevance_ranking";
+  initialized?: boolean;
+  lazyInitialization?: true;
+  startupWholeTableScan?: false;
+  timers?: false;
+  watchers?: false;
+  loadedProjectCount?: number;
+  receiptCacheSize?: number;
+  safety: {
+    signingKeyExposed: false;
+    trustContextExposed: false;
+    rawSessionBodyRead: false;
+    storesBase64: false;
+    startupFullScan: false;
+    startsTimers: false;
+    backgroundGraphRebuild: false;
+  };
 };
 
 export type RuntimeContextPacket = {
@@ -1021,7 +1276,32 @@ export type RuntimeContextPacket = {
     memoryGraphVaultScan?: false;
     memoryGraphSeedNodes?: number;
     memoryGraphSeedEdges?: number;
+    sidecarIndexWholeDatabaseExport?: false;
+    sidecarIndexBackgroundTimer?: false;
   };
+  hybridRetrieval?: {
+    strategy: string;
+    deterministic: boolean;
+    invokesModels: false;
+    candidatesReceived: number;
+    candidatesEligible: number;
+    candidatesFiltered: number;
+    resultsReturned: number;
+    tokenEstimate: number;
+    memoryFactCandidates: number;
+    sidecar: {
+      engine: "node:sqlite_fts5" | string;
+      wholeDatabaseExport: false;
+      incrementalWrites: true;
+      indexed: number;
+      unchanged: number;
+      skipped: number;
+      ftsCandidates: number;
+      ftsDurationMs: number;
+    };
+  } | null;
+  triggerReceipt?: MemoryRuntimeTriggerReceipt;
+  memoryCore?: MemoryCoreAuthorityDiagnostics;
   partial?: boolean;
   expiresAt?: string;
   cacheKey?: string;
@@ -1056,6 +1336,7 @@ export type EvidenceWritebackPacket = {
     failurePattern?: string[];
     residualRisk?: string;
     sourceRefs?: SourceRef[];
+    memoryFacts?: Array<Partial<MemoryFact> & { subject: string; predicate: string; value?: unknown; object?: unknown }>;
   };
   writeback?: Record<string, unknown>;
   privacy?: {
@@ -1078,6 +1359,15 @@ export type EvidenceWritebackReceipt = {
   candidateCount: number;
   flowSkillCandidateCount?: number;
   storagePath: string;
+  memoryFactWriteback?: {
+    attempted: number;
+    written: number;
+    rejected: number;
+    review: number;
+    actions: Array<{ id: string; action: string; status: string }>;
+  };
+  triggerReceipt?: MemoryRuntimeTriggerReceipt;
+  memoryCore?: MemoryCoreFormationDiagnostics;
 };
 
 export type FlowSkillCandidateRecord = {
@@ -1147,6 +1437,7 @@ export type WorkingMemoryRecord = {
   nextAction: string;
   updatedAt: string;
   storagePath?: string;
+  memoryCore?: MemoryCoreFormationDiagnostics;
 };
 
 export type RuntimeEventMemoryType =
@@ -1207,6 +1498,7 @@ export type RuntimeEventMemoryReceipt = {
   };
   createdAt: string;
   updatedAt: string;
+  memoryCore?: MemoryCoreFormationDiagnostics;
 };
 
 export type RuntimeEventWritebackSummary = {
@@ -1313,7 +1605,120 @@ export type ThreadRecoveryPacket = {
   };
   warnings: string[];
   runtimeEventWriteback?: RuntimeEventWritebackSummary;
+  recoveryReady?: boolean;
+  continuityStatus?: MemoryCoreContinuityStatus;
+  memoryCore?: MemoryCoreAuthorityDiagnostics & {
+    continuityPaginationComplete?: boolean;
+    mandatorySlotsSatisfied?: boolean;
+  };
   tokenEstimate: number;
+};
+
+export type CeoThreadPressureAction =
+  | "continue"
+  | "writeback_required"
+  | "harvest_only"
+  | "takeover_recommended"
+  | "freeze_risk_stop_dispatch";
+
+export type CeoThreadPressureMetrics = {
+  sessionBytes?: number;
+  lineCount?: number;
+  maxLineChars?: number;
+  linesOver100k?: number;
+  dataImageHits?: number;
+  base64Hits?: number;
+  imagePathHits?: number;
+  toolOutputLikeHits?: number;
+  visibleThreadCount?: number;
+  activeWorkerCount?: number;
+  longTitleCount?: number;
+};
+
+export type CeoThreadPressureReport = {
+  schemaVersion: "zhixia.ceo_memory_runtime_guard.v1";
+  generatedAt: string;
+  threadId?: string | null;
+  projectPath?: string | null;
+  pressureLevel: "ok" | "watch" | "warning" | "high" | "critical" | string;
+  action: CeoThreadPressureAction;
+  sessionMb: number;
+  metrics: Required<CeoThreadPressureMetrics>;
+  gates: {
+    writebackRequired: boolean;
+    stopNewDispatch: boolean;
+    harvestOnly: boolean;
+    takeoverRecommended: boolean;
+    freezeRisk: boolean;
+  };
+  recommendations: string[];
+  warnings: string[];
+  performance: {
+    purePolicy: true;
+    startsTimers: false;
+    scansVault: false;
+    readsRawSessionBody: false;
+    mutatesCodexSessions: false;
+    archiveCompactDeleteMoveRestore: false;
+  };
+};
+
+export type CeoLifecycleWritebackPacket = {
+  schemaVersion: "zhixia.ceo_lifecycle_writeback_packet.v1";
+  mode: "ceo_lifecycle_writeback_packet";
+  generatedAt: string;
+  stage: "bootstrap" | "dispatch" | "worker_callback" | "review" | "harvest" | "decision" | "handoff" | "thread_pressure" | string;
+  evidenceWritebackPacket: EvidenceWritebackPacket;
+  workingMemoryRecord: Partial<WorkingMemoryRecord> & { taskId: string };
+  runtimeEvent: RuntimeEventMemoryInput;
+  pressure?: CeoThreadPressureReport | null;
+  warnings: string[];
+  hash: string;
+  safety: {
+    metadataOnly: true;
+    rawSessionBodyRead: false;
+    storesRawSessionRefs: false;
+    startsTimers: false;
+    scansVault: false;
+    archiveCompactDeleteMoveRestore: false;
+    mutatesRawSession: false;
+  };
+};
+
+export type CeoTakeoverBootstrapPacket = {
+  schemaVersion: "zhixia.ceo_takeover_bootstrap_packet.v1";
+  mode: "ceo_takeover_bootstrap_packet";
+  generatedAt: string;
+  project: { name: string; path?: string | null; summary: string };
+  threads: {
+    currentCeoThreadId?: string | null;
+    replacementThreadId?: string | null;
+    staleThreadIds: string[];
+  };
+  request: { taskGoal: string; tokenBudget: number; queryType: "thread_recovery" | string };
+  threadPressure: CeoThreadPressureReport;
+  recallPlan: {
+    defaultReadOrder: string[];
+    hot: string;
+    warm: string;
+    skill: string;
+    cold: string;
+    coldLayer: { defaultRead: false; requiresExplicitGate: true };
+  };
+  recommendedHooks: Array<{ hook: string; queryType: string; tokenBudget: number; reason: string }>;
+  sourceRefs: SourceRef[];
+  coldHistorySources: Array<SourceRef & { threadId?: string | null; readByDefault: false }>;
+  oneLinePrompt: string;
+  warnings: string[];
+  safety: {
+    metadataOnly: true;
+    rawSessionBodyRead: false;
+    coldHistoryDefaultRead: false;
+    startsTimers: false;
+    scansVault: false;
+    archiveCompactDeleteMoveRestore: false;
+    mutatesRawSession: false;
+  };
 };
 
 export type MemoryPromotionCandidate = {
@@ -1653,6 +2058,7 @@ declare global {
         generatedKnowledge?: number;
         knowledgeErrors?: Array<{ filePath: string; message: string }>;
         generatedToolSkillRecords?: number;
+        memoryCoreSeeds?: MemoryCoreProjectSeedSummary[];
       }>;
       getCodexGuardianReport: () => Promise<CodexGuardianCommandResult<CodexGuardianReport>>;
       cleanCodexHotLogs: (options?: { userConfirmed?: boolean }) => Promise<CodexGuardianCommandResult<CodexGuardianCleanReceipt>>;
@@ -1760,12 +2166,22 @@ declare global {
       activateMemoryRuntimeGraph: (options?: AgentRetrieveOptions & { taskGoal?: string; threadId?: string | null; maxNodes?: number; seedLimit?: number }) => Promise<MemoryGraph & { sync?: { nodes: number; edges: number; projectCount: number; projectPath?: string | null; limit: number } }>;
       retrieveMemoryRuntimePrecedent: (options?: { taskType?: string; task_type?: string; query?: string; projectPath?: string | null; parentCeoThreadId?: string | null; tokenBudget?: number; maxResults?: number; allowedKinds?: AgentRetrieveKind[] }) => Promise<RuntimeContextPacket>;
       recoverMemoryRuntimeThread: (options?: { threadId?: string | null; ceoThreadId?: string | null; title?: string; threadTitle?: string; query?: string; taskGoal?: string; projectPath?: string | null; tokenBudget?: number; maxResults?: number; replacementThreadId?: string | null; takeoverThreadId?: string | null; observeRuntimeEvent?: boolean }) => Promise<ThreadRecoveryPacket>;
+      evaluateCeoThreadPressure: (options?: CeoThreadPressureMetrics & { threadId?: string | null; currentThreadId?: string | null; projectPath?: string | null }) => Promise<CeoThreadPressureReport>;
+      buildCeoTakeoverBootstrap: (options?: CeoThreadPressureMetrics & { projectName?: string; projectPath?: string | null; projectSummary?: string; title?: string; taskGoal?: string; goal?: string; query?: string; currentCeoThreadId?: string | null; threadId?: string | null; parentCeoThreadId?: string | null; replacementThreadId?: string | null; takeoverThreadId?: string | null; staleThreadIds?: string[]; badThreadIds?: string[]; sourceRefs?: SourceRef[]; coldHistorySources?: SourceRef[]; pressure?: CeoThreadPressureReport; tokenBudget?: number; maxResults?: number }) => Promise<CeoTakeoverBootstrapPacket>;
+      buildCeoLifecycleWriteback: (options?: Partial<CeoLifecycleWritebackPacket> & Record<string, unknown>) => Promise<CeoLifecycleWritebackPacket>;
       writebackMemoryRuntimeEvidence: (packet: EvidenceWritebackPacket) => Promise<EvidenceWritebackReceipt>;
       observeMemoryRuntimeEvent: (event: RuntimeEventMemoryInput) => Promise<RuntimeEventMemoryReceipt>;
       upsertWorkingMemory: (record: Partial<WorkingMemoryRecord> & { taskId: string }) => Promise<WorkingMemoryRecord>;
       listWorkingMemory: (options?: { status?: WorkingMemoryRecord["status"]; projectPath?: string | null; limit?: number }) => Promise<{ records: WorkingMemoryRecord[] }>;
       listFlowSkillCandidates: (options?: { status?: FlowSkillCandidateRecord["status"]; projectPath?: string | null; limit?: number }) => Promise<{ candidates: FlowSkillCandidateRecord[] }>;
-      closeWorkingMemory: (options: { taskId: string; status?: WorkingMemoryRecord["status"]; nextAction?: string }) => Promise<WorkingMemoryRecord>;
+      listMemoryFacts: (options?: { projectPath?: string | null; subject?: string; predicate?: string; view?: "current" | "historical" | MemoryFactStatus; asOf?: string; from?: string; to?: string; limit?: number }) => Promise<{ facts: MemoryFact[] }>;
+      listMemoryRuntimeTriggerReceipts: (options?: { hook?: MemoryRuntimeTriggerReceipt["hook"]; projectPath?: string | null; limit?: number }) => Promise<{ receipts: MemoryRuntimeTriggerReceipt[] }>;
+      evaluateMemoryRuntimeBenchmark: (options?: { cases?: unknown[]; count?: number; seed?: number; k?: number; thresholds?: Record<string, number> }) => Promise<Record<string, unknown>>;
+      getMemoryCoreDiagnostics: (options?: { projectId?: string | null; projectPath?: string | null }) => Promise<MemoryCoreDiagnostics>;
+      listMemoryCoreReviewQueue: (options?: { projectId?: string | null; projectPath?: string | null; limit?: number }) => Promise<MemoryCoreReviewQueue>;
+      getMemoryCoreContinuityStatus: (options?: { projectId?: string | null; projectPath?: string | null; projectName?: string; projectSummary?: string; tokenBudget?: number; maxPacketItems?: number; maxPacketChars?: number }) => Promise<MemoryCoreContinuityStatus>;
+      getProjectContinuity: (options: { projectPath: string; projectId?: string | null; projectName?: string; projectSummary?: string; moduleId?: string; taskGoal?: string; query?: string; cursor?: string | null; tokenBudget?: number; maxPacketItems?: number; maxPacketChars?: number }) => Promise<MemoryCoreContinuityPage>;
+      closeWorkingMemory: (options: { taskId: string; status?: WorkingMemoryRecord["status"]; nextAction?: string; projectId?: string | null; moduleId?: string | null }) => Promise<WorkingMemoryRecord>;
       promoteMemory: (candidate: MemoryPromotionCandidate) => Promise<MemoryPromotionResult>;
       listRetrieveLogs: (options?: { limit?: number }) => Promise<{ logs: AgentRetrieveLogEntry[] }>;
       getRuntimeMonitorSnapshot: (options?: AgentRuntimeMonitorOptions) => Promise<AgentRuntimeMonitorSnapshot>;

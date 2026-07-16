@@ -41,9 +41,15 @@ const {
   writeEvidenceWriteback,
 } = require("./memoryRuntimePolicy.cjs");
 const {
+  buildCeoLifecycleWritebackPacket,
+  buildCeoTakeoverBootstrapPacket,
+  evaluateCeoThreadPressure,
+} = require("./ceoMemoryRuntimeGuardPolicy.cjs");
+const {
   documentSelectSql,
   rowToDocument,
 } = require("./documentMetadataPolicy.cjs");
+const { openKnowledgeDatabaseFromFile } = require("./databaseStartupPolicy.cjs");
 const {
   AGENT_RETRIEVE_ALLOWED_KINDS,
   AGENT_RETRIEVE_CACHE_TTL_MS,
@@ -51,12 +57,39 @@ const {
   AGENT_RETRIEVE_DEFAULT_TOKEN_BUDGET,
   AGENT_RETRIEVE_MAX_RESULTS,
   assembleAgentRetrieveContractResult,
+  buildAgentRetrieveCandidatePool,
   buildAgentRetrieveCacheKey: buildAgentRetrievePolicyCacheKey,
   collectAgentRetrieveContractSources,
   filterCEOFlowRecords,
   normalizeAgentRetrieveRequest: normalizeAgentRetrievePolicyRequest,
   trimAgentResultsToBudget,
 } = require("./agentRetrievePolicy.cjs");
+const { retrieveHybridMemory } = require("./hybridMemoryRetrievalPolicy.cjs");
+const {
+  evaluateMemoryBenchmark,
+} = require("./memoryEvaluationPolicy.cjs");
+const {
+  buildUnavailableMemoryCoreContinuity,
+  buildUnavailableMemoryCoreDiagnostics,
+  buildUnavailableMemoryCoreReviewQueue,
+  buildUnavailableProjectContinuity,
+  createMemoryCoreRuntime,
+  loadExistingSigningKey,
+  loadOrCreateSigningKey,
+  memoryCorePrivateStateExists,
+} = require("./memoryCoreRuntime.cjs");
+const {
+  listMemoryFacts,
+  listMemoryRuntimeTriggerReceipts,
+  memoryFactToSearchItem,
+  openMemoryRuntimeIndex,
+  reconcileMemorySearchItems,
+  searchMemoryRuntimeIndex,
+  upsertMemorySearchItems,
+  upsertMemoryFact,
+  writeMemoryFactsFromEvidence,
+  writeMemoryRuntimeTriggerReceipt,
+} = require("./memoryRuntimeIndexStore.cjs");
 const { evaluateArchiveCandidate, inferArchiveThreadRole, normalizeArchiveCandidateEvidence } = require("./archiveCandidatePolicy.cjs");
 const { buildProjectResumePacket } = require("./projectResumePolicy.cjs");
 const { buildProjectMemoryBackfillCards } = require("./projectMemoryBackfillPolicy.cjs");
@@ -193,6 +226,8 @@ let fileWatchLastRun = null;
 let fileWatchLastSummary = null;
 let fileWatchPendingReasons = [];
 let startupAutoIngestTimer = null;
+let memoryCoreRuntimeInstance = null;
+const APP_OWNED_MEMORY_CORE_ORIGIN = Object.freeze({ kind: "app_owned_memory_core_origin" });
 
 function dbPath() {
   return path.join(app.getPath("userData"), "knowledge-store.sqlite");
@@ -228,6 +263,25 @@ function codexHistoryVaultRoot() {
 
 function memoryRuntimeRoot() {
   return path.join(app.getPath("userData"), "memory-runtime");
+}
+
+function getMemoryCoreRuntime() {
+  if (!memoryCoreRuntimeInstance) {
+    const storeRoot = memoryRuntimeRoot();
+    const authoritySigningKey = loadOrCreateSigningKey(storeRoot);
+    memoryCoreRuntimeInstance = createMemoryCoreRuntime({ storeRoot, authoritySigningKey });
+  }
+  return memoryCoreRuntimeInstance;
+}
+
+function getExistingMemoryCoreRuntime() {
+  if (memoryCoreRuntimeInstance) return memoryCoreRuntimeInstance;
+  const storeRoot = memoryRuntimeRoot();
+  if (!memoryCorePrivateStateExists(storeRoot)) return null;
+  const authoritySigningKey = loadExistingSigningKey(storeRoot);
+  if (!authoritySigningKey) return null;
+  memoryCoreRuntimeInstance = createMemoryCoreRuntime({ storeRoot, authoritySigningKey });
+  return memoryCoreRuntimeInstance;
 }
 
 function performanceStatePath() {
@@ -2127,7 +2181,7 @@ async function persistRuntimeMonitorEvents(snapshot = {}, options = {}) {
     }
     try {
       await ensureDatabase();
-      const receipt = await observeMemoryRuntimeEvent(event);
+      const receipt = await observeMemoryRuntimeEvent(event, APP_OWNED_MEMORY_CORE_ORIGIN);
       receipts.push({
         id: receipt.id,
         eventType: receipt.eventType,
@@ -2190,22 +2244,14 @@ async function ensureDatabase() {
   dbReady = (async () => {
     const Runtime = await ensureSqlRuntime();
     const file = dbPath();
-    await fs.mkdir(path.dirname(file), { recursive: true });
-    try {
-      const bytes = await fs.readFile(file);
-      db = new Runtime.Database(bytes);
-    } catch (error) {
-      if (error?.code === "ENOENT") {
-        db = new Runtime.Database();
-      } else {
-        const backupPath = await backupUnreadableDatabaseFile(file, error);
-        const reason = error?.message || String(error || "unknown database open error");
-        throw new Error(
-          `Zhixia refused to replace an unreadable knowledge-store.sqlite with an empty database. ` +
-            `A byte-for-byte backup was written to ${backupPath || "unavailable"}. Original error: ${reason}`,
-        );
-      }
-    }
+    const opened = await openKnowledgeDatabaseFromFile({
+      Runtime,
+      file,
+      readFile: fs.readFile,
+      ensureParentDir: (dir) => fs.mkdir(dir, { recursive: true }),
+      backupUnreadableDatabaseFile,
+    });
+    db = opened.db;
     migrateSchema();
     await migrateLegacyJson();
     await compactLegacyDocumentContentStore();
@@ -3720,11 +3766,15 @@ async function generateKnowledgeItems(options = {}) {
       );
     }
   }
+  const memoryCoreSeeds = [];
+  const seedMemoryCore = options.seedMemoryCore !== false;
   if (projectPath) {
-    await writeProjectKnowledgeFiles([projectPath]);
+    await writeProjectKnowledgeFiles([projectPath], { seedMemoryCore, seedSummaries: memoryCoreSeeds });
   } else {
     const touchedProjects = Array.from(new Set(items.map((item) => item.projectPath).filter(Boolean)));
-    if (touchedProjects.length > 0) await writeProjectKnowledgeFiles(touchedProjects);
+    if (touchedProjects.length > 0) {
+      await writeProjectKnowledgeFiles(touchedProjects, { seedMemoryCore, seedSummaries: memoryCoreSeeds });
+    }
   }
   await saveDatabase();
   return {
@@ -3733,6 +3783,7 @@ async function generateKnowledgeItems(options = {}) {
     usedNetwork: mode === "ai" && Boolean(String(settings.aiProviderApiKey || "").trim()),
     items,
     errors,
+    memoryCoreSeeds,
     overview: getKnowledgeOverview(),
   };
 }
@@ -5240,9 +5291,127 @@ async function writeProjectMemoryFiles(projectPaths) {
   return written;
 }
 
-async function writeProjectKnowledgeFiles(projectPaths) {
+function buildMemoryCoreProjectSeedInput(input = {}) {
+  const sourceRefLimit = 12;
+  const projectPath = path.resolve(String(input.projectPath || "").trim());
+  if (!projectPath) return null;
+  const normalizedProjectPath = projectPath.replace(/\\/g, "/").replace(/\/$/, "");
+  const excludedPathPattern = /(?:^|[\\/])\.codex-knowledge(?:[\\/]|$)|(?:^|[\\/])(?:codex-history-vault|thread-history-vault|vault)(?:[\\/]|$)|(?:^|[\\/])\.codex[\\/](?:archived_)?sessions[\\/]|\.jsonl$/i;
+  const imagePathPattern = /\.(?:avif|bmp|gif|heic|ico|jpe?g|png|svg|tiff?|webp)$/i;
+  const rawSourceTypePattern = /raw[_ -]?session|session[_ -]?jsonl|vault/i;
+  const isoTimestamp = (value) => {
+    const parsed = Date.parse(value || "");
+    return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+  };
+  const compact = (value, maxChars) => String(value == null ? "" : value).replace(/\s+/g, " ").trim().slice(0, maxChars);
+  const eligibleDocs = (Array.isArray(input.projectDocs) ? input.projectDocs : [])
+    .filter((doc) => {
+      const filePath = String(doc?.filePath || "");
+      return doc
+        && doc.parseStatus !== "failed"
+        && filePath
+        && !excludedPathPattern.test(filePath)
+        && !imagePathPattern.test(filePath)
+        && !rawSourceTypePattern.test(String(doc.sourceType || ""))
+        && Boolean(compact(doc.contentHash, 160))
+        && Boolean(isoTimestamp(doc.fileModifiedAt || doc.updatedAt));
+    })
+    .map((doc) => ({
+      path: path.resolve(doc.filePath),
+      hash: compact(doc.contentHash, 160),
+      artifactType: compact(doc.artifactType || "other", 80) || "other",
+      updatedAt: isoTimestamp(doc.fileModifiedAt || doc.updatedAt),
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path) || left.hash.localeCompare(right.hash));
+  if (eligibleDocs.length === 0) return null;
+
+  const updatedAt = eligibleDocs.reduce((latest, doc) => doc.updatedAt > latest ? doc.updatedAt : latest, eligibleDocs[0].updatedAt);
+  const sourceRefs = eligibleDocs.slice(0, sourceRefLimit).map((doc) => ({
+    kind: "project_document",
+    path: doc.path,
+    hash: doc.hash,
+    artifactType: doc.artifactType,
+    updatedAt: doc.updatedAt,
+  }));
+  const artifactCounts = new Map();
+  for (const doc of eligibleDocs) artifactCounts.set(doc.artifactType, (artifactCounts.get(doc.artifactType) || 0) + 1);
+  const artifactSummary = Array.from(artifactCounts.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([artifactType, count]) => `${artifactType}:${count}`)
+    .join(", ");
+  const fallbackName = path.basename(projectPath) || normalizedProjectPath;
+  const aliases = [];
+  const seenAliases = new Set();
+  for (const candidate of [input.layered?.project, input.projectRecord?.name, ...(Array.isArray(input.projectRecord?.aliases) ? input.projectRecord.aliases : []), fallbackName]) {
+    const alias = compact(candidate, 120);
+    const key = alias.toLocaleLowerCase();
+    if (!alias || seenAliases.has(key)) continue;
+    seenAliases.add(key);
+    aliases.push(alias);
+    if (aliases.length >= 8) break;
+  }
+  const projectName = aliases[0] || fallbackName;
+  const factualSummary = compact(`${projectName} has ${eligibleDocs.length} original source document${eligibleDocs.length === 1 ? "" : "s"}${artifactSummary ? ` (${artifactSummary})` : ""}.`, 300);
+  const override = input.projectRecordOverride && typeof input.projectRecordOverride === "object" ? input.projectRecordOverride : null;
+  const governanceCurrent = input.projectRecord?.governance?.reviewState === "current"
+    && input.projectRecord?.governance?.status === "confirmed"
+    && Boolean(override?.confirmedAt);
+  const confirmedSummary = governanceCurrent ? compact(override.lastSummary, 220) : "";
+  const confirmedPhaseCandidate = governanceCurrent ? compact(override.phase || override.completion, 80) : "";
+  const confirmedPhase = confirmedPhaseCandidate && confirmedPhaseCandidate !== "unknown" ? confirmedPhaseCandidate : null;
+  const productSummary = compact(confirmedSummary ? `${factualSummary} Confirmed summary: ${confirmedSummary}` : factualSummary, 360);
+  const identitySeed = normalizedProjectPath.toLocaleLowerCase();
+  const anchorId = `anchor-project-identity-${crypto.createHash("sha256").update(identitySeed).digest("hex").slice(0, 16)}`;
+
+  return {
+    projectPath,
+    projectName,
+    name: projectName,
+    aliases,
+    projectSummary: productSummary,
+    productSummary,
+    phase: confirmedPhase,
+    sourceRefs,
+    anchors: [{
+      anchorId,
+      category: "identity",
+      title: "Project identity",
+      statement: compact(`Canonical project identity: ${projectName} at ${normalizedProjectPath}.`, 360),
+      authorityStatus: "accepted",
+      sourceRefs,
+      updatedAt,
+    }],
+    modules: [],
+    now: updatedAt,
+  };
+}
+
+function seedProjectMemoryCoreBackfill(input = {}) {
+  const seedInput = buildMemoryCoreProjectSeedInput(input);
+  if (!seedInput) return { status: "skipped", projectPath: input.projectPath || null, reason: "no_original_source_documents" };
+  const result = getMemoryCoreRuntime().seedProject(seedInput);
+  const writes = Array.isArray(result.writes) ? result.writes : [];
+  const actions = writes.reduce((counts, write) => {
+    counts[write.action] = (counts[write.action] || 0) + 1;
+    return counts;
+  }, {});
+  return {
+    status: writes.length > 0 && writes.every((write) => write.action === "noop") ? "noop" : "ready",
+    projectId: result.projectId,
+    projectPath: result.projectPath,
+    updatedAt: seedInput.now,
+    sourceRefCount: seedInput.sourceRefs.length,
+    brainCount: writes.filter((write) => write.kind === "projectBrain").length,
+    identityAnchorCount: writes.filter((write) => write.kind === "projectAnchor").length,
+    moduleCount: writes.filter((write) => write.kind === "moduleMemory").length,
+    actions,
+  };
+}
+
+async function writeProjectKnowledgeFiles(projectPaths, options = {}) {
   const written = [];
   const allDocs = listDocuments();
+  const projectRecordOverrides = options.seedMemoryCore === true ? getSettings().projectRecordOverrides || {} : {};
   syncSkillCandidatesForProjects(projectPaths);
   for (const projectPath of projectPaths) {
     const projectDocs = allDocs.filter((doc) => doc.workspacePath === projectPath);
@@ -5259,6 +5428,16 @@ async function writeProjectKnowledgeFiles(projectPaths) {
     const projectChunksJsonlPath = path.join(bundleDir, "project-chunks.jsonl");
     const layered = buildProjectLayeredKnowledge(projectPath, allDocs);
     const projectRecord = buildProjectRecords().find((record) => record.rootPath === projectPath);
+    if (options.seedMemoryCore === true) {
+      const seedSummary = seedProjectMemoryCoreBackfill({
+        projectPath,
+        projectDocs,
+        layered,
+        projectRecord,
+        projectRecordOverride: projectRecordOverrides[projectPath] || null,
+      });
+      if (Array.isArray(options.seedSummaries)) options.seedSummaries.push(seedSummary);
+    }
     await fs.writeFile(knowledgePath, buildProjectKnowledge(projectPath, allDocs), "utf8");
     await fs.writeFile(retrievalPacketMarkdownPath, buildRetrievalPacketMarkdown(layered), "utf8");
     await fs.writeFile(
@@ -5329,7 +5508,7 @@ async function writeProjectKnowledgeFiles(projectPaths) {
   return written;
 }
 
-async function scanCodexWorkspacePath(workspacePath) {
+async function scanCodexWorkspacePath(workspacePath, options = {}) {
   const files = await scanDirectory(workspacePath);
   const projectRoots = await discoverProjectRoots(workspacePath);
   const imported = await importPaths(files, {
@@ -5341,7 +5520,11 @@ async function scanCodexWorkspacePath(workspacePath) {
     }),
   });
   const touchedProjects = Array.from(new Set(imported.imported.map((doc) => doc.workspacePath).filter(Boolean)));
-  const knowledgeFiles = await writeProjectKnowledgeFiles(touchedProjects);
+  const memoryCoreSeeds = [];
+  const knowledgeFiles = await writeProjectKnowledgeFiles(touchedProjects, {
+    seedMemoryCore: options.seedMemoryCore === true,
+    seedSummaries: memoryCoreSeeds,
+  });
   const knowledgeImport =
     knowledgeFiles.length > 0
       ? await importPaths(knowledgeFiles, {
@@ -5357,7 +5540,7 @@ async function scanCodexWorkspacePath(workspacePath) {
       : { imported: [], documents: imported.documents, errors: [] };
   const knowledgeGeneration = { generated: 0, errors: [] };
   for (const projectPath of touchedProjects) {
-    const result = await generateKnowledgeItems({ mode: "heuristic", projectPath });
+    const result = await generateKnowledgeItems({ mode: "heuristic", projectPath, seedMemoryCore: false });
     knowledgeGeneration.generated += result.generated;
     knowledgeGeneration.errors.push(...result.errors);
   }
@@ -5380,6 +5563,7 @@ async function scanCodexWorkspacePath(workspacePath) {
     generatedKnowledge: knowledgeGeneration.generated,
     knowledgeErrors: knowledgeGeneration.errors,
     generatedToolSkillRecords,
+    memoryCoreSeeds,
   };
 }
 
@@ -8511,7 +8695,7 @@ function retrieveAgentContext(options = {}) {
   }
   const cacheKey = buildAgentRetrieveCacheKey(request);
   const cached = agentRetrieveCache.get(cacheKey);
-  if (cached && Date.now() - cached.createdAt <= AGENT_RETRIEVE_CACHE_TTL_MS) {
+  if (options.includeCandidatePool !== true && cached && Date.now() - cached.createdAt <= AGENT_RETRIEVE_CACHE_TTL_MS) {
     return {
       ...cloneAgentRetrieveResult(cached.result),
       cache: {
@@ -8531,7 +8715,7 @@ function retrieveAgentContext(options = {}) {
     listSkillCandidates,
     listToolSkillRecords: listToolSkillRecordsForRetrieval,
   });
-  const trimmed = assembleAgentRetrieveContractResult(request, contractSources, {
+  const retrieveDeps = {
     makeProjectRecord: makeAgentRetrieveProjectRecord,
     makeProjectResumePacket: makeAgentRetrieveProjectResumePacket,
     makeCEOFlowRecord: makeAgentRetrieveCEOFlowRecord,
@@ -8549,7 +8733,11 @@ function retrieveAgentContext(options = {}) {
     makeToolSkillRecord: (record, currentRequest) =>
       makeAgentRetrieveToolSkillRecord(record, { query: currentRequest.query, projectPath: currentRequest.projectPath }),
     overallFreshness,
-  });
+  };
+  const trimmed = assembleAgentRetrieveContractResult(request, contractSources, retrieveDeps);
+  const candidateItems = options.includeCandidatePool === true
+    ? buildAgentRetrieveCandidatePool(request, contractSources, retrieveDeps)
+    : null;
   const result = {
     provider: "zhixia_local_docs",
     mode: "local_contract",
@@ -8563,17 +8751,241 @@ function retrieveAgentContext(options = {}) {
     freshness: overallFreshness(trimmed.items),
     generatedAt: new Date().toISOString(),
     items: trimmed.items,
+    ...(candidateItems ? { candidateItems } : {}),
   };
-  agentRetrieveCache.set(cacheKey, { createdAt: Date.now(), result: cloneAgentRetrieveResult(result) });
+  if (options.includeCandidatePool !== true) {
+    agentRetrieveCache.set(cacheKey, { createdAt: Date.now(), result: cloneAgentRetrieveResult(result) });
+  }
   return result;
 }
 
-async function retrieveMemoryRuntimeContext(options = {}) {
-  const taskGoal = options.taskGoal || options.task_goal || options.query || "";
-  const routerPlan = buildMemoryRouterPlan({
-    ...options,
-    taskGoal,
+function dedupeMemoryCandidates(items = []) {
+  const seen = new Set();
+  return safeArray(items).filter((item) => {
+    const id = String(item?.id || "").trim();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
   });
+}
+
+function collectUnrankedAgentRetrieveCandidates(options = {}) {
+  const collected = retrieveAgentContext({ ...options, query: "", includeCandidatePool: true });
+  return {
+    ...collected,
+    candidateItems: safeArray(collected.candidateItems).map((item) => ({
+      ...item,
+      score: 0,
+      relevanceScored: false,
+    })),
+  };
+}
+
+function bestEffortMemoryRuntimeTriggerReceipt(entry = {}) {
+  try {
+    return writeMemoryRuntimeTriggerReceipt(memoryRuntimeRoot(), entry);
+  } catch {
+    return {
+      schemaVersion: "zhixia.memory_runtime_index.v1",
+      id: `trigger-unavailable-${crypto.randomUUID()}`,
+      hook: entry.hook || "memory_runtime",
+      queryType: entry.queryType || null,
+      projectPath: null,
+      threadId: null,
+      returnedCount: Math.max(0, Number(entry.returnedCount || 0)),
+      tokenEstimate: Math.max(0, Number(entry.tokenEstimate || 0)),
+      durationMs: Math.max(0, Number(entry.durationMs || 0)),
+      partial: true,
+      warnings: ["memory_runtime_trigger_receipt_unavailable_retrieval_result_preserved"],
+      sourceRefs: [],
+      createdAt: new Date().toISOString(),
+      storageUnavailable: true,
+    };
+  }
+}
+
+function normalizeAuthorityPath(value) {
+  return String(value || "").trim().replace(/[\\/]+/g, "/").replace(/\/$/, "").toLowerCase();
+}
+
+function candidateBelongsToProject(item = {}, projectPath) {
+  if (!projectPath) return true;
+  const project = normalizeAuthorityPath(projectPath);
+  const pointers = [
+    item.projectPath,
+    item.rootPath,
+    item.workspacePath,
+    item.sourcePath,
+    ...safeArray(item.sourceRefs).flatMap((ref) => [ref?.projectPath, ref?.path]),
+  ].map(normalizeAuthorityPath).filter(Boolean);
+  return pointers.some((pointer) => pointer === project || pointer.startsWith(`${project}/`));
+}
+
+function filterHybridCandidatesByAuthority(items = [], options = {}, queryType = "task_dispatch") {
+  const reviewModes = new Set(["retrieve_precedent", "review_gate", "thread_recovery", "history_audit", "archive_candidate", "workflow_reuse"]);
+  const projectPath = options.projectPath || null;
+  if (options.reviewMode === true || reviewModes.has(queryType)) {
+    return safeArray(items).filter((item) => !projectPath || item?.kind !== "memory_fact" || item?.scope === "project");
+  }
+  const authoritativeStatuses = new Set(["active", "current", "accepted", "curated", "ready", "confirmed", "completed", "in_progress", "hot"]);
+  return safeArray(items).filter((item) => {
+    const status = String(item?.status || "").toLowerCase();
+    const freshness = String(item?.freshness || "unknown").toLowerCase();
+    if (!candidateBelongsToProject(item, projectPath)) return false;
+    if (projectPath && item?.kind === "memory_fact" && item?.scope !== "project") return false;
+    if (!authoritativeStatuses.has(status)) return false;
+    if (freshness !== "fresh") return false;
+    if (item?.requiresHumanConfirmation === true) return false;
+    return safeArray(item?.sourceRefs).length > 0;
+  });
+}
+
+function listRuntimeMemoryFactItems(options = {}) {
+  const allowHistorical = ["thread_recovery", "history_audit", "archive_candidate"].includes(String(options.queryType || ""));
+  return listMemoryFacts(memoryRuntimeRoot(), {
+    projectPath: options.projectPath || null,
+    limit: Math.max(40, Math.min(Number(options.limit || 320), 600)),
+  })
+    .filter((fact) => fact.status !== "rejected")
+    .filter((fact) => allowHistorical || fact.status !== "superseded")
+    .map(memoryFactToSearchItem);
+}
+
+function runHybridMemoryRetrieval(options = {}, routerPlan, extraItems = []) {
+  const taskGoal = options.taskGoal || options.task_goal || options.query || "";
+  const queryType = routerPlan.queryType || options.queryType || "task_dispatch";
+  const includeKinds = safeArray(routerPlan.retrieval?.includeKinds);
+  const agentKinds = includeKinds.filter((kind) => kind !== "memory_fact" && kind !== "runtime_event");
+  const warnings = [];
+  const agentRetrieval = agentKinds.length > 0
+    ? collectUnrankedAgentRetrieveCandidates({
+      ...options,
+      queryType,
+      includeKinds: agentKinds,
+      maxResults: routerPlan.budgets.topK,
+      tokenBudget: routerPlan.budgets.tokenBudget,
+    })
+    : {
+      provider: "zhixia_local_docs",
+      mode: "local_contract",
+      query: taskGoal,
+      queryType,
+      projectPath: options.projectPath || null,
+      parentCeoThreadId: options.parentCeoThreadId || options.ceoThreadId || null,
+      candidateItems: [],
+      items: [],
+      warnings: [],
+    };
+  const factItems = includeKinds.includes("memory_fact")
+    ? listRuntimeMemoryFactItems({ ...options, queryType })
+    : [];
+  const memoryCoreRuntime = getMemoryCoreRuntime();
+  const memoryCoreContinuity = options.projectPath ? memoryCoreRuntime.getProjectContinuity({
+    ...options,
+    readOnly: true,
+    queryType,
+    reviewMode: options.reviewMode === true || ["retrieve_precedent", "review_gate", "thread_recovery", "history_audit", "archive_candidate", "workflow_reuse"].includes(queryType),
+    tokenBudget: Math.max(1800, Number(routerPlan.budgets.tokenBudget || 1800)),
+    maxPacketItems: Math.max(8, Math.min(Number(routerPlan.budgets.topK || 8) * 2, 32)),
+  }) : null;
+  const memoryCoreCandidates = memoryCoreRuntime.listRecallCandidates({ ...options, queryType })
+    .filter((item) => includeKinds.includes(item.kind));
+  const explicitReviewMode = options.reviewMode === true
+    || ["retrieve_precedent", "review_gate", "thread_recovery", "history_audit", "archive_candidate", "workflow_reuse"].includes(queryType);
+  let explicitReviewIndexCandidates = [];
+  if (explicitReviewMode && includeKinds.includes("memory_fact")) {
+    try {
+      explicitReviewIndexCandidates = searchMemoryRuntimeIndex(memoryRuntimeRoot(), taskGoal, {
+        projectPath: options.projectPath || null,
+        includeKinds: ["memory_fact"],
+        limit: Math.max(20, Math.min(Number(routerPlan.budgets.topK || 8) * 4, 80)),
+      }).items;
+    } catch (error) {
+      warnings.push(`memory_runtime_review_index_fallback:${sanitizeAgentRetrieveErrorMessage(error)}`);
+    }
+  }
+  const initialCandidates = dedupeMemoryCandidates([
+    ...safeArray(extraItems),
+    ...safeArray(agentRetrieval.candidateItems || agentRetrieval.items),
+    ...factItems,
+    ...memoryCoreCandidates,
+    ...explicitReviewIndexCandidates,
+  ]);
+  const initialAuthority = memoryCoreRuntime.filterAuthorizedCandidates(initialCandidates, {
+    ...options,
+    queryType,
+    authorizedFactIds: memoryCoreContinuity?.authorizedFactIds || [],
+    authorizedCoreIds: memoryCoreContinuity?.authorizedCoreIds || [],
+  });
+  const currentCandidates = initialAuthority.items;
+  let indexSync = { indexed: 0, unchanged: 0, skipped: 0 };
+  let indexSearch = { items: [], queryTerms: [], durationMs: 0 };
+  try {
+    indexSync = reconcileMemorySearchItems(
+      memoryRuntimeRoot(),
+      currentCandidates.filter((item) => item.kind !== "runtime_event").slice(0, 600),
+      {
+        projectPath: options.projectPath || null,
+        kinds: includeKinds,
+      },
+    );
+    indexSearch = { items: [], queryTerms: [], durationMs: 0, skippedReason: "authority_scoped_hybrid_ranking" };
+  } catch (error) {
+    warnings.push(`memory_runtime_sidecar_index_fallback:${sanitizeAgentRetrieveErrorMessage(error)}`);
+  }
+  const authorityResult = initialAuthority;
+  const hybrid = retrieveHybridMemory(
+    authorityResult.items,
+    taskGoal,
+    {
+      projectPath: options.projectPath || null,
+      threadId: options.threadId || options.parentCeoThreadId || options.ceoThreadId || null,
+      includeGlobal: true,
+      strictProject: Boolean(options.projectPath),
+      topK: routerPlan.budgets.topK,
+      tokenBudget: routerPlan.budgets.tokenBudget,
+      maxCandidates: 800,
+      now: options.now || null,
+    },
+  );
+  return {
+    provider: "zhixia_local_docs",
+    mode: "hybrid_local_index",
+    query: taskGoal,
+    queryType,
+    projectPath: options.projectPath || agentRetrieval.projectPath || null,
+    parentCeoThreadId: options.parentCeoThreadId || options.ceoThreadId || agentRetrieval.parentCeoThreadId || null,
+    tokenBudget: routerPlan.budgets.tokenBudget,
+    returnedCount: hybrid.items.length,
+    tokenEstimate: hybrid.tokenEstimate,
+    freshness: overallFreshness(hybrid.items),
+    generatedAt: new Date().toISOString(),
+    items: hybrid.items,
+    warnings: [...safeArray(agentRetrieval.warnings), ...warnings],
+    hybridRetrieval: {
+      ...hybrid.performance,
+      sidecar: {
+        engine: "node:sqlite_fts5",
+        wholeDatabaseExport: false,
+        incrementalWrites: true,
+        indexed: Number(indexSync.indexed || 0),
+        unchanged: Number(indexSync.unchanged || 0),
+        skipped: Number(indexSync.skipped || 0),
+        ftsCandidates: safeArray(indexSearch.items).length,
+        ftsDurationMs: Number(indexSearch.durationMs || 0),
+      },
+      memoryFactCandidates: factItems.length,
+      memoryCoreCandidates: memoryCoreCandidates.length,
+    },
+    memoryCoreAuthority: authorityResult.diagnostics,
+    memoryCoreContinuity,
+  };
+}
+
+async function retrieveMemoryRuntimeContext(options = {}) {
+  const startedAt = Date.now();
+  const taskGoal = options.taskGoal || options.task_goal || options.query || "";
+  const routerPlan = buildMemoryRouterPlan({ ...options, taskGoal });
   const [runtimeEvents, workingMemory] = await Promise.all([
     listRuntimeEventRecords(memoryRuntimeRoot(), {
       projectPath: options.projectPath || null,
@@ -8585,46 +8997,24 @@ async function retrieveMemoryRuntimeContext(options = {}) {
       limit: 24,
     }),
   ]);
-  const volatileItems = buildRuntimeItemsFromVolatileMemory({
-    events: runtimeEvents,
-    workingMemory,
-  });
-  if (routerPlan.retrieval.includeKinds.length === 0) {
-    return buildRuntimeContextPacket({
+  const volatileItems = buildRuntimeItemsFromVolatileMemory({ events: runtimeEvents, workingMemory });
+  const retrieval = routerPlan.retrieval.includeKinds.length > 0
+    ? runHybridMemoryRetrieval(options, routerPlan, volatileItems)
+    : {
       query: taskGoal,
       queryType: routerPlan.queryType || options.queryType || "task_dispatch",
       projectPath: options.projectPath || null,
       parentCeoThreadId: options.parentCeoThreadId || options.ceoThreadId || null,
       tokenBudget: routerPlan.budgets.tokenBudget,
-      tokenEstimate: 0,
+      tokenEstimate: volatileItems.reduce((sum, item) => sum + Number(item.tokenEstimate || 0), 0),
       generatedAt: new Date().toISOString(),
       warnings: ["memory_router_no_allowed_runtime_kinds_no_retrieval"],
       items: volatileItems,
-    }, {
-      ...options,
-      taskGoal,
-      routerPlan,
-      allowedKinds: routerPlan.retrieval.includeKinds,
-      retrievalDurationMs: 0,
-    });
-  }
-  const retrievalStartedAt = Date.now();
-  const retrieval = retrieveAgentContext({
-    ...options,
-    query: taskGoal,
-    queryType: routerPlan.queryType || options.queryType || "task_dispatch",
-      includeKinds: routerPlan.retrieval.includeKinds,
-      maxResults: routerPlan.budgets.topK,
-      tokenBudget: routerPlan.budgets.tokenBudget,
-  });
-  const retrievalDurationMs = Date.now() - retrievalStartedAt;
+      hybridRetrieval: null,
+    };
+  const retrievalDurationMs = Date.now() - startedAt;
   const packet = buildRuntimeContextPacket({
     ...retrieval,
-    items: [
-      ...volatileItems,
-      ...safeArray(retrieval.items),
-    ].filter((item, index, array) => array.findIndex((candidate) => candidate.id === item.id) === index),
-    tokenEstimate: Number(retrieval.tokenEstimate || 0) + volatileItems.reduce((sum, item) => sum + Number(item.tokenEstimate || 0), 0),
     warnings: [
       ...safeArray(retrieval.warnings),
       ...(volatileItems.length > 0 ? ["runtime_event_working_memory_hot_state_included"] : []),
@@ -8643,7 +9033,7 @@ async function retrieveMemoryRuntimeContext(options = {}) {
     threadId: options.threadId || null,
     maxNodes: Math.max(12, Math.min(Number(options.memoryGraphMaxNodes || options.maxResults || 32), 64)),
   });
-  return {
+  const result = getMemoryCoreRuntime().decorateRetrievalResult({
     ...packet,
     memoryGraph: mergeMemoryGraphs(packet.memoryGraph, activatedGraph),
     activatedMemory: {
@@ -8658,6 +9048,7 @@ async function retrieveMemoryRuntimeContext(options = {}) {
       })),
       sync: activatedGraph.sync || null,
     },
+    hybridRetrieval: retrieval.hybridRetrieval || null,
     performance: {
       ...packet.performance,
       memoryGraphMetadataOnly: true,
@@ -8665,19 +9056,55 @@ async function retrieveMemoryRuntimeContext(options = {}) {
       memoryGraphVaultScan: false,
       memoryGraphSeedNodes: activatedGraph.performance?.boundedSeedNodes || 0,
       memoryGraphSeedEdges: activatedGraph.performance?.boundedSeedEdges || 0,
+      sidecarIndexWholeDatabaseExport: false,
+      sidecarIndexBackgroundTimer: false,
     },
     warnings: [
       ...safeArray(packet.warnings),
       "memory_graph_activation_metadata_only",
+      "hybrid_bm25_sidecar_index_enabled",
       ...safeArray(activatedGraph.warnings),
     ].filter((warning, index, array) => array.indexOf(warning) === index),
+  }, retrieval.memoryCoreContinuity || {
+    ...retrieval.memoryCoreAuthority,
+    compactPacket: true,
+    whyRecalledIncluded: true,
+  });
+  const triggerReceipt = bestEffortMemoryRuntimeTriggerReceipt({
+    hook: "retrieve_context",
+    queryType: result.request.queryType,
+    projectPath: result.request.projectPath,
+    threadId: result.request.threadId || result.request.parentCeoThreadId || null,
+    returnedCount: result.items.length,
+    tokenEstimate: result.tokenEstimate,
+    durationMs: Date.now() - startedAt,
+    partial: result.partial,
+    warnings: result.warnings,
+    sourceRefs: result.sourceRefs,
+  });
+  return {
+    ...result,
+    triggerReceipt,
+    memoryCore: {
+      ...(result.memoryCore || {}),
+      triggerReceiptCounts: { retrieveContext: 1, returnedCount: result.items.length },
+    },
   };
 }
 
-function retrieveMemoryRuntimePrecedent(options = {}) {
+async function retrieveMemoryRuntimePrecedent(options = {}) {
+  const startedAt = Date.now();
   const retrievalRequest = buildRuntimePrecedentRequest(options);
-  if (retrievalRequest.includeKinds.length === 0) {
-    return buildRuntimePrecedentPacket({
+  const routerPlan = retrievalRequest.routerPlan;
+  const retrieval = retrievalRequest.includeKinds.length > 0
+    ? runHybridMemoryRetrieval({
+      ...options,
+      taskGoal: retrievalRequest.query,
+      queryType: retrievalRequest.queryType,
+      projectPath: retrievalRequest.projectPath,
+      parentCeoThreadId: retrievalRequest.parentCeoThreadId,
+    }, routerPlan, [])
+    : {
       query: retrievalRequest.query,
       queryType: retrievalRequest.queryType,
       projectPath: retrievalRequest.projectPath,
@@ -8687,22 +9114,39 @@ function retrieveMemoryRuntimePrecedent(options = {}) {
       generatedAt: new Date().toISOString(),
       warnings: ["memory_router_no_allowed_runtime_kinds_no_retrieval"],
       items: [],
-    }, {
-      ...options,
-      routerPlan: retrievalRequest.routerPlan,
-      allowedKinds: retrievalRequest.includeKinds,
-      retrievalDurationMs: 0,
-    });
-  }
-  const retrievalStartedAt = Date.now();
-  const retrieval = retrieveAgentContext(retrievalRequest);
-  const retrievalDurationMs = Date.now() - retrievalStartedAt;
-  return buildRuntimePrecedentPacket(retrieval, {
+      hybridRetrieval: null,
+    };
+  const result = getMemoryCoreRuntime().decorateRetrievalResult(buildRuntimePrecedentPacket(retrieval, {
     ...options,
-    routerPlan: retrievalRequest.routerPlan,
+    routerPlan,
     allowedKinds: retrievalRequest.includeKinds,
-    retrievalDurationMs,
+    retrievalDurationMs: Date.now() - startedAt,
+  }), retrieval.memoryCoreContinuity || {
+    ...retrieval.memoryCoreAuthority,
+    compactPacket: true,
+    whyRecalledIncluded: true,
   });
+  const triggerReceipt = bestEffortMemoryRuntimeTriggerReceipt({
+    hook: "retrieve_precedent",
+    queryType: result.request.queryType,
+    projectPath: result.request.projectPath,
+    threadId: result.request.parentCeoThreadId || null,
+    returnedCount: result.items.length,
+    tokenEstimate: result.tokenEstimate,
+    durationMs: Date.now() - startedAt,
+    partial: result.partial,
+    warnings: result.warnings,
+    sourceRefs: result.sourceRefs,
+  });
+  return {
+    ...result,
+    hybridRetrieval: retrieval.hybridRetrieval || null,
+    triggerReceipt,
+    memoryCore: {
+      ...(result.memoryCore || {}),
+      triggerReceiptCounts: { retrievePrecedent: 1, returnedCount: result.items.length },
+    },
+  };
 }
 
 function scoreThreadRecoveryText(tokens, fields = []) {
@@ -8961,7 +9405,7 @@ async function recoverMemoryRuntimeThread(options = {}) {
     guardianRecords,
     options,
   );
-  const packet = buildThreadRecoveryPacket({
+  let packet = buildThreadRecoveryPacket({
     ...options,
     threadId: normalized.threadId || guardianRecords[0]?.threadId || vaultManifests[0]?.threadId || null,
     title: normalized.title || guardianRecords[0]?.title || vaultManifests[0]?.title || normalized.query,
@@ -8988,6 +9432,47 @@ async function recoverMemoryRuntimeThread(options = {}) {
       ...(projectDocs.length === 0 ? ["no_project_recovery_docs_found"] : []),
     ],
   });
+  const continuityWorkingMemory = await listWorkingMemoryRecords(memoryRuntimeRoot(), {
+    projectPath: resolvedProjectPath || null,
+    limit: 200,
+  });
+  const continuityPage = getMemoryCoreRuntime().getProjectContinuity({
+    ...options,
+    readOnly: true,
+    projectPath: resolvedProjectPath,
+    projectName: contextPacket.project?.name || normalized.title || null,
+    projectSummary: contextPacket.project?.summary || null,
+    workingMemory: continuityWorkingMemory,
+    cursor: options.cursor || options.nextCursor || null,
+  });
+  const continuityStatus = {
+    recoveryReady: continuityPage.recoveryReady,
+    missingSlots: continuityPage.missing,
+    staleSlots: continuityPage.stale,
+    conflictSlots: continuityPage.conflict,
+    unsatisfiedSlots: [...new Set([...safeArray(continuityPage.missing), ...safeArray(continuityPage.stale), ...safeArray(continuityPage.conflict)])],
+    pagination: {
+      complete: continuityPage.mandatoryComplete,
+      nextCursor: continuityPage.nextCursor,
+      mandatoryTotal: continuityPage.continuityPacket?.mandatoryTotal || 0,
+      mandatoryReturned: continuityPage.continuityPacket?.mandatoryReturned || 0,
+    },
+  };
+  packet = {
+    ...packet,
+    recoveryReady: continuityStatus.recoveryReady,
+    continuityStatus,
+    continuityPacket: continuityPage.continuityPacket,
+    nextCursor: continuityPage.nextCursor,
+    missing: continuityPage.missing,
+    stale: continuityPage.stale,
+    conflict: continuityPage.conflict,
+    memoryCore: {
+      ...(packet.memoryCore || {}),
+      continuityPaginationComplete: continuityStatus.pagination.complete,
+      mandatorySlotsSatisfied: continuityStatus.unsatisfiedSlots.length === 0,
+    },
+  };
   if (options.observeRuntimeEvent === false) {
     return {
       ...packet,
@@ -9025,7 +9510,7 @@ async function recoverMemoryRuntimeThread(options = {}) {
         updatedAt: packet.generatedAt,
       },
     ],
-  });
+  }, APP_OWNED_MEMORY_CORE_ORIGIN);
   await saveDatabase();
   return {
     ...packet,
@@ -9048,15 +9533,157 @@ async function recoverMemoryRuntimeThread(options = {}) {
   };
 }
 
-async function writebackMemoryRuntimeEvidence(packet = {}) {
-  return writeEvidenceWriteback(memoryRuntimeRoot(), packet);
+async function buildCeoTakeoverBootstrap(options = {}) {
+  const projectPath = options.projectPath || null;
+  const contextPacket = await retrieveMemoryRuntimeContext({
+    ...options,
+    taskGoal: options.taskGoal || options.query || options.projectName || options.title || "CEO takeover bootstrap",
+    queryType: "project_resume",
+    projectPath,
+    threadId: options.currentCeoThreadId || options.threadId || null,
+    parentCeoThreadId: options.parentCeoThreadId || options.currentCeoThreadId || options.threadId || null,
+    allowedKinds: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "knowledge_item", "experience_card"],
+    tokenBudget: options.tokenBudget || 1200,
+    maxResults: options.maxResults || 8,
+  });
+  const projectDocs = await buildRecoveryProjectDocs(projectPath);
+  const sourceRefs = [
+    ...safeArray(contextPacket.sourceRefs),
+    ...projectDocs.map((doc) => ({
+      kind: doc.kind,
+      path: doc.path,
+      title: doc.title,
+      updatedAt: doc.lastWriteTime,
+    })),
+  ];
+  const bootstrap = buildCeoTakeoverBootstrapPacket({
+    ...options,
+    projectPath,
+    projectName: options.projectName || options.title || contextPacket.project?.name || path.basename(projectPath || "") || "当前项目",
+    projectSummary: options.projectSummary || contextPacket.project?.summary || "",
+    currentCeoThreadId: options.currentCeoThreadId || options.threadId || null,
+    sourceRefs,
+    coldHistorySources: safeArray(options.coldHistorySources || options.staleThreadIds || options.badThreadIds),
+    pressure: options.pressure || null,
+  });
+  if (!projectPath) {
+    return {
+      ...bootstrap,
+      continuityPacket: null,
+      recoveryReady: false,
+      missing: ["project_identity"],
+      stale: [],
+      conflict: [],
+      nextCursor: null,
+    };
+  }
+  const workingMemory = await listWorkingMemoryRecords(memoryRuntimeRoot(), { projectPath, limit: 200 });
+  const continuity = getMemoryCoreRuntime().getProjectContinuity({
+    ...options,
+    readOnly: true,
+    projectPath,
+    workingMemory,
+    cursor: options.cursor || options.nextCursor || null,
+    tokenBudget: options.continuityTokenBudget || 2200,
+  });
+  return {
+    ...bootstrap,
+    continuityPacket: continuity.continuityPacket,
+    recoveryReady: continuity.recoveryReady,
+    missing: continuity.missing,
+    stale: continuity.stale,
+    conflict: continuity.conflict,
+    nextCursor: continuity.nextCursor,
+    memoryCore: {
+      identity: continuity.principal,
+      authority: continuity.authority,
+      mandatoryComplete: continuity.mandatoryComplete,
+    },
+  };
 }
 
-async function observeMemoryRuntimeEvent(event = {}) {
+async function writebackMemoryRuntimeEvidence(packet = {}, origin = null) {
+  const startedAt = Date.now();
+  const receipt = await writeEvidenceWriteback(memoryRuntimeRoot(), packet);
+  let memoryFactWriteback = receipt.status === "rejected"
+    ? {
+      attempted: 0,
+      written: 0,
+      rejected: 0,
+      review: 0,
+      actions: [],
+      warnings: ["rejected_writeback_did_not_create_memory_facts"],
+    }
+    : null;
+  if (!memoryFactWriteback) {
+    try {
+      memoryFactWriteback = writeMemoryFactsFromEvidence(memoryRuntimeRoot(), packet, receipt);
+    } catch {
+      memoryFactWriteback = {
+        attempted: 0,
+        written: 0,
+        rejected: 0,
+        review: 0,
+        actions: [],
+        warnings: ["memory_fact_sidecar_unavailable_evidence_receipt_preserved"],
+      };
+    }
+  }
+  const memoryCoreRuntime = getMemoryCoreRuntime();
+  const directSourceBackedAccept = receipt.status === "queued"
+    && String(packet.decision || "").trim().toLowerCase() === "accept"
+    && safeArray(packet.evidence?.sourceRefs).length > 0;
+  const formationInput = {
+    ...packet,
+    deterministic: packet.deterministic === true || packet.evidence?.deterministic === true || directSourceBackedAccept,
+  };
+  const formationOptions = {
+    projectPath: packet.task?.projectPath || packet.projectPath || null,
+    projectId: packet.task?.projectId || packet.projectId || null,
+    moduleId: packet.task?.moduleId || packet.moduleId || null,
+    now: receipt.createdAt,
+  };
+  const formedMemoryCore = origin === APP_OWNED_MEMORY_CORE_ORIGIN
+    ? memoryCoreRuntime.formAppOwnedLifecycleEvent("writeback_evidence", formationInput, formationOptions)
+    : memoryCoreRuntime.formLifecycleEvent("writeback_evidence", formationInput, formationOptions);
+  let factAuthority;
+  try {
+    factAuthority = memoryCoreRuntime.authorizeFormedMemoryFacts(memoryFactWriteback.actions, formedMemoryCore, {
+      projectPath: packet.task?.projectPath || packet.projectPath || null,
+      projectId: packet.task?.projectId || packet.projectId || null,
+      moduleId: packet.task?.moduleId || packet.moduleId || null,
+      now: receipt.createdAt,
+    });
+  } catch {
+    factAuthority = {
+      schemaVersion: "zhixia.memory_core_runtime.v1",
+      authorized: 0,
+      links: [],
+      reasonCodes: ["formed_memory_fact_authority_link_unavailable"],
+    };
+  }
+  const memoryCore = { ...formedMemoryCore, factAuthority };
+  const triggerReceipt = bestEffortMemoryRuntimeTriggerReceipt({
+    hook: "writeback_evidence",
+    queryType: "memory_writeback",
+    projectPath: packet.task?.projectPath || packet.projectPath || null,
+    threadId: packet.task?.threadId || packet.threadId || packet.task?.parentCeoThreadId || null,
+    returnedCount: memoryFactWriteback.written,
+    tokenEstimate: 0,
+    durationMs: Date.now() - startedAt,
+    partial: receipt.status !== "queued",
+    warnings: [...safeArray(receipt.warnings), ...safeArray(receipt.safetyBlockers)],
+    sourceRefs: safeArray(packet.evidence?.sourceRefs),
+  });
+  return { ...receipt, memoryFactWriteback, triggerReceipt, memoryCore };
+}
+
+async function observeMemoryRuntimeEvent(event = {}, origin = null) {
   const receipt = await writeRuntimeEventMemory(memoryRuntimeRoot(), event);
   const record = await fs.readFile(receipt.storagePath, "utf8")
     .then((raw) => JSON.parse(raw))
     .catch(() => null);
+  let memoryFactWriteback = null;
   if (record) {
     const nodeId = `runtime-event:${record.id}`;
     upsertMemoryGraphNode({
@@ -9138,8 +9765,47 @@ async function observeMemoryRuntimeEvent(event = {}) {
         updatedAt: record.updatedAt,
       });
     }
+    if (record.rejected !== true && record.eventType === "user_rule_update" && (record.summary || safeArray(record.decisions).length > 0)) {
+      try {
+        memoryFactWriteback = upsertMemoryFact(memoryRuntimeRoot(), {
+        projectPath: record.projectPath || null,
+        subject: record.projectPath ? `project:${record.projectPath}` : "user_rules",
+        predicate: "active_user_rule",
+        value: [record.summary, ...safeArray(record.decisions)].filter(Boolean).join(" | "),
+        factType: "user_rule",
+        status: "accepted",
+        confidence: 1,
+        observedAt: record.updatedAt,
+        validFrom: record.updatedAt,
+        sourceRefs: [
+          ...safeArray(record.defaultSourceRefs),
+          {
+            kind: "runtime_event",
+            path: `memory-runtime://runtime-events/${record.id}`,
+            title: record.title || "user rule update",
+            updatedAt: record.updatedAt,
+          },
+        ],
+        }, { now: record.updatedAt });
+      } catch {
+        memoryFactWriteback = {
+          action: "sidecar_unavailable",
+          warnings: ["memory_fact_sidecar_unavailable_runtime_event_preserved"],
+        };
+      }
+    }
   }
-  return receipt;
+  const runtime = getMemoryCoreRuntime();
+  const formationInput = {
+    ...event,
+    projectPath: event.projectPath || record?.projectPath || null,
+    observedAt: event.observedAt || record?.updatedAt || receipt.createdAt,
+    sourceRefs: safeArray(event.sourceRefs).length > 0 ? event.sourceRefs : record?.defaultSourceRefs || [],
+  };
+  const memoryCore = origin === APP_OWNED_MEMORY_CORE_ORIGIN
+    ? runtime.formAppOwnedLifecycleEvent("observe_event", formationInput)
+    : runtime.formLifecycleEvent("observe_event", formationInput);
+  return { ...receipt, memoryFactWriteback, memoryCore };
 }
 
 async function upsertMemoryRuntimeWorkingMemory(record = {}) {
@@ -9154,21 +9820,92 @@ async function listMemoryRuntimeFlowSkillCandidates(options = {}) {
   return { candidates: await listFlowSkillCandidateRecords(memoryRuntimeRoot(), options) };
 }
 
-async function closeMemoryRuntimeWorkingMemory(options = {}) {
+function listMemoryRuntimeFacts(options = {}) {
+  return { facts: listMemoryFacts(memoryRuntimeRoot(), options) };
+}
+
+function listMemoryRuntimeTriggerReceiptRecords(options = {}) {
+  return { receipts: listMemoryRuntimeTriggerReceipts(memoryRuntimeRoot(), options) };
+}
+
+function getMemoryCoreDiagnostics(options = {}) {
+  return getExistingMemoryCoreRuntime()?.getDiagnostics(options) || buildUnavailableMemoryCoreDiagnostics(options);
+}
+
+function listMemoryCoreReviewQueue(options = {}) {
+  return getExistingMemoryCoreRuntime()?.listReviewQueue(options) || buildUnavailableMemoryCoreReviewQueue(options);
+}
+
+async function getMemoryCoreContinuityStatus(options = {}) {
+  const workingMemory = await listWorkingMemoryRecords(memoryRuntimeRoot(), {
+    projectPath: options.projectPath || null,
+    limit: 200,
+  });
+  return getExistingMemoryCoreRuntime()?.getContinuityStatus({ ...options, workingMemory })
+    || buildUnavailableMemoryCoreContinuity(options);
+}
+
+async function getProjectContinuity(options = {}) {
+  const workingMemory = await listWorkingMemoryRecords(memoryRuntimeRoot(), {
+    projectPath: options.projectPath || null,
+    limit: 200,
+  });
+  return getExistingMemoryCoreRuntime()?.getProjectContinuity({ ...options, readOnly: true, workingMemory })
+    || buildUnavailableProjectContinuity(options);
+}
+
+function evaluateMemoryRuntimeBenchmark(options = {}) {
+  const cases = safeArray(options.cases);
+  const evaluation = evaluateMemoryBenchmark(cases, {
+    k: options.k || 5,
+    thresholds: options.thresholds || undefined,
+  });
+  return {
+    ...evaluation,
+    proofLevel: cases.length > 0 ? "caller_executed_results" : "no_runtime_results",
+    warnings: cases.length > 0 ? [] : ["benchmark_requires_executed_query_results"],
+  };
+}
+
+async function closeMemoryRuntimeWorkingMemory(options = {}, origin = null) {
   const taskId = String(options.taskId || "").trim();
   if (!taskId) throw new Error("Working memory close requires taskId.");
   const records = await listWorkingMemoryRecords(memoryRuntimeRoot(), { limit: 500 });
   const existing = records.find((record) => record.taskId === taskId);
   if (!existing) throw new Error("Working memory record not found.");
-  return upsertWorkingMemoryRecord(memoryRuntimeRoot(), {
+  const closed = await upsertWorkingMemoryRecord(memoryRuntimeRoot(), {
     ...existing,
     status: options.status || "accepted",
     nextAction: options.nextAction || existing.nextAction,
   });
+  const runtime = getMemoryCoreRuntime();
+  const formationOptions = {
+    projectPath: closed.projectPath || null,
+    projectId: options.projectId || null,
+    moduleId: options.moduleId || null,
+    now: closed.updatedAt,
+  };
+  const memoryCore = origin === APP_OWNED_MEMORY_CORE_ORIGIN
+    ? runtime.formAppOwnedLifecycleEvent("close_working_memory", closed, formationOptions)
+    : runtime.formLifecycleEvent("close_working_memory", closed, formationOptions);
+  return { ...closed, memoryCore };
 }
 
 async function promoteMemoryRuntimeCandidate(candidate = {}) {
-  return promoteMemoryCandidate(memoryRuntimeRoot(), candidate);
+  const startedAt = Date.now();
+  const result = await promoteMemoryCandidate(memoryRuntimeRoot(), candidate);
+  const triggerReceipt = bestEffortMemoryRuntimeTriggerReceipt({
+    hook: "promote_memory",
+    queryType: "memory_writeback",
+    projectPath: candidate.projectPath || candidate.task?.projectPath || null,
+    threadId: candidate.threadId || candidate.task?.threadId || null,
+    returnedCount: result.status === "candidate_review" || result.status === "queued" ? 1 : 0,
+    durationMs: Date.now() - startedAt,
+    partial: result.status !== "queued",
+    warnings: [...safeArray(result.warnings), ...safeArray(result.safetyBlockers)],
+    sourceRefs: safeArray(candidate.sourceRefs || candidate.evidence?.sourceRefs),
+  });
+  return { ...result, triggerReceipt };
 }
 
 function sanitizeAgentRetrieveErrorMessage(error) {
@@ -9607,7 +10344,169 @@ async function runE2EGovernanceProbe(options = {}) {
     maxResults: 5,
   });
   const lineageItems = safeArray(retrieved.items).filter((item) => item.kind === "thread_lineage_index");
+  appendAgentRetrieveLog(buildAgentRetrieveLogEntry(retrieved, { status: "success", durationMs: 0 }));
   const retrievalLogs = listAgentRetrieveLogs({ limit: 2 });
+  const memoryWriteback = await writebackMemoryRuntimeEvidence({
+    decision: "accept",
+    task: {
+      id: "e2e-memory-intelligence",
+      goal: "Keep the synthetic editor architecture aligned",
+      projectPath,
+      parentCeoThreadId: "11111111-2222-7333-8444-555555555555",
+    },
+    evidence: {
+      summary: "The editor remains scene-first and module-oriented.",
+      memoryFacts: [{
+        subject: "Synthetic editor",
+        predicate: "current_architecture",
+        value: "scene-first module-oriented workspace",
+        factType: "architecture",
+      }],
+      sourceRefs: [{
+        kind: "project_doc",
+        path: candidateDocs[0],
+        title: "CEO Flow Handoff",
+        updatedAt: new Date().toISOString(),
+      }],
+    },
+  }, APP_OWNED_MEMORY_CORE_ORIGIN);
+  upsertMemorySearchItems(memoryRuntimeRoot(), [
+    {
+      id: "e2e-global-draft-authority-bypass",
+      kind: "memory_fact",
+      projectPath: null,
+      title: "Scene-first editor architecture global draft",
+      summary: "scene-first module-oriented workspace authority bypass candidate",
+      status: "candidate",
+      freshness: "review",
+      requiresHumanConfirmation: true,
+      sourceRefs: [{ kind: "draft", path: "memory-runtime://draft/global-authority-bypass" }],
+    },
+    {
+      id: "e2e-project-ready-review-authority-bypass",
+      kind: "memory_fact",
+      scope: "project",
+      projectPath,
+      title: "Scene-first editor architecture ready review",
+      summary: "scene-first module-oriented workspace authority bypass ready review",
+      status: "ready",
+      freshness: "fresh",
+      requiresHumanConfirmation: true,
+      sourceRefs: [{ kind: "review", path: "memory-runtime://review/project-authority-bypass" }],
+    },
+  ]);
+  upsertMemorySearchItems(memoryRuntimeRoot(), [{
+    id: "e2e-global-scope-project-masquerade",
+    kind: "memory_fact",
+    scope: "global",
+    projectPath: null,
+    title: "Global scope project masquerade",
+    summary: "global scope masquerade must not become project current",
+    status: "review",
+    freshness: "review",
+    requiresHumanConfirmation: true,
+    sourceRefs: [{ kind: "review", path: "memory-runtime://review/global-scope-masquerade" }],
+  }]);
+  const legacyScopeDb = openMemoryRuntimeIndex(memoryRuntimeRoot());
+  try {
+    legacyScopeDb.prepare(`
+      UPDATE memory_search_items
+      SET projectPath = ?, scope = 'global', status = 'accepted', freshness = 'fresh', requiresHumanConfirmation = 0
+      WHERE id = ?
+    `).run(projectPath, "e2e-global-scope-project-masquerade");
+  } finally {
+    legacyScopeDb.close();
+  }
+  const explicitGlobalScopeSearch = searchMemoryRuntimeIndex(memoryRuntimeRoot(), "global scope project masquerade", {
+    scope: "global",
+    includeKinds: ["memory_fact"],
+    limit: 8,
+  });
+  const memoryContext = await retrieveMemoryRuntimeContext({
+    taskGoal: "Which scene-first editor architecture is current?",
+    queryType: "project_resume",
+    projectPath,
+    parentCeoThreadId: "11111111-2222-7333-8444-555555555555",
+    tokenBudget: 1000,
+    maxResults: 8,
+  });
+  const reviewMemoryContext = await retrieveMemoryRuntimeContext({
+    taskGoal: "authority bypass ready review",
+    queryType: "review_gate",
+    projectPath,
+    parentCeoThreadId: "11111111-2222-7333-8444-555555555555",
+    tokenBudget: 1000,
+    maxResults: 8,
+    reviewMode: true,
+  });
+  const memoryFacts = listMemoryFacts(memoryRuntimeRoot(), { projectPath, view: "current", limit: 40 });
+  const unsafeE2eToken = "ghp_1234567890ABCDEFGHIJKLMN";
+  const rejectedWriteback = await writebackMemoryRuntimeEvidence({
+    decision: "accept",
+    task: { id: "e2e-rejected-memory", goal: "unsafe memory", projectPath },
+    evidence: {
+      summary: `credential ${unsafeE2eToken}`,
+      sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/rejected-e2e" }],
+    },
+    privacy: { containsSecrets: false },
+  });
+  const rejectedStoredPayload = await fs.readFile(rejectedWriteback.storagePath, "utf8");
+  const memoryFactsAfterRejected = listMemoryFacts(memoryRuntimeRoot(), { projectPath, view: "current", limit: 40 });
+  const unsafeE2eKey = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456";
+  const rejectedKeyWriteback = await writebackMemoryRuntimeEvidence({
+    decision: "accept",
+    task: { id: "e2e-rejected-key-memory", goal: "safe sibling summary", projectPath },
+    evidence: {
+      summary: "safe sibling summary must not become accepted",
+      memoryFacts: [{
+        subject: "Synthetic editor",
+        predicate: "unsafe_key_bypass",
+        value: { [unsafeE2eKey]: "safe" },
+        factType: "architecture",
+        status: "accepted",
+      }],
+      sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/rejected-key-e2e" }],
+    },
+  });
+  const rejectedKeyStoredPayload = await fs.readFile(rejectedKeyWriteback.storagePath, "utf8");
+  const memoryFactsAfterRejectedKey = listMemoryFacts(memoryRuntimeRoot(), { projectPath, view: "current", limit: 40 });
+  const unsafeRuntimeEventReceipt = await observeMemoryRuntimeEvent({
+    eventType: "user_rule_update",
+    id: `unsafe-runtime-${unsafeE2eToken}`,
+    automationId: "raw_session",
+    projectPath,
+    summary: "Safe sibling summary must not become an accepted user rule.",
+    sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/unsafe-runtime-event" }],
+  });
+  const unsafeRuntimeEventStoredPayload = await fs.readFile(unsafeRuntimeEventReceipt.storagePath, "utf8");
+  const memoryFactsAfterUnsafeRuntimeEvent = listMemoryFacts(memoryRuntimeRoot(), { projectPath, view: "current", limit: 40 });
+  const triggerReceipts = listMemoryRuntimeTriggerReceipts(memoryRuntimeRoot(), { projectPath, limit: 20 });
+  const expectedArchitectureFact = memoryFacts.find((fact) => fact.predicate === "current_architecture");
+  const memoryEvaluation = evaluateMemoryRuntimeBenchmark({
+    k: 4,
+    cases: [{
+      id: "electron-memory-runtime-query",
+      project: "synthetic-project",
+      queryType: "project_resume",
+      query: "Which scene-first editor architecture is current?",
+      expectedIds: expectedArchitectureFact ? [expectedArchitectureFact.id] : [],
+      staleIds: [],
+      results: memoryContext.items,
+      latencyMs: memoryContext.triggerReceipt?.durationMs || 0,
+      tokenEstimate: memoryContext.tokenEstimate,
+    }],
+    thresholds: {
+      minimumCases: 1,
+      recallAtK: 1,
+      precisionAtK: 0.1,
+      mrr: 0.5,
+      ndcgAtK: 0.6,
+      missingAnchorRate: 0,
+      staleHitRate: 0.3,
+      p95LatencyMs: 500,
+      p95TokenEstimate: 1800,
+    },
+  });
 
   return {
     ok: true,
@@ -9643,6 +10542,31 @@ async function runE2EGovernanceProbe(options = {}) {
         requiresHumanConfirmation: item.requiresHumanConfirmation,
         whyMatched: safeArray(item.whyMatched),
       })),
+    },
+    memoryRuntime: {
+      writebackStatus: memoryWriteback.status,
+      factWriteCount: memoryWriteback.memoryFactWriteback?.written || 0,
+      factCount: memoryFacts.length,
+      contextFactCount: safeArray(memoryContext.items).filter((item) => item.kind === "memory_fact").length,
+      contextReturnedCount: safeArray(memoryContext.items).length,
+      authorityBypassExcluded: !safeArray(memoryContext.items).some((item) => ["e2e-global-draft-authority-bypass", "e2e-project-ready-review-authority-bypass", "e2e-global-scope-project-masquerade"].includes(item.id)),
+      reviewModeCandidateReturned: safeArray(reviewMemoryContext.items).some((item) => item.id === "e2e-project-ready-review-authority-bypass"),
+      explicitGlobalScopeTruthful: safeArray(explicitGlobalScopeSearch.items).some((item) => item.id === "e2e-global-scope-project-masquerade" && item.scope === "global" && item.projectPath == null && item.status === "review"),
+      contextMode: memoryContext.hybridRetrieval?.strategy || null,
+      sidecarWholeDatabaseExport: memoryContext.performance?.sidecarIndexWholeDatabaseExport,
+      triggerReceiptCount: triggerReceipts.length,
+      triggerHooks: triggerReceipts.map((receipt) => receipt.hook),
+      benchmarkPassed: memoryEvaluation.gate?.passed === true,
+      benchmarkRecallAtK: memoryEvaluation.metrics?.recallAtK || 0,
+      rejectedWritebackStatus: rejectedWriteback.status,
+      rejectedWritebackFactCountUnchanged: memoryFactsAfterRejected.length === memoryFacts.length,
+      rejectedStoredPayloadSanitized: !rejectedStoredPayload.includes(unsafeE2eToken),
+      rejectedKeyWritebackStatus: rejectedKeyWriteback.status,
+      rejectedKeyWritebackFactCountUnchanged: memoryFactsAfterRejectedKey.length === memoryFactsAfterRejected.length,
+      rejectedKeyStoredPayloadSanitized: !rejectedKeyStoredPayload.includes(unsafeE2eKey),
+      unsafeRuntimeEventRejected: unsafeRuntimeEventReceipt.memoryFactWriteback == null,
+      unsafeRuntimeEventFactCountUnchanged: memoryFactsAfterUnsafeRuntimeEvent.length === memoryFactsAfterRejectedKey.length,
+      unsafeRuntimeEventStoredPayloadSanitized: !unsafeRuntimeEventStoredPayload.includes(unsafeE2eToken),
     },
   };
 }
@@ -9810,7 +10734,7 @@ ipcMain.handle("codex:scanWorkspace", async () => {
   }
 
   const workspacePath = result.filePaths[0];
-  const scanResult = await scanCodexWorkspacePath(workspacePath);
+  const scanResult = await scanCodexWorkspacePath(workspacePath, { seedMemoryCore: true });
   await startFileWatchers({ silent: true });
   return scanResult;
 });
@@ -10024,6 +10948,15 @@ ipcMain.handle("memoryRuntime:recoverThread", async (_event, options = {}) => {
   return recoverMemoryRuntimeThread(options);
 });
 
+ipcMain.handle("memoryRuntime:evaluateCeoThreadPressure", async (_event, options = {}) => evaluateCeoThreadPressure(options));
+
+ipcMain.handle("memoryRuntime:buildCeoTakeoverBootstrap", async (_event, options = {}) => {
+  await ensureDatabase();
+  return buildCeoTakeoverBootstrap(options);
+});
+
+ipcMain.handle("memoryRuntime:buildCeoLifecycleWriteback", async (_event, options = {}) => buildCeoLifecycleWritebackPacket(options));
+
 ipcMain.handle("memoryRuntime:writebackEvidence", async (_event, packet = {}) => writebackMemoryRuntimeEvidence(packet));
 
 ipcMain.handle("memoryRuntime:observeEvent", async (_event, event = {}) => {
@@ -10038,6 +10971,20 @@ ipcMain.handle("memoryRuntime:upsertWorkingMemory", async (_event, record = {}) 
 ipcMain.handle("memoryRuntime:listWorkingMemory", async (_event, options = {}) => listMemoryRuntimeWorkingMemory(options));
 
 ipcMain.handle("memoryRuntime:listFlowSkillCandidates", async (_event, options = {}) => listMemoryRuntimeFlowSkillCandidates(options));
+
+ipcMain.handle("memoryRuntime:listFacts", async (_event, options = {}) => listMemoryRuntimeFacts(options));
+
+ipcMain.handle("memoryRuntime:listTriggerReceipts", async (_event, options = {}) => listMemoryRuntimeTriggerReceiptRecords(options));
+
+ipcMain.handle("memoryRuntime:evaluateBenchmark", async (_event, options = {}) => evaluateMemoryRuntimeBenchmark(options));
+
+ipcMain.handle("memoryRuntime:getCoreDiagnostics", async (_event, options = {}) => getMemoryCoreDiagnostics(options));
+
+ipcMain.handle("memoryRuntime:listCoreReviewQueue", async (_event, options = {}) => listMemoryCoreReviewQueue(options));
+
+ipcMain.handle("memoryRuntime:getContinuityStatus", async (_event, options = {}) => getMemoryCoreContinuityStatus(options));
+
+ipcMain.handle("memoryRuntime:getProjectContinuity", async (_event, options = {}) => getProjectContinuity(options));
 
 ipcMain.handle("memoryRuntime:closeWorkingMemory", async (_event, options = {}) => closeMemoryRuntimeWorkingMemory(options));
 

@@ -1,7 +1,7 @@
 {
   "name": "local-doc-knowledge",
   "private": true,
-  "version": "0.8.3",
+  "version": "0.9.0",
   "description": "Zhixia, the local-first official Memory Runtime for CEO Flow",
   "license": "MIT",
   "author": "Zhixia contributors",
@@ -15,13 +15,16 @@
     "knowledge-base"
   ],
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "vite --host 127.0.0.1 --port 5290",
     "dev:electron": "wait-on tcp:5290 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5290 electron .",
     "build": "tsc -b && vite build",
-    "test": "node tests/smoke-test.cjs && node tests/security-policy.test.cjs && node tests/prepare-public-repo-policy.test.cjs && node tests/compact-policy.test.cjs && node tests/agent-retrieve-policy.test.cjs && node tests/memory-runtime-policy.test.cjs && node tests/memory-runtime-lifecycle-e2e.test.cjs && node tests/zhixia-local-docs-helper.test.cjs && node tests/electron-ipc-governance-contract.test.cjs && node tests/codex-thread-history-auto-ingest-policy.test.cjs && node tests/archive-candidate-policy.test.cjs && node tests/project-resume-policy.test.cjs && node tests/project-memory-backfill-policy.test.cjs && node tests/project-artifact-policy.test.cjs && node tests/agent-runtime-monitor-policy.test.cjs && node tests/runtime-monitor-adapter.test.cjs && node tests/tool-skill-inventory-policy.test.cjs",
+    "test": "node tests/smoke-test.cjs && node tests/memory-authority-policy.test.cjs && node tests/project-brain-policy.test.cjs && node tests/memory-core-index-store.test.cjs && node tests/memory-formation-policy.test.cjs && node tests/memory-core-runtime-lifecycle.test.cjs && node tests/memory-core-project-backfill.test.cjs && node tests/security-policy.test.cjs && node tests/prepare-public-repo-policy.test.cjs && node tests/database-startup-policy.test.cjs && node tests/compact-policy.test.cjs && node tests/agent-retrieve-policy.test.cjs && node tests/hybrid-memory-retrieval-policy.test.cjs && node tests/memory-fact-policy.test.cjs && node tests/memory-runtime-index-store.test.cjs && node tests/memory-evaluation-policy.test.cjs && node tests/memory-runtime-hybrid-lifecycle.test.cjs && node tests/memory-runtime-policy.test.cjs && node tests/memory-runtime-lifecycle-e2e.test.cjs && node tests/ceo-memory-runtime-guard-policy.test.cjs && node tests/zhixia-local-docs-helper.test.cjs && node tests/electron-ipc-governance-contract.test.cjs && node tests/codex-thread-history-auto-ingest-policy.test.cjs && node tests/archive-candidate-policy.test.cjs && node tests/project-resume-policy.test.cjs && node tests/project-memory-backfill-policy.test.cjs && node tests/project-artifact-policy.test.cjs && node tests/agent-runtime-monitor-policy.test.cjs && node tests/runtime-monitor-adapter.test.cjs && node tests/tool-skill-inventory-policy.test.cjs",
     "prepare:public": "node scripts/prepare-public-repo.cjs"
   },
   "dependencies": {

@@ -163,9 +163,10 @@ async function main() {
     ],
   });
   assert.equal(runtimeEvent.status, "blocked", "broken thread events should become blocked working memory");
-  assert.equal(runtimeEvent.defaultSourceRefs.length, 1, "runtime events should filter raw/secret refs out of default context");
+  assert.equal(runtimeEvent.rejected, true, "one unsafe structured ref should fail closed for the entire runtime event packet");
+  assert.equal(runtimeEvent.defaultSourceRefs.length, 1, "rejected runtime events may retain only independently safe source refs");
   assert.equal(runtimeEvent.sourceRefs.length, 1, "runtime events should not retain unsafe refs in stored sourceRefs");
-  assert.equal(runtimeEvent.unsafeSourceRefCount, 2, "runtime events should keep only an unsafe ref count");
+  assert.equal(runtimeEvent.unsafeSourceRefCount, 2, "rejected runtime events should retain only the unsafe ref count");
   assert.ok(runtimeEvent.warnings.includes("unsafe_source_refs_pointer_omitted_from_runtime_event_storage"), "filtered refs should leave a storage warning");
   assert.equal(runtimeEvent.safety.rawSessionBodyRead, false, "runtime event memory must not read raw session bodies");
   assert.equal(runtimeEvent.safety.startsTimers, false, "runtime event memory must not start timers");
@@ -287,12 +288,9 @@ async function main() {
   assert.equal(JSON.stringify(storedRuntimeEvent).includes(".codex/sessions"), false, "stored runtime event must not retain raw session paths");
   assert.equal(JSON.stringify(storedRuntimeEvent).includes(".env"), false, "stored runtime event must not retain secret paths");
   assert.equal(JSON.stringify(storedRuntimeEvent).includes("raw_session"), false, "stored runtime event must not retain raw session sourceRef kind");
-  assert.equal(storedRuntimeEvent.unsafeSourceRefCount, 2, "stored runtime event should keep unsafe ref count only");
-  const listedEvents = await listRuntimeEventRecords(runtimeEventStore, {
-    projectPath: "C:/Users/example/Documents/2D游戏项目",
-    threadId: "11111111-2222-7333-8444-555555555555",
-  });
-  assert.equal(listedEvents.length, 1, "runtime event should be listable by project/thread");
+  assert.equal(storedRuntimeEvent.unsafeSourceRefCount, 2, "stored rejected runtime event should keep only the unsafe ref count");
+  const listedEvents = await listRuntimeEventRecords(runtimeEventStore, { status: "blocked" });
+  assert.equal(listedEvents.length, 1, "rejected runtime event should remain listable without unsafe project/thread identifiers");
   const listedWorking = await listWorkingMemoryRecords(runtimeEventStore, { status: "blocked" });
   assert.equal(listedWorking.length, 1, "runtime event should create a blocked WorkingMemoryRecord");
   const volatileItems = buildRuntimeItemsFromVolatileMemory({
@@ -686,7 +684,7 @@ async function main() {
       sourceRefs: [{ kind: "experience_card", path: "memory/card.json" }],
       privacy: { containsRawSession: false, containsSecrets: false },
     });
-    assert.equal(safePromotion.status, "queued_candidate", "safe source-backed promotion should queue candidate metadata");
+    assert.equal(safePromotion.status, "queued", "safe source-backed promotion should use the queued receipt status");
     assert.equal(safePromotion.effects.installsOrExecutes, false, "promotion must not install or execute");
 
     const unsafePromotion = evaluatePromotionCandidate({
@@ -696,7 +694,7 @@ async function main() {
       action: "execute and publish",
       privacy: { publicExportRequested: true, containsRawSession: true },
     });
-    assert.equal(unsafePromotion.status, "review", "unsafe promotion should stay in review");
+    assert.equal(unsafePromotion.status, "rejected", "unsafe promotion should use the rejected receipt status");
     assert.ok(unsafePromotion.blockers.includes("contains_raw_session"), "promotion should block raw-session candidates");
     assert.ok(unsafePromotion.blockers.includes("public_export_requires_confirmation"), "promotion should block public export automation");
     assert.equal(unsafePromotion.effects.exportsPublicly, false, "promotion must never export publicly in this slice");
@@ -707,7 +705,7 @@ async function main() {
       sourceRefs: [{ kind: "raw_session", path: "C:/Users/example/.codex/sessions/2026/06/19/thread.jsonl" }],
       privacy: { containsRawSession: false, containsSecrets: false },
     });
-    assert.equal(rawPromotionWithoutPrivacy.status, "review", "raw-session promotion should stay review even when privacy flags are false");
+    assert.equal(rawPromotionWithoutPrivacy.status, "rejected", "raw-session promotion should reject even when privacy flags are false");
     assert.ok(rawPromotionWithoutPrivacy.blockers.includes("contains_raw_session"), "promotion should infer raw-session blocker from sourceRefs");
 
     const secretPromotionWithoutPrivacy = evaluatePromotionCandidate({
@@ -716,7 +714,7 @@ async function main() {
       sourceRefs: [{ kind: "project_artifact", path: "C:/repo/credentials.json", title: "credential fixture" }],
       requestedEffect: "promote token evidence",
     });
-    assert.equal(secretPromotionWithoutPrivacy.status, "review", "secret promotion should stay review even when privacy flags are omitted");
+    assert.equal(secretPromotionWithoutPrivacy.status, "rejected", "secret promotion should reject even when privacy flags are omitted");
     assert.ok(secretPromotionWithoutPrivacy.blockers.includes("contains_secrets"), "promotion should infer secret blocker from refs or action fields");
 
     const envPromotionWithoutPrivacy = evaluatePromotionCandidate({
@@ -725,9 +723,208 @@ async function main() {
       sourceRefs: [{ kind: "document", path: "C:/repo/.env", title: "env config" }],
       privacy: { containsRawSession: false, containsSecrets: false },
     });
-    assert.equal(envPromotionWithoutPrivacy.status, "review", ".env promotion should stay review even when privacy flags are false");
+    assert.equal(envPromotionWithoutPrivacy.status, "rejected", ".env promotion should reject even when privacy flags are false");
     assert.ok(envPromotionWithoutPrivacy.blockers.includes("contains_secrets"), "promotion should infer .env sourceRef blocker from path alone");
     assert.equal(JSON.stringify(envPromotionWithoutPrivacy).includes("C:/repo/.env"), false, "unsafe promotion candidates should redact secret sourceRef paths");
+
+    const nakedToken = "ghp_1234567890ABCDEFGHIJKLMN";
+    const secretContentWriteback = evaluateWritebackEvidence({
+      decision: "accept",
+      task: { id: "secret-content", goal: "store result" },
+      evidence: {
+        summary: `credential value ${nakedToken}`,
+        sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/secret-content" }],
+      },
+      privacy: { containsSecrets: false },
+    });
+    assert.equal(secretContentWriteback.status, "rejected", "naked credential values in evidence content must fail closed");
+    assert.equal(JSON.stringify(secretContentWriteback.compact).includes(nakedToken), false, "rejected compact evidence must not retain credential values");
+
+    const structuredWritebackBypasses = [
+      {
+        label: "task.domain",
+        packet: {
+          decision: "accept",
+          task: { id: "safe-task", goal: "safe sibling summary", domain: [nakedToken] },
+          evidence: { summary: "safe sibling summary", sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/domain" }] },
+        },
+      },
+      {
+        label: "evidence.memoryFacts id",
+        packet: {
+          decision: "accept",
+          task: { id: "safe-task", goal: "safe sibling summary" },
+          evidence: {
+            summary: "safe sibling summary",
+            memoryFacts: [{ id: nakedToken, subject: "safe", predicate: "safe", value: "safe", status: "accepted" }],
+            sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/fact-id" }],
+          },
+        },
+      },
+      {
+        label: "evidence.memoryFacts sourceRef hash",
+        packet: {
+          decision: "accept",
+          task: { id: "safe-task", goal: "safe sibling summary" },
+          evidence: {
+            summary: "safe sibling summary",
+            memoryFacts: [{
+              subject: "safe",
+              predicate: "safe",
+              value: "safe",
+              status: "accepted",
+              sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/fact-hash", hash: nakedToken }],
+            }],
+            sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/fact-hash" }],
+          },
+        },
+      },
+    ];
+    for (const bypass of structuredWritebackBypasses) {
+      const evaluated = evaluateWritebackEvidence(bypass.packet);
+      assert.equal(evaluated.status, "rejected", `${bypass.label} must reject the entire writeback packet`);
+      assert.equal(evaluated.compact.evidence.summary, "[unsafe-evidence-content-omitted]", `${bypass.label} must suppress safe sibling summaries`);
+      assert.equal(JSON.stringify(evaluated.compact).includes(nakedToken), false, `${bypass.label} must not retain unsafe original values`);
+    }
+
+    const dangerousObjectKey = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456";
+    const keyBypassWriteback = evaluateWritebackEvidence({
+      decision: "accept",
+      task: { id: "key-bypass", goal: "safe sibling summary" },
+      evidence: {
+        summary: "safe sibling summary",
+        memoryFacts: [{ subject: "safe", predicate: "safe", value: { [dangerousObjectKey]: "safe" }, status: "accepted" }],
+        sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/key-bypass" }],
+      },
+    });
+    assert.equal(keyBypassWriteback.status, "rejected", "dangerous MemoryFact object keys must reject the entire writeback packet");
+    assert.equal(keyBypassWriteback.compact.evidence.summary, "[unsafe-evidence-content-omitted]", "unsafe sibling keys must suppress safe summaries");
+    assert.equal(JSON.stringify(keyBypassWriteback.compact).includes(dangerousObjectKey), false);
+
+    const post120Object = {};
+    for (let index = 0; index < 130; index += 1) post120Object[`safe_${String(index).padStart(3, "0")}`] = "safe";
+    post120Object[dangerousObjectKey] = "safe";
+    const post120Writeback = evaluateWritebackEvidence({
+      decision: "accept",
+      task: { id: "post-120", goal: "safe sibling summary" },
+      evidence: {
+        summary: "safe sibling summary",
+        memoryFacts: [{ subject: "safe", predicate: "safe", value: post120Object, status: "accepted" }],
+        sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/post-120" }],
+      },
+    });
+    assert.equal(post120Writeback.status, "rejected", "danger after 120 entries must be detected before the object budget");
+    assert.equal(post120Writeback.compact.privacy.structureTruncated, false);
+
+    const truncatedObject = {};
+    for (let index = 0; index < 280; index += 1) truncatedObject[`safe_${String(index).padStart(3, "0")}`] = "safe";
+    const truncatedWriteback = evaluateWritebackEvidence({
+      decision: "accept",
+      task: { id: "truncated-structure", goal: "safe sibling summary" },
+      evidence: {
+        summary: "safe sibling summary",
+        memoryFacts: [{ subject: "safe", predicate: "safe", value: truncatedObject, status: "accepted" }],
+        sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/truncated" }],
+      },
+    });
+    assert.equal(truncatedWriteback.status, "rejected", "bounded traversal truncation must reject writeback packets");
+    assert.equal(truncatedWriteback.compact.privacy.structureTruncated, true);
+    assert.ok(truncatedWriteback.safetyBlockers.includes("structure_truncated"));
+
+    const splitTokenWriteback = evaluateWritebackEvidence({
+      decision: "accept",
+      task: { id: "split-token", goal: "safe sibling summary" },
+      evidence: {
+        summary: "safe sibling summary",
+        memoryFacts: [{ subject: "safe", predicate: "safe", value: { prefix: "ghp_", bodyPart: "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456" }, status: "accepted" }],
+        sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/split-token" }],
+      },
+    });
+    assert.equal(splitTokenWriteback.status, "rejected", "strong split token fields must be reconstructed and rejected");
+    assert.ok(splitTokenWriteback.safetyBlockers.includes("contains_secrets"));
+
+    const base64Writeback = evaluateWritebackEvidence({
+      decision: "accept",
+      task: { id: "base64-writeback", goal: "safe sibling" },
+      evidence: {
+        summary: "safe sibling summary",
+        memoryFacts: [{ subject: "safe", predicate: "payload", value: `data:text/plain;base64,${"A".repeat(220)}` }],
+        sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/base64" }],
+      },
+    });
+    assert.equal(base64Writeback.status, "rejected");
+    assert.ok(base64Writeback.safetyBlockers.includes("contains_base64"));
+
+    const giantWriteback = evaluateWritebackEvidence({
+      decision: "accept",
+      task: { id: "giant-writeback", goal: "safe sibling" },
+      evidence: {
+        summary: "safe sibling summary",
+        body: "giant body sentence ".repeat(900),
+        sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/giant" }],
+      },
+    });
+    assert.equal(giantWriteback.status, "rejected");
+    assert.ok(giantWriteback.safetyBlockers.includes("contains_giant_body"));
+
+    const rawContentWriteback = evaluateWritebackEvidence({
+      decision: "accept",
+      task: { id: "raw-content", goal: "store result" },
+      evidence: {
+        summary: "raw_session transcript body should not be stored",
+        sourceRefs: [{ kind: "review_report", path: "memory-runtime://review/raw-content" }],
+      },
+      privacy: { containsRawSession: false },
+    });
+    assert.equal(rawContentWriteback.status, "rejected", "raw-session content signals must fail closed even when privacy flags are false");
+    assert.equal(rawContentWriteback.compact.evidence.summary, "[unsafe-evidence-content-omitted]");
+
+    const unsafeRuntimeEvent = normalizeRuntimeEventMemory({
+      eventType: "user_rule_update",
+      projectPath: `C:/workspace/${nakedToken}`,
+      summary: `-----BEGIN PRIVATE KEY----- ${nakedToken} -----END PRIVATE KEY-----`,
+      decisions: ["raw_session transcript"],
+    });
+    assert.equal(unsafeRuntimeEvent.projectPath, null, "unsafe runtime event scope must be omitted");
+    assert.equal(unsafeRuntimeEvent.summary, "[unsafe-runtime-event-content-omitted]");
+    assert.equal(JSON.stringify(unsafeRuntimeEvent).includes(nakedToken), false, "unsafe runtime event storage must not retain secret values");
+    assert.equal(unsafeRuntimeEvent.rejected, true, "unsafe runtime events should be explicitly rejected");
+
+    const structuredRuntimeEvent = normalizeRuntimeEventMemory({
+      eventType: "user_rule_update",
+      id: nakedToken,
+      automationId: "raw_session",
+      projectPath: "C:/safe-project",
+      summary: "safe sibling user rule",
+      sourceRefs: [{ kind: "review_report", id: "safe-ref", path: "memory-runtime://review/safe" }],
+    });
+    assert.equal(structuredRuntimeEvent.rejected, true, "runtime event id/automationId must participate in fail-closed evaluation");
+    assert.equal(structuredRuntimeEvent.automationId, null);
+    assert.equal(structuredRuntimeEvent.sourceRefs.length, 1, "safe source refs may remain on an explicitly rejected event");
+    assert.equal(JSON.stringify(structuredRuntimeEvent).includes(nakedToken), false);
+
+    const unsafeRuntimeEventRef = normalizeRuntimeEventMemory({
+      eventType: "user_rule_update",
+      id: "safe-runtime-event",
+      projectPath: "C:/safe-project",
+      summary: "safe sibling user rule",
+      sourceRefs: [{ kind: "review_report", id: "safe-ref", path: "memory-runtime://review/safe", hash: nakedToken }],
+    });
+    assert.equal(unsafeRuntimeEventRef.rejected, true);
+    assert.equal(unsafeRuntimeEventRef.sourceRefs.length, 0, "unsafe sourceRef hash must be removed");
+    assert.equal(JSON.stringify(unsafeRuntimeEventRef).includes(nakedToken), false);
+
+    const structuredPromotion = evaluatePromotionCandidate({
+      id: nakedToken,
+      target: "memory_card",
+      title: "safe sibling promotion",
+      summary: "safe sibling summary",
+      actions: ["Bearer abcdefghijklmnopqrstuvwxyz"],
+      sourceRefs: [{ kind: "review_report", id: "safe", path: "memory-runtime://review/promotion", hash: nakedToken }],
+    });
+    assert.equal(structuredPromotion.status, "rejected", "promotion ids, actions, and sourceRef metadata must fail closed");
+    assert.equal(JSON.stringify(structuredPromotion).includes(nakedToken), false);
+    assert.equal(structuredPromotion.sourceRefs[0]?.kind, "unsafe_source");
   } finally {
     await fs.rm(storeRoot, { recursive: true, force: true });
   }
