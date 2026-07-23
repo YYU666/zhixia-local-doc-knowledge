@@ -253,7 +253,8 @@ function buildRuntimeMonitorSnapshotFromInputs(input = {}, options = {}) {
   const longThreadSessions = safeArray(input.longThreadsEnvelope?.items)
     .slice(0, Number(options.sessionLimit || 20))
     .map(normalizeLongThreadItem);
-  const sessions = mergeSessionsByThreadId(input.sessions, guardianSessions, longThreadSessions);
+  const openClawSessions = safeArray(input.openClawMetadata?.sessions).slice(0, Number(options.sessionLimit || 20));
+  const sessions = mergeSessionsByThreadId(input.sessions, openClawSessions, guardianSessions, longThreadSessions);
   const snapshot = buildRuntimeMonitorSnapshot(
     {
       sampledAt,
@@ -269,16 +270,18 @@ function buildRuntimeMonitorSnapshotFromInputs(input = {}, options = {}) {
       processSampler: input.processSampler || "windows_cim",
       guardianReport: Boolean(input.guardianReport),
       longThreadMetadata: Boolean(input.longThreadsEnvelope),
+      openClawSessionTaskMetadata: Boolean(input.openClawMetadata),
+      openClawMetadata: input.openClawMetadata?.provenance || null,
       rawSessionPolicy: "metadata_only_no_raw_body",
       threadAttributionMode: "observed_process_samples_plus_metadata_inference",
       platformSupport: snapshot.summary.platformSupport,
-      nonCodexSessionAdapterPolicy: "process_only_planned_session_adapter",
+      nonCodexSessionAdapterPolicy: "openclaw_metadata_others_process_only",
       supportedPlatforms: ["codex", "claude_code", "openclaw", "cursor", "windsurf", "gemini_cli", "unknown"].map(getRuntimePlatformSupport),
       sensitiveFieldPolicy: snapshot.sensitiveFieldPolicy,
       platformLimitations: [
         "process samples do not guarantee exact thread ownership across platforms",
         "session bodies are not read; attribution relies on metadata, recent writes, and vault/receipt evidence",
-        "non-Codex adapters are process-only until a future fixture-backed session adapter is accepted",
+        "OpenClaw has bounded session/task metadata; other non-Codex adapters remain process-only until fixture-backed adapters are accepted",
       ],
     },
   };
@@ -289,6 +292,7 @@ async function collectRuntimeMonitorSnapshot(options = {}) {
   const processResult = await sampleAgentProcesses({ ...options, sampledAt });
   let guardianResult = null;
   let longThreadsResult = null;
+  let openClawMetadata = null;
   const warnings = [...processResult.warnings];
 
   if (typeof options.guardianReportProvider === "function") {
@@ -309,12 +313,22 @@ async function collectRuntimeMonitorSnapshot(options = {}) {
     }
   }
 
+  if (typeof options.openClawMetadataProvider === "function") {
+    try {
+      openClawMetadata = await options.openClawMetadataProvider();
+      warnings.push(...safeArray(openClawMetadata?.warnings));
+    } catch (error) {
+      warnings.push(`openclaw_session_metadata_failed:${compactText(error.message || error, 180)}`);
+    }
+  }
+
   return buildRuntimeMonitorSnapshotFromInputs(
     {
       sampledAt,
       processes: processResult.processes,
       guardianReport: guardianResult?.result || null,
       longThreadsEnvelope: longThreadsResult?.result || null,
+      openClawMetadata,
       warnings,
     },
     options,

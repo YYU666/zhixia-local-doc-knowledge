@@ -44,6 +44,14 @@ node scripts/read-project-knowledge.cjs <workspace-path> --recover-thread --thre
 node scripts/read-project-knowledge.cjs <workspace-path> --writeback-dry-run --evidence-json .codex-knowledge/evidence-input.json --json
 ```
 
+OpenClaw legacy memory is a separate cold audit source. It is never searched by ordinary project retrieval:
+
+```powershell
+node scripts/read-openclaw-memory-archive.cjs --query "<audit topic>" --limit 6 --token-budget 1200 --json
+```
+
+Only a maintainer or explicit migration task runs `--build`; ordinary Codex audit tasks query the existing sanitized SQLite index. Before dispatching an OpenClaw audit task, Codex/CEO Flow may inject bounded `items[].excerpt` plus `providerSafeSourceRefs`. Never inject local backup paths, skipped sensitive bodies, the whole archive, or the index database. OpenClaw does not install this Skill and does not query the vault directly.
+
 Read [references/memory-core-lifecycle.md](references/memory-core-lifecycle.md) for exact CLI flags, JSON schemas, authority semantics, pagination, cursor behavior, diagnostics, pressure, takeover, and writeback contracts.
 
 `--recover-thread` returns a compact ThreadRecoveryPacket-shaped result. Rows with `freshness=review` are non-authoritative until verified by canonical sources or the app-owned authority runtime.
@@ -76,6 +84,8 @@ For runtime context and precedent, the helper may perform bounded logical read-o
 - `skill`: experience cards, tool records, Skill candidates, and reusable workflows.
 - `cold`: raw, Vault, archive, and old-thread evidence pointers only. Cold bodies are not read by default.
 
+OpenClaw cold archive recall requires the explicit `openclaw_audit` gate. It returns sanitized excerpts from a prebuilt index; raw session/chat backups and secret/config paths remain pointer-only.
+
 Use `--query-type review_gate`, `handoff`, `thread_recovery`, or other explicit lifecycle query types when the task requires them. Ordinary product queries should not let archive or maintenance records outrank current project state.
 
 ## No-Go Rules
@@ -86,6 +96,7 @@ Use `--query-type review_gate`, `handoff`, `thread_recovery`, or other explicit 
 - `tool-skill-inventory.md` is read-only candidate material and does not authorize install, update, or execution.
 - Do not modify source documents from the user's knowledge base unless explicitly requested.
 - Evidence output paths must stay inside the requested workspace.
+- Do not enable OpenClaw native memory or install this Skill into OpenClaw. CEO Flow owns retrieval and injects only the bounded provider-safe packet.
 
 ## Generated Documents
 
@@ -110,3 +121,4 @@ Do not run Guardian cleanup or session-body optimization automatically. Explicit
 
 - [references/memory-core-lifecycle.md](references/memory-core-lifecycle.md): exact helper lifecycle contracts and JSON shapes.
 - [references/context-bundle.md](references/context-bundle.md): context bundle fields and citation format.
+- [references/openclaw-cold-archive.md](references/openclaw-cold-archive.md): Codex audit retrieval and OpenClaw packet-injection boundary.

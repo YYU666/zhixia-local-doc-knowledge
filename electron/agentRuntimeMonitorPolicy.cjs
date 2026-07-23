@@ -51,10 +51,10 @@ const RUNTIME_PLATFORM_SUPPORT = {
   openclaw: {
     platform: "openclaw",
     processAdapter: "windows_cim_process_sample",
-    sessionAdapter: "planned_session_adapter",
-    supportLevel: "process_only_planned_session_adapter",
+    sessionAdapter: "openclaw_session_task_metadata_v1",
+    supportLevel: "session_task_metadata_read_only",
     rawSessionPolicy: "metadata_only_no_raw_body",
-    limitation: "OpenClaw/AutoFlow session bodies and exact run mapping are not read in this MVP.",
+    limitation: "OpenClaw session/task metadata is read on demand; raw session and task bodies remain cold and unread by default.",
   },
   cursor: {
     platform: "cursor",

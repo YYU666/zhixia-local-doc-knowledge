@@ -10,9 +10,11 @@ Do not upload the canonical app working directory wholesale. Prepare a reviewed 
 npm run prepare:public
 ```
 
-The script writes only to `public-staging/zhixia-local-doc-knowledge`, verifies that the resolved target stays under `public-staging`, recreates only that owned staging directory, and copies files from an explicit whitelist. It also writes `PUBLIC_STAGING_MANIFEST.md` inside the staging directory with included top-level paths, excluded private/generated categories, and the legacy docs kept out by default.
+From the canonical app directory, the script continues to write to `C:\Users\example\Documents\Zhixia-Local-Doc-Knowledge\public-staging\zhixia-local-doc-knowledge`. From a public checkout, the copied script writes to the clearly owned nested path `<checkout>\public-staging\zhixia-local-doc-knowledge`. It never selects the source checkout itself as the staging target, and source `.git` metadata remains untouched.
 
-During copy, text files are sanitized for private paths, private project/tool codenames, and real-looking Codex thread IDs. After copy, the staging directory is scanned again; a hit blocks publication.
+The script verifies that the resolved target stays under its selected `public-staging` root, rejects a target that equals or contains the source checkout, recreates only the owned repository-named staging directory, and copies files from an explicit whitelist. It also writes `PUBLIC_STAGING_MANIFEST.md` inside the staging directory with included top-level paths, excluded private/generated categories, and the legacy docs kept out by default.
+
+During canonical copy, text files are sanitized for private paths, private project/tool codenames, and real-looking Codex thread IDs. The staging-script copy is additionally rewritten into public-bootstrap mode with the canonical-only private codename catalog removed. A public checkout can therefore prepare another clean nested copy without carrying or reconstructing those names. After copy, the staging directory is scanned again; a known high-risk hit blocks publication.
 
 ## Include
 

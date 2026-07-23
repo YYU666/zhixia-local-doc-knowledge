@@ -375,7 +375,7 @@ Agent Runtime Monitor 已实现 Codex-focused read-only MVP，并采用平台适
 
 - `CodexAdapter`：读取 Codex 进程、`.codex/sessions`、thread list、Guardian report、compact receipts 和 Thread History Vault。
 - `ClaudeCodeAdapter`：当前显式标为 `process_only_planned_session_adapter`；只采样进程 metadata 和红action后的命令行，后续 fixture-backed session adapter 验收前不读取日志/session body。
-- `OpenClawAdapter`：当前显式标为 `process_only_planned_session_adapter`；后续才读取 AutoFlow/OpenClaw state、leases、worker heartbeat、completion ledger 和报告。
+- `OpenClawAdapter`：已实现 `openclaw_session_task_metadata_v1`；只按需读取 bounded `sessions.json` 和 `task_runs` 固定列，不读取 session/task body、heartbeat 正文或旧 checkpoint。
 - `GenericCliAdapter`：对 Cursor、Windsurf、Gemini CLI 和未知 CLI agent 只做进程级采样、平台支持状态标注和命令行脱敏。
 
 采样原则：
@@ -514,6 +514,20 @@ Sidecar 的目的不是立即替换整个文档主库，而是把新增事实和
 - PDF：`.pdf`，使用 PDFParse 提取文本。
 - Excel：`.xlsx/.xls` 当前只保留元信息并标记失败原因；不接入已知审计风险较高的解析库。
 
+## OpenClaw Session/Task Metadata Adapter
+
+- `electron/openClawSessionAdapter.cjs` 通过有界目录枚举读取 `sessions.json`，并用 `node:sqlite` 的 `readOnly + query_only + 50ms busy_timeout` 读取 `task_runs` 固定元数据列。
+- 默认上限：3 个 state root、16 个 agent、40 个 session、80 个 task、单 index 2 MiB、task DB 64 MiB、48 次 session file stat。
+- session JSONL 只做受控 `stat`，不读取正文；session path 必须位于对应 agent sessions 目录内，越界路径 fail-closed。
+- Runtime Monitor snapshot 默认按需合并 OpenClaw 元数据；无 timer、watcher、递归 walk、embedding 或启动扫描。
+- CEO Flow 外部执行使用独立 launcher profile，直接以参数数组调用 `node.exe + openclaw.mjs`，避免 Windows cmd 对长 JSON 的二次解析。
+- OpenClaw 原生 `memorySearch`、`session-memory`、`memoryFlush` 和 `memory-core` 全部关闭；CEO Flow bridge 在隔离本地执行前同时检查 state 配置、固定原生记忆路径和 bounded agent memory-index 行数并 fail-closed，只有任务信封中的知匣 Hot/Warm packet 和 sourceRefs 可以进入执行上下文。
+- 旧 OpenClaw 记忆迁移工具先写入知匣 app-owned SHA-256 清单保险库，再只删除清单命中的 `MEMORY.md`/`memory/**`，最后只清 agent SQLite 的 memory index 表；raw session、task ledger、凭据和整库删除均不在允许范围。
+- 冷档案使用独立 sanitized FTS5 index；build 最多读取 16 个批次、500 个文件、单文件 2 MiB/总计 32 MiB，query 只读 SQLite、最多返回 12 条/2400 tokens。JSONL、聊天备份、secret/config path、hash/path 异常只留 pointer。
+- Codex Skill 可以执行显式 `openclaw_audit` 查询；CEO Flow 仅把 excerpt 和 `openclaw-vault://` provider-safe refs 注入 OpenClaw，绝不传本地绝对路径或原始档案正文。
+
+详细生命周期见 `docs/OPENCLAW_MEMORY_CONTEXT_INTEGRATION.md`。
+
 ## 当前限制
 
 - 文档库 UI 搜索仍有前端预览评分路径；Memory Runtime 已使用独立 FTS5/BM25F sidecar，但尚未把全部人类 UI 全文搜索迁入 sidecar。
@@ -522,7 +536,7 @@ Sidecar 的目的不是立即替换整个文档主库，而是把新增事实和
 - AI 整理只是可选摘要器，不是联网问答；用户必须显式配置和触发。
 - 后台监听已接入，但网络盘、同步盘、极大目录和系统 watcher 丢事件场景仍需要手动检测兜底。
 - 万级文档库已避免 watcher 全量正文读取，但前端搜索仍基于列表预览文本，后续需要更强本地索引或按需正文加载。
-- Agent Runtime Monitor 已实现 Codex-focused read-only MVP，但尚未完成多平台适配、长期趋势持久化或完整 IPC/e2e 验收。即使实现 MVP，也不能保证把 Electron renderer CPU 100% 精确归因到某条线程。
+- Agent Runtime Monitor 已实现 Codex session metadata 和 OpenClaw bounded session/task metadata；Claude Code、Cursor/Windsurf/Gemini CLI 仍是 process-only。长期趋势持久化和更多平台 e2e 尚未完成，Electron renderer CPU 仍不能 100% 精确归因到某条线程。
 - 项目记忆回填和归档治理已有 candidate/policy-level MVP：当前数据库已支持 project_doc / experience card candidates、Project Resume Packet、ProjectArtifact、Archive Candidate read-only evidence 和 bounded Agent retrieval；最新治理切片加入 source-signature-bound ProjectRecord confirmation、stale override gating、ExperienceCard rejected/stale states 和 retrieval freshness review gate。完整持久化治理、批量人工确认、ThreadLineageIndex 权威关系图、richer MemoryCard curation 和 e2e 覆盖仍未完成。
 - Codex 工具与 Skill 资产图谱已完成 export + IPC/UI/snapshot confirmation + first-class 工具页 + SQLite-backed per-record governance metadata + Agent retrieval integration MVP：当前可生成只读 ToolSkillRecord candidate / SkillInventory 快照，随项目知识写入 `.codex-knowledge/tool-skill-inventory.md/json`，可被 `read-project-knowledge.cjs` 作为 `tool_inventory` kind 检索，并可在项目总览和工具页确认当前 live inventory snapshot，也可对单条候选标记 confirmed/rejected/deprecated/blocked/clear；`tool_skill_record` retrieval 只返回 compact advisory metadata，stale governance 显示为 review-needed，不授权执行。
 - 自动判断项目完成度和下一步存在误判风险，必须提供人工确认、改写、归档和拒绝入口。

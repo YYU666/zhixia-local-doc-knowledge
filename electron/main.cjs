@@ -95,6 +95,7 @@ const { buildProjectResumePacket } = require("./projectResumePolicy.cjs");
 const { buildProjectMemoryBackfillCards } = require("./projectMemoryBackfillPolicy.cjs");
 const { buildProjectArtifacts } = require("./projectArtifactPolicy.cjs");
 const { collectRuntimeMonitorSnapshot } = require("./runtimeMonitorAdapter.cjs");
+const { collectOpenClawMetadata } = require("./openClawSessionAdapter.cjs");
 const {
   buildToolSkillInventory,
   buildToolSkillInventoryJson,
@@ -2062,6 +2063,13 @@ async function getRuntimeMonitorSnapshot(options = {}) {
           tokenBudget: 700,
         })
       : null,
+    openClawMetadataProvider: options.includeOpenClawMetadata === false
+      ? null
+      : () => collectOpenClawMetadata({
+          maxSessions: sessionLimit,
+          maxTasks: 80,
+          maxFileStats: sessionLimit * 2,
+        }),
   });
   if (options.observeRuntimeEvents === false) {
     return {

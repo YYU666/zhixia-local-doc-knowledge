@@ -28,6 +28,13 @@ Review `public-staging/zhixia-local-doc-knowledge/PUBLIC_STAGING_MANIFEST.md` be
 
 The staging script also sanitizes text content and fails the run when the staging copy contains high-risk private residue such as real Windows user paths, private project/tool codenames, or real-looking Codex thread IDs.
 
+Path expectations depend on the source checkout:
+
+- Canonical app: `C:\Users\example\Documents\Zhixia-Local-Doc-Knowledge\public-staging\zhixia-local-doc-knowledge`
+- Public checkout: `<checkout>\public-staging\zhixia-local-doc-knowledge`
+
+The public-checkout output must remain nested below the checkout, must not equal the checkout, and must not modify or relocate the checkout's `.git`. The copied staging script must be in public-bootstrap mode and must not contain or reconstruct the canonical-only private codename catalog.
+
 ## Must Not Publish
 
 - `.codex-knowledge/`
@@ -108,6 +115,8 @@ Then run the public staging test from the staging directory:
 cd ..\public-staging\zhixia-local-doc-knowledge
 npm test
 ```
+
+To verify public self-bootstrap, run `npm run prepare:public` from that public staging checkout and inspect its nested `public-staging\zhixia-local-doc-knowledge` output. Confirm the source checkout and its `.git` are unchanged.
 
 Optional dependency visibility:
 

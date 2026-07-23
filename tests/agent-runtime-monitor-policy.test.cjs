@@ -51,6 +51,18 @@ assert.equal(redactedProcess.commandLine, "claude --api-key [REDACTED] --project
 assert.deepEqual(redactedProcess.redactedFields, ["commandLine"], "redacted process samples should report redacted fields");
 assert.equal(redactedProcess.platformSupport.supportLevel, "process_only_planned_session_adapter", "non-Codex platforms should remain process-only planned session adapters");
 assert.deepEqual(
+  getRuntimePlatformSupport("openclaw"),
+  {
+    platform: "openclaw",
+    processAdapter: "windows_cim_process_sample",
+    sessionAdapter: "openclaw_session_task_metadata_v1",
+    supportLevel: "session_task_metadata_read_only",
+    rawSessionPolicy: "metadata_only_no_raw_body",
+    limitation: "OpenClaw session/task metadata is read on demand; raw session and task bodies remain cold and unread by default.",
+  },
+  "OpenClaw should expose the accepted bounded metadata adapter instead of the old planned-only label",
+);
+assert.deepEqual(
   getRuntimePlatformSupport("gemini_cli"),
   {
     platform: "gemini_cli",

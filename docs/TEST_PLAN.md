@@ -229,6 +229,9 @@ Fresh-user / second-machine release signoff is intentionally outside default `np
 - `tests/electron-governance-e2e.test.cjs` 必须在隔离 userData 的真实 Electron 主进程中执行 accepted writeback -> MemoryFact -> retrieve_context -> trigger receipt，并证明 hybrid strategy 生效、sidecar wholeDatabaseExport=false。
 - Memory Runtime 新增 `listFacts`、`listTriggerReceipts`、`evaluateBenchmark` preload/IPC/type；这些接口只读或纯评测，不得启动 timer、读取 raw session、执行 archive/compact/delete/move/restore 或安装/执行 FlowSkill。
 - `evaluateBenchmark` 只有在调用方提供已经真实执行的 query results 时才可标记 `caller_executed_results`；空 cases 必须失败，预填答案的 synthetic fixture 只能验证指标计算，不能作为产品召回证明。
+- OpenClaw adapter 测试必须覆盖 bounded `sessions.json`、read-only task ledger、session/task 关联、状态映射、越界 session path 拒绝、raw JSONL sentinel 不泄漏、无递归扫描和固定 file-stat 预算。
+- OpenClaw 旧记忆迁移测试必须使用临时 state/vault fixture 覆盖 preservation dry-run、SHA-256 manifest、removal validate-only、SQLite clear validate-only/execute，以及 symlink/junction/reparse-point 逃逸拒绝；不得触碰真实 OpenClaw 数据。
+- OpenClaw R0 生命周期探针必须证明：Zhixia compact memory packet -> SHA-256 task -> isolated local OpenClaw -> typed receipt -> Codex validation；receipt 必须声明无写入、无命令、无网络、无发布，且 raw provider output 只保留为 cold local artifact。
 - `zhixia-local-docs` helper 必须能在 Codex/CEO Flow lane 中通过 `--runtime-context`、`--precedent` 和 `--writeback-dry-run` 输出 compact lifecycle JSON，保持 legacy `--query --limit --json` 兼容，并且不得读取 raw session、巨型 Markdown 尾部、base64 payload、凭据或自动运行 FlowSkill/归档/瘦身/安装/执行。
 - `codex-skills/zhixia-local-docs/SKILL.md` 和 `agents/openai.yaml` 存在且通过烟测。
 - 设置页 Skill 安装器可用，且打包产物包含 `codex-skills`。

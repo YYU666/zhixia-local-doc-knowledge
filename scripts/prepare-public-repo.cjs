@@ -2,9 +2,27 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const appRoot = path.resolve(__dirname, "..");
-const stagingRoot = path.resolve(appRoot, "..", "public-staging");
-const stagingDir = path.join(stagingRoot, "zhixia-local-doc-knowledge");
+const publicCheckoutBootstrap = true;
+const publicStagingDirectoryName = "public-staging";
+const publicRepositoryDirectoryName = "zhixia-local-doc-knowledge";
+
+function calculatePublicStagingPaths(sourceRoot, isPublicCheckout = publicCheckoutBootstrap) {
+  const resolvedSourceRoot = path.resolve(sourceRoot);
+  const resolvedStagingRoot = isPublicCheckout
+    ? path.join(resolvedSourceRoot, publicStagingDirectoryName)
+    : path.resolve(resolvedSourceRoot, "..", publicStagingDirectoryName);
+  return {
+    sourceRoot: resolvedSourceRoot,
+    stagingRoot: resolvedStagingRoot,
+    stagingDir: path.join(resolvedStagingRoot, publicRepositoryDirectoryName),
+  };
+}
+
+const {
+  sourceRoot: appRoot,
+  stagingRoot,
+  stagingDir,
+} = calculatePublicStagingPaths(path.resolve(__dirname, ".."));
 
 const rootFiles = new Set([
   ".gitignore",
@@ -22,8 +40,10 @@ const rootFiles = new Set([
 ]);
 
 const publicDocs = new Set([
+  "AGENT_RUNTIME_MONITOR_DESIGN.md",
   "CEO_FLOW_MEMORY_RUNTIME.md",
   "EXTERNAL_AUDIT_REQUIREMENTS.md",
+  "OPENCLAW_MEMORY_CONTEXT_INTEGRATION.md",
   "PRD.md",
   "PUBLICATION_CHECKLIST.md",
   "PUBLIC_REPO_LAYOUT.md",
@@ -32,7 +52,11 @@ const publicDocs = new Set([
 ]);
 
 const publicScripts = new Set([
+  "audit-openclaw-memory-index.py",
+  "clear-openclaw-memory-index.py",
   "prepare-public-repo.cjs",
+  "preserve-openclaw-memory.ps1",
+  "remove-verified-openclaw-memory.ps1",
 ]);
 
 const publicDirs = new Set([
@@ -94,15 +118,23 @@ function toPosix(value) {
   return value.split(path.sep).join("/");
 }
 
-function assertOwnedStagingTarget(target) {
-  const resolvedRoot = path.resolve(stagingRoot);
+function assertOwnedStagingTarget(target, ownedRoot = stagingRoot, sourceRoot = appRoot) {
+  const resolvedRoot = path.resolve(ownedRoot);
   const resolvedTarget = path.resolve(target);
+  const resolvedSource = path.resolve(sourceRoot);
   const relative = path.relative(resolvedRoot, resolvedTarget);
   if (!relative || relative === ".." || relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`Refusing to use staging target outside public-staging root: ${resolvedTarget}`);
   }
-  if (path.basename(resolvedTarget) !== "zhixia-local-doc-knowledge") {
+  if (path.basename(resolvedTarget) !== publicRepositoryDirectoryName) {
     throw new Error(`Refusing unexpected staging directory name: ${resolvedTarget}`);
+  }
+  const sourceRelativeToTarget = path.relative(resolvedTarget, resolvedSource);
+  if (
+    resolvedTarget === resolvedSource
+    || (!sourceRelativeToTarget.startsWith("..") && !path.isAbsolute(sourceRelativeToTarget))
+  ) {
+    throw new Error(`Refusing staging target that could delete or overwrite the source checkout: ${resolvedTarget}`);
   }
   return resolvedTarget;
 }
@@ -154,20 +186,15 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// BEGIN_CANONICAL_PRIVATE_PUBLICATION_TERMS
 function privatePublicationTerms() {
-  return [
-    ["Ark", "-Office"].join(""),
-    ["ARK", "_OFFICE"].join(""),
-    ["Ref", "muse"].join(""),
-    "R" + "GS",
-    ["codex", "fix"].join(""),
-    ["Bridge", " backend"].join(""),
-    ["sovereign", " target"].join(""),
-  ];
+  return [];
 }
+// END_CANONICAL_PRIVATE_PUBLICATION_TERMS
 
 function privatePublicationTermPatterns() {
   const terms = privatePublicationTerms();
+  if (terms.length === 0) return [];
   return [
     `\\b${escapeRegExp(terms[0])}\\b`,
     `\\b${escapeRegExp(terms[1])}\\b`,
@@ -182,7 +209,10 @@ function privatePublicationTermPatterns() {
 function sanitizePublicText(text, options = {}) {
   const codexDir = ".co" + "dex";
   const platformLocalDataWord = String.fromCharCode(65, 112, 112, 68, 97, 116, 97);
-  const privateTermsRe = new RegExp(privatePublicationTermPatterns().join("|"), "gi");
+  const privateTermPatterns = privatePublicationTermPatterns();
+  const privateTermsRe = privateTermPatterns.length > 0
+    ? new RegExp(privateTermPatterns.join("|"), "gi")
+    : null;
   let sanitized = text
     .replace(/C:\\\\Users\\\\(?:a|ROG)(?=\\\\)/g, "C:\\\\Users\\\\example")
     .replace(/C:\\Users\\(?:a|ROG)(?=\\)/g, "C:\\Users\\example")
@@ -202,7 +232,7 @@ function sanitizePublicText(text, options = {}) {
     .replace(new RegExp(`"${platformLocalDataWord}"`, "g"), '["App", "Data"].join("")')
     .replace(new RegExp(`'${platformLocalDataWord}'`, "g"), '["App", "Data"].join("")')
     .replace(new RegExp(`\\b${platformLocalDataWord}\\b`, "g"), "local app data");
-  if (options.replacePrivateTerms !== false) {
+  if (options.replacePrivateTerms !== false && privateTermsRe) {
     sanitized = sanitized
       .replace(privateTermsRe, "Example Project")
       .replace(/Example Project\s+Game\s+Studio/gi, "Example Project Studio")
@@ -220,6 +250,38 @@ function sanitizePublicCodeText(text) {
   return sanitizePublicText(text, { replacePrivateTerms: false });
 }
 
+function sanitizePublicStagingScript(text) {
+  const startMarker = "// BEGIN_CANONICAL_PRIVATE_PUBLICATION_TERMS";
+  const endMarker = "// END_CANONICAL_PRIVATE_PUBLICATION_TERMS";
+  const startIndex = text.indexOf(startMarker);
+  const endIndex = text.indexOf(endMarker);
+  if (startIndex < 0 || endIndex < 0 || endIndex <= startIndex) {
+    throw new Error("Refusing to stage a bootstrap script without the canonical privacy markers");
+  }
+
+  const publicCatalog = [
+    startMarker,
+    "function privatePublicationTerms() {",
+    "  return [];",
+    "}",
+    endMarker,
+  ].join("\n");
+  let sanitized = `${text.slice(0, startIndex)}${publicCatalog}${text.slice(endIndex + endMarker.length)}`;
+  const bootstrapDeclaration = /const publicCheckoutBootstrap = (?:false|true);/;
+  if (!bootstrapDeclaration.test(sanitized)) {
+    throw new Error("Refusing to stage a bootstrap script without an explicit checkout mode");
+  }
+  sanitized = sanitized.replace(bootstrapDeclaration, "const publicCheckoutBootstrap = true;");
+  sanitized = sanitizePublicCodeText(sanitized);
+
+  for (const privateTerm of privatePublicationTerms()) {
+    if (sanitized.toLowerCase().includes(privateTerm.toLowerCase())) {
+      throw new Error("Refusing to stage a bootstrap script that still contains a private publication term");
+    }
+  }
+  return sanitized;
+}
+
 function shouldSanitizeAsPublicDoc(relativePath) {
   const normalized = toPosix(relativePath);
   if (normalized === "README.md" || normalized === "CONTRIBUTING.md" || normalized === "SECURITY.md") return true;
@@ -231,7 +293,15 @@ function copyFilePublic(source, destination, relativePath) {
   ensureDir(path.dirname(destination));
   if (isLikelyTextFile(source)) {
     const sourceText = fs.readFileSync(source, "utf8");
-    fs.writeFileSync(destination, shouldSanitizeAsPublicDoc(relativePath) ? sanitizePublicDocText(sourceText) : sanitizePublicCodeText(sourceText), "utf8");
+    let publicText;
+    if (toPosix(relativePath) === "scripts/prepare-public-repo.cjs") {
+      publicText = sanitizePublicStagingScript(sourceText);
+    } else {
+      publicText = shouldSanitizeAsPublicDoc(relativePath)
+        ? sanitizePublicDocText(sourceText)
+        : sanitizePublicCodeText(sourceText);
+    }
+    fs.writeFileSync(destination, publicText, "utf8");
     return;
   }
   fs.copyFileSync(source, destination);
@@ -270,6 +340,14 @@ function writePublicReleaseNotes() {
     "- Explicit project scans can deterministically initialize or update ProjectBrain. Read-only startup, project viewing, and file watchers do not create private Memory Core state.",
     "- The project detail UI includes a read-only Project Memory view for continuity coverage, all 14 slots, missing/conflict/review status, trusted summaries, and bounded recall reasons.",
     "- Performance and privacy boundaries remain local-first and metadata-first: no default raw session bodies, giant Markdown, image/base64 payloads, credentials, background embedding, startup full scan, or Memory Core polling loop.",
+    "",
+    "## Post-0.9.0 - OpenClaw Memory Bridge",
+    "",
+    "- Added bounded OpenClaw session/runtime monitoring without a heartbeat polling loop.",
+    "- Added an explicit sanitized cold-memory archive index for Codex audit and recovery queries.",
+    "- CEO Flow can inject provider-safe Zhixia memory packets into OpenClaw while Zhixia remains the only memory authority.",
+    "- OpenClaw native durable memory stays disabled; raw sessions, local backup paths, credentials, and base64 payloads are not exposed to the provider packet.",
+    "- Added verified migration, audit, junction/path confinement, JSON-secret redaction, token-budget, and regression coverage.",
     "",
     "## 0.8.3",
     "",
@@ -353,7 +431,9 @@ function writeManifest() {
     "## Public Docs Included",
     "",
     "- docs/CEO_FLOW_MEMORY_RUNTIME.md",
+    "- docs/AGENT_RUNTIME_MONITOR_DESIGN.md",
     "- docs/EXTERNAL_AUDIT_REQUIREMENTS.md",
+    "- docs/OPENCLAW_MEMORY_CONTEXT_INTEGRATION.md",
     "- docs/PRD.md",
     "- docs/PUBLICATION_CHECKLIST.md",
     "- docs/PUBLIC_REPO_LAYOUT.md",
@@ -391,12 +471,14 @@ function writeManifest() {
 }
 
 function scanPublicStagingForPrivateResidue(target) {
-  const privateTermsRe = new RegExp(privatePublicationTermPatterns().join("|"), "i");
+  const privateTermPatterns = privatePublicationTermPatterns();
   const forbidden = [
-    { name: "private Windows user path", pattern: /C:\\\\Users\\\\(?:a|ROG)|C:\\Users\\(?:a|ROG)|C:\/Users\/(?:a|ROG)/i },
-    { name: "private project/tool codename", pattern: privateTermsRe },
+    { name: "private Windows user path", pattern: /C:\\\\Users\\\\(?:a|ROG)(?=\\\\)|C:\\Users\\(?:a|ROG)(?=\\)|C:\/Users\/(?:a|ROG)(?=\/)/i },
     { name: "real-looking Codex thread id", pattern: /\b019[0-9a-f][0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i },
   ];
+  if (privateTermPatterns.length > 0) {
+    forbidden.push({ name: "private project/tool codename", pattern: new RegExp(privateTermPatterns.join("|"), "i") });
+  }
   const hits = [];
   for (const relativePath of listFiles(target)) {
     const fullPath = path.join(target, relativePath);
@@ -459,10 +541,13 @@ if (require.main === module) {
 }
 
 module.exports = {
+  assertOwnedStagingTarget,
+  calculatePublicStagingPaths,
   privatePublicationTerms,
   privatePublicationTermPatterns,
   sanitizePublicText,
   sanitizePublicDocText,
   sanitizePublicCodeText,
+  sanitizePublicStagingScript,
   shouldSanitizeAsPublicDoc,
 };

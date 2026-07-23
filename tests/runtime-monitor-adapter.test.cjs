@@ -107,7 +107,7 @@ const snapshot = buildRuntimeMonitorSnapshotFromInputs(
 );
 assert.equal(snapshot.provenance.rawSessionPolicy, "metadata_only_no_raw_body", "snapshot must declare the raw-session body is not read");
 assert.equal(snapshot.provenance.threadAttributionMode, "observed_process_samples_plus_metadata_inference", "snapshot should declare heuristic attribution mode");
-assert.equal(snapshot.provenance.nonCodexSessionAdapterPolicy, "process_only_planned_session_adapter", "non-Codex adapters should stay process-only until fixture-backed session adapters exist");
+assert.equal(snapshot.provenance.nonCodexSessionAdapterPolicy, "openclaw_metadata_others_process_only", "OpenClaw metadata support and other process-only adapters should be distinguished");
 assert.equal(snapshot.provenance.sensitiveFieldPolicy.commandLine, "compact_and_redact_secret_like_tokens", "adapter provenance should expose command-line redaction policy");
 assert.ok(
   snapshot.provenance.supportedPlatforms.some((item) => item.platform === "cursor" && item.supportLevel === "process_only_planned_session_adapter"),
@@ -130,6 +130,28 @@ assert.deepEqual(snapshot.sessions[0].memoryPointers, ["ZhixiaHistoryId: codex-h
 assert.equal(snapshot.sessions[0].observed.historySizeBytes, 12 * 1024 * 1024, "session observed facts should expose history size");
 assert.equal(snapshot.sessions[0].uncertainty.metadataOnly, true, "session uncertainty should state metadata-only attribution");
 assert.equal(snapshot.summary.topHistorySizeSession.threadId, "019e-large", "summary should expose the largest history session");
+
+const openClawSnapshot = buildRuntimeMonitorSnapshotFromInputs({
+  sampledAt: "2026-07-20T06:20:00.000Z",
+  processes: [],
+  openClawMetadata: {
+    sessions: [{
+      id: "openclaw:main:task-1",
+      threadId: "task-1",
+      platform: "openclaw",
+      title: "bounded-task",
+      status: "idle",
+      sessionBytes: 4096,
+      lastWriteTime: "2026-07-20T06:19:00.000Z",
+      evidence: ["openclaw_sessions_json_metadata", "raw_session_body_not_read"],
+    }],
+    provenance: { adapter: "openclaw_session_task_metadata_v1", rawSessionPolicy: "metadata_only_no_raw_body" },
+  },
+});
+assert.equal(openClawSnapshot.sessions.length, 1, "OpenClaw metadata sessions should join the runtime snapshot");
+assert.equal(openClawSnapshot.sessions[0].platformSupport.supportLevel, "session_task_metadata_read_only", "OpenClaw support should be explicit and read-only");
+assert.equal(openClawSnapshot.provenance.openClawSessionTaskMetadata, true, "snapshot provenance should report OpenClaw metadata use");
+assert.equal(openClawSnapshot.provenance.openClawMetadata.adapter, "openclaw_session_task_metadata_v1", "adapter provenance should survive snapshot assembly");
 
 const normalizedLongThread = normalizeLongThreadItem({
   threadId: "019e-optimized",
