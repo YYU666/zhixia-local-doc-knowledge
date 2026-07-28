@@ -239,7 +239,7 @@ CEO Flow 负责触发时机，知匣负责 continuity 数据与验证。触发�
 - Codex 工具/Skill 资产图谱已有 export + IPC/UI/snapshot confirmation + first-class 工具页 MVP：`electron/toolSkillInventoryPolicy.cjs` 可从 Skill/script/workflow 根目录生成 `ToolSkillRecord` 风格 records 和 `SkillInventory` 快照；项目知识导出会写入 `.codex-knowledge/tool-skill-inventory.md/json`；主进程提供只读 scan/read/confirm IPC，项目总览和工具页可确认当前 live inventory snapshot，并通过 `tool_skill_record_governance` 表保存 per-record confirmed/rejected/deprecated/blocked/clear metadata。
 - Agent Runtime Monitor MVP 默认不持久化高频采样。后续如需要趋势图和卡顿事件记录，再增加 `runtime_process_samples`、`runtime_session_snapshots`、`runtime_incidents` 等表。
 - 项目记忆回填需要新增或复用项目级索引结构，用于表达 ProjectRecord、CEOFlowRecord、ProjectArtifact、Project Resume Packet、ThreadRecord 和 ThreadArchiveReceipt。MVP 可先用 `knowledge_items` / `experience_cards` / markdown 导出承载，后续再独立建表。
-- `settings`：应用设置键值。AI Provider API Key 只保存在本机，返回给前端前由主进程脱敏。
+- `settings`：应用设置键值。AI Provider API Key 在主进程中使用 Electron `safeStorage` 加密为版本化 `enc:v2:` envelope 后再写入 SQLite；被加密 payload 内含固定 marker、版本和 SHA-256 完整性字段。启动时迁移旧明文或 `enc:v1`，使用时只在主进程解密，返回 renderer 前只给掩码和 availability 状态。系统加密不可用或密文损坏时 fail closed，不保存新的明文 key，也不把旧值交给 Provider；active SQLite 可能暂时保留被禁用的旧值，直至系统加密恢复或用户通过仍可用的“清除 Key”操作删除。Provider/代理错误按当前 Key 精确脱敏并做通用凭据脱敏后，才可返回 renderer 或写入 `knowledge_items` / skill receipt。迁移前产生的旧数据库备份不会被静默改写，仍需按敏感文件保护。
 
 写入策略：
 
@@ -304,6 +304,7 @@ CEO Flow 负责触发时机，知匣负责 continuity 数据与验证。触发�
 - 默认能力是本地启发式整理：按标题、摘要、正文、标题行、项目路径和标签推断 category，并生成 compact summary/body。
 - 可选 AI 能力使用 OpenAI 兼容 `/chat/completions`，默认 Base URL 为 `https://api.deepseek.com`，默认模型为 `deepseek-chat`，模型可在设置页修改。
 - AI Provider 仍是显式用户行为：未配置 API Key 时不会联网；点击测试连接或 AI 整理时才会调用。调用会发送待整理文档的短上下文给配置的可信 Provider，因此 UI、README 和 SECURITY 必须把“默认本地、AI 模式会把文本发给第三方”并列说明。
+- AI Provider 响应体限制为 1 MiB；主进程对 response `aborted`、`error`、未完成 `close`、超限和 request timeout/error 都必须单次 settle。远端半截响应不得让 renderer 永久停在 busy 状态。
 - AI prompt 明确要求输出 JSON、限制 summary/body 长度、禁止输出密钥、token、password、session 或聊天全文。
 - 如果 AI 调用失败或未配置 API Key，主进程会降级为本地整理并把 `status=fallback`、短错误原因写入条目，用户仍能看到结果。
 - `knowledge-items.md/json` 只导出 compact 摘要和来源指针，不把完整文档正文写入 `.codex-knowledge/`。
@@ -541,3 +542,11 @@ Sidecar 的目的不是立即替换整个文档主库，而是把新增事实和
 - Codex 工具与 Skill 资产图谱已完成 export + IPC/UI/snapshot confirmation + first-class 工具页 + SQLite-backed per-record governance metadata + Agent retrieval integration MVP：当前可生成只读 ToolSkillRecord candidate / SkillInventory 快照，随项目知识写入 `.codex-knowledge/tool-skill-inventory.md/json`，可被 `read-project-knowledge.cjs` 作为 `tool_inventory` kind 检索，并可在项目总览和工具页确认当前 live inventory snapshot，也可对单条候选标记 confirmed/rejected/deprecated/blocked/clear；`tool_skill_record` retrieval 只返回 compact advisory metadata，stale governance 显示为 review-needed，不授权执行。
 - 自动判断项目完成度和下一步存在误判风险，必须提供人工确认、改写、归档和拒绝入口。
 - 尚未代码签名；安装器和应用图标已接入，但仍需要在真实外部机器上验收 Windows 图标缓存表现。
+# Memory Runtime hardening (2026-07-28)
+
+- `.codex-knowledge` freshness is derived from file mtime, age windows, canonical document mtimes, and review requirements. Packet names never imply freshness.
+- Provider results merge duplicate IDs conservatively while retaining sourceRefs and recall reasons; every merge emits `duplicate_memory_item_id_merged` diagnostics.
+- Missing/incompatible Memory Core returns `fallback_stale`, `current=false`, and `recoveryReady=false`.
+- The packaged Skill exposes a strict-JSON headless lifecycle with project-scoped retrieval, event observation, real evidence writeback, continuity, and trigger receipt lookup.
+- `ProjectIdentityEnvelope` binds canonical repository/root and linked worktrees; exact identity and source-path checks prevent cross-project memory leakage.
+- The native SQLite migration begins with a verified metadata-only shadow. The sql.js source remains authoritative and byte-for-byte unchanged; no cutover occurs in this phase.

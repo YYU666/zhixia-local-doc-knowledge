@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const initSqlJs = require("sql.js");
 
 const root = path.resolve(__dirname, "..");
 const electronExe = path.join(root, "node_modules", "electron", "dist", process.platform === "win32" ? "electron.exe" : "electron");
@@ -13,8 +14,9 @@ const projectPath = path.join(tempRoot, "project-alpha");
 const projectSkillPath = path.join(projectPath, "codex-skills", "e2e-review-skill");
 const projectScriptsPath = path.join(projectPath, "scripts");
 const projectDocsPath = path.join(projectPath, "docs");
+const legacyApiKey = ["legacy", "synthetic", "provider", "key"].join("-");
 
-function writeFixture() {
+async function writeFixture() {
   fs.mkdirSync(projectSkillPath, { recursive: true });
   fs.mkdirSync(projectScriptsPath, { recursive: true });
   fs.mkdirSync(projectDocsPath, { recursive: true });
@@ -50,11 +52,21 @@ function writeFixture() {
     "# Release Notes\n\nGovernance e2e fixture for project release verification.\n",
     "utf8",
   );
+  fs.mkdirSync(userData, { recursive: true });
+  const SQL = await initSqlJs({ locateFile: (file) => require.resolve(`sql.js/dist/${file}`) });
+  const legacyDb = new SQL.Database();
+  legacyDb.run("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+  legacyDb.run("INSERT INTO settings (key, value) VALUES ($key, $value)", {
+    $key: "aiProviderApiKey",
+    $value: JSON.stringify(legacyApiKey),
+  });
+  fs.writeFileSync(path.join(userData, "knowledge-store.sqlite"), Buffer.from(legacyDb.export()));
+  legacyDb.close();
 }
 
 function runElectronProbe() {
   return new Promise((resolve, reject) => {
-    const probeScript = `window.docKnowledge.e2eProbe({ projectPath: ${JSON.stringify(projectPath)} })`;
+    const probeScript = `window.docKnowledge.e2eProbe({ projectPath: ${JSON.stringify(projectPath)}, expectedLegacyApiKey: ${JSON.stringify(legacyApiKey)} })`;
 
     const child = spawn(electronExe, [
       root,
@@ -125,10 +137,18 @@ function cleanupTempRoot() {
 
 (async () => {
   try {
-    writeFixture();
+    await writeFixture();
     const result = await runElectronProbe();
     assert.equal(result.ok, true, "Electron governance probe should complete");
     assert.equal(isPathInside(userData, result.storePath), true, "probe storePath must stay under isolated userData");
+    assert.equal(result.secretStorage.status, "encrypted", "real Electron safeStorage must be available in the supported Windows test environment");
+    assert.equal(result.secretStorage.legacyMigrated, true, "startup must replace a legacy plaintext API key with ciphertext");
+    assert.equal(result.secretStorage.legacyRuntimeRoundTrip, true, "migrated API key must remain usable in the main process");
+    assert.equal(result.secretStorage.storedEncrypted, true, "SQLite must persist a versioned ciphertext envelope");
+    assert.equal(result.secretStorage.storedPlaintextAbsent, true, "SQLite must not contain the synthetic API key plaintext");
+    assert.equal(result.secretStorage.runtimeRoundTrip, true, "main process must decrypt the stored API key for provider use");
+    assert.equal(result.secretStorage.rendererMasked, true, "renderer-facing settings must keep the API key masked");
+    assert.equal(result.secretStorage.rendererStatus, "available", "renderer-facing settings must expose only a non-secret key availability state");
     assert.equal(result.importedCount >= 2, true, "probe should import fixture project docs through main process");
     assert.equal(result.inventory.recordCount >= 2, true, "probe should discover project Skill/script records");
     assert.equal(result.inventory.confirmationStatus, "confirmed", "snapshot confirmation should persist through real IPC");

@@ -152,8 +152,35 @@ function main() {
         p95LatencyMs: 200,
         p95TokenEstimate: 900,
       },
+      strategyThresholds: {
+        minimumCases: 4,
+        minimumTakeoverCases: 0,
+        minimumCrossWordingCases: 0,
+        minimumAuthorityThreatCases: 0,
+        minimumAuthorityPositiveControlCases: 0,
+        authorityThreatCoverage: 0,
+        authorityPositiveControlCoverage: 0,
+        authorityEvidenceVerificationRate: 0,
+        authorityOutcomeFailureRate: 1,
+        authorityPositiveControlFailureRate: 1,
+        recallAtK: 1,
+        crossWordingRecallAtK: 0,
+        mandatorySlotCoverage: 0,
+        criticalMissingRate: 1,
+        takeoverSuccessRate: 0,
+        wrongProjectRate: 0,
+        wrongModuleRate: 0,
+        unauthorizedAcceptanceRate: 0,
+        retiredMemoryLeakageRate: 0,
+        selfApprovalRate: 0,
+        standingRuleViolationRate: 0,
+        minimumNetCompoundScore: 0,
+        p95LatencyMs: 200,
+        p95TokenEstimate: 900,
+      },
     });
     assert.equal(evaluation.gate.passed, true, evaluation.compactReport);
+    assert.equal(evaluation.strategyGate.passed, true, evaluation.compactReport);
     assert.equal(evaluation.metrics.recallAtK, 1);
     assert.equal(evaluation.metrics.missingAnchorRate, 0);
 

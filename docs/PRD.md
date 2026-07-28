@@ -911,7 +911,7 @@ type AgentRuntimeSession = {
 - 设置页能把配套 Codex Skill 安装到当前用户 Codex skills 目录。
 - 新机器上可通过一个安装包完成应用安装，并在用户授权后完成 Skill 安装。
 - 知识页能显示知识条目分类和来源，用户可以手动生成本地整理结果。
-- 可选 AI Provider 配置不会泄漏 API Key，AI 整理失败时仍能本地降级。
+- 可选 AI Provider 配置不会泄漏 API Key：密钥必须由 OS-backed `safeStorage` 和带完整性校验的版本化 envelope 加密后落盘，renderer 不得收到明文或密文；旧明文/旧版密文需自动迁移，加密不可用或密文损坏时 fail closed，但 UI 仍须显示“不含秘密的已保存但不可用状态”并允许清除。Provider/代理错误在返回 UI 或写入知识条目前必须按当前 Key 精确脱敏。AI 整理失败时仍能本地降级。
 - 知匣 Skill / 流程模块能绑定到产品动作：项目摘要、个人库整理、工具说明、智能优化、知识/记忆分层和 SQLite 体积诊断；普通用户不需要手动选择 Skill。
 - 流程模块运行必须产出 SkillRunReceipt，记录版本、输入来源、模型、本地/AI/fallback 状态、写入记录和失败原因。
 - Codex Skill 能通过 `read-project-knowledge.cjs --query --limit --json` 读取知识条目、经验卡片和 Skill 候选。
@@ -1024,3 +1024,13 @@ OpenClaw 旧记忆在完成退役后进入知匣 cold archive：显式构建一�
 - 外部监督工具跟踪 Codex 对后台文件监听、项目配置页、版本 diff/回滚、项目知识质量评分、本地索引增强、Codex 查询入口、自动化 UI 测试和公开发布卫生等建议的推进状态。
 - 外部监督工具把未完成、失败或需要人工验收的事项整理成下一轮 Codex 任务，而不是直接进入知匣运行链路。
 - 知匣保持本地优先、离线可用；没有外部监督工具时仍能完整导入、阅读、搜索和导出 Codex 上下文。
+# Memory Runtime provider hardening requirements (2026-07-28)
+
+1. `.codex-knowledge` packet freshness must be computed from actual mtime/age and canonical document evidence. File type alone can never imply `fresh`.
+2. Provider results with the same memory item ID must merge sourceRefs and recall/reason fields and emit a structured duplicate diagnostic.
+3. Missing or incompatible Memory Core must return `memoryMode=fallback_stale`, `current=false`, and `recoveryReady=false`.
+4. Codex and CEO Flow must have a strict-JSON, UI-free lifecycle covering context, precedent, event observation, real evidence writeback, continuity, and trigger receipt lookup.
+5. Every lifecycle request must carry a stable `ProjectIdentityEnvelope`. Linked worktrees inherit canonical project memory; unrelated projects and foreign local paths fail closed.
+6. Accepted evidence writeback requires safe sourceRefs and must preserve them. Raw sessions, secrets, images/base64, and giant bodies are prohibited from hot memory.
+7. Any benchmark `strategy=FAIL` must fail CI/release with a nonzero exit.
+8. Native SQLite adoption begins with an exact source snapshot and metadata-only shadow sidecar. The sql.js main database remains unchanged and authoritative; this phase has no cutover.

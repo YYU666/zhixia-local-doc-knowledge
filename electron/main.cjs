@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require("electron");
 const { execFile } = require("node:child_process");
 const https = require("node:https");
 const http = require("node:http");
@@ -50,6 +50,15 @@ const {
   rowToDocument,
 } = require("./documentMetadataPolicy.cjs");
 const { openKnowledgeDatabaseFromFile } = require("./databaseStartupPolicy.cjs");
+const {
+  createSensitiveSettingsProtector,
+  isProtectedSensitiveSetting,
+  sanitizeSensitiveErrorMessage,
+  sensitiveSettingAvailability,
+} = require("./sensitiveSettingsPolicy.cjs");
+const {
+  collectBoundedProviderResponse,
+} = require("./aiProviderResponsePolicy.cjs");
 const {
   AGENT_RETRIEVE_ALLOWED_KINDS,
   AGENT_RETRIEVE_CACHE_TTL_MS,
@@ -169,6 +178,7 @@ const ZHIXIA_SKILL_PROJECT_SUMMARY_ID = "project-summary-cn";
 const KNOWLEDGE_BODY_CHARS = 720;
 const KNOWLEDGE_PROMPT_CHARS = 6000;
 const ZHIXIA_SKILL_PROMPT_CHARS = 8000;
+const MAX_AI_PROVIDER_RESPONSE_BYTES = 1024 * 1024;
 const DOCUMENT_LIST_CONTENT_CHARS = 12000;
 const DOCUMENT_LIST_DEFAULT_INCLUDE_CONTENT_TEXT = false;
 const STARTUP_AUTO_INGEST_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -220,6 +230,8 @@ let SQL = null;
 let db = null;
 let dbReady = null;
 let dbSaveQueue = Promise.resolve();
+let sensitiveSettingsProtector = null;
+const sensitiveSettingsWarnings = new Set();
 let fileWatchers = new Map();
 let fileWatchDebounceTimer = null;
 let fileWatchRunning = false;
@@ -2542,6 +2554,7 @@ function migrateSchema() {
   setSettingIfMissing("aiProviderBaseUrl", DEFAULT_AI_PROVIDER_BASE_URL);
   setSettingIfMissing("aiProviderModel", DEFAULT_AI_PROVIDER_MODEL);
   setSettingIfMissing("aiProviderApiKey", "");
+  migrateSensitiveSettingsAtRest();
   migratePerformanceSafeDefaults();
 }
 
@@ -3655,6 +3668,17 @@ function openAiCompatibleChatCompletion(args) {
   const model = args.model;
   const messages = args.messages;
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const settleResolve = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const settleReject = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
     const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
     const endpoint = new URL(
       normalizedBaseUrl.endsWith("/chat/completions")
@@ -3680,26 +3704,27 @@ function openAiCompatibleChatCompletion(args) {
         },
       },
       (response) => {
-        const chunks = [];
-        response.on("data", (chunk) => chunks.push(chunk));
-        response.on("end", () => {
-          const raw = Buffer.concat(chunks).toString("utf8");
+        collectBoundedProviderResponse(response, {
+          maxBytes: MAX_AI_PROVIDER_RESPONSE_BYTES,
+          sanitizeError: (error) => sanitizeSensitiveErrorMessage(error, [apiKey], "AI Provider response failed."),
+        }).then((raw) => {
           const parsed = safeJsonParseValue(raw, null);
           if (response.statusCode < 200 || response.statusCode >= 300) {
-            const message = parsed?.error?.message || parsed?.message || ("HTTP " + response.statusCode);
-            reject(new Error(message));
+            settleReject(new Error("AI Provider HTTP " + response.statusCode));
             return;
           }
           const content = parsed?.choices?.[0]?.message?.content;
           if (!content) {
-            reject(new Error("AI 响应缺少 content"));
+            settleReject(new Error("AI 响应缺少 content"));
             return;
           }
-          resolve(content);
-        });
+          settleResolve(content);
+        }).catch(settleReject);
       },
     );
-    request.on("error", reject);
+    request.on("error", (error) => {
+      settleReject(new Error(sanitizeSensitiveErrorMessage(error, [apiKey], "AI Provider network request failed.")));
+    });
     request.setTimeout(20000, () => request.destroy(new Error("AI 请求超时")));
     request.write(payload);
     request.end();
@@ -3738,7 +3763,7 @@ async function summarizeDocumentToKnowledgeItem(doc, providerSettings, mode) {
       provider: baseUrl,
       model,
       status: "fallback",
-      errorMessage: error instanceof Error ? error.message : String(error),
+      errorMessage: sanitizeSensitiveErrorMessage(error, [apiKey]),
     };
   }
 }
@@ -3817,7 +3842,7 @@ async function testAiProviderConnection() {
     });
     return { ok: true, message: "连接成功：" + baseUrl + " / " + model };
   } catch (error) {
-    return { ok: false, message: "连接失败：" + (error instanceof Error ? error.message : String(error)) };
+    return { ok: false, message: "连接失败：" + sanitizeSensitiveErrorMessage(error, [apiKey]) };
   }
 }
 
@@ -4115,7 +4140,7 @@ async function runProjectSummarySkill(options = {}) {
     } catch (error) {
       status = "fallback";
       provider = baseUrl;
-      errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessage = sanitizeSensitiveErrorMessage(error, [apiKey]);
       output = { ...localOutput, provider: "local", model: "heuristic" };
     }
   } else if (options.mode === "ai" && !apiKey) {
@@ -6004,28 +6029,93 @@ async function reindexDocumentsBatch(docs) {
   return { reindexed, errors };
 }
 
+function getSensitiveSettingsProtector() {
+  if (!sensitiveSettingsProtector) {
+    sensitiveSettingsProtector = createSensitiveSettingsProtector({ safeStorageProvider: safeStorage });
+  }
+  return sensitiveSettingsProtector;
+}
+
+function warnSensitiveSettingOnce(code, message) {
+  if (sensitiveSettingsWarnings.has(code)) return;
+  sensitiveSettingsWarnings.add(code);
+  console.warn(`Zhixia sensitive setting warning (${code}): ${message}`);
+}
+
+function migrateSensitiveSettingsAtRest() {
+  const result = db.exec("SELECT value FROM settings WHERE key = $key", { $key: "aiProviderApiKey" });
+  const raw = result[0]?.values?.[0]?.[0];
+  if (raw == null) return { status: "missing" };
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    value = raw;
+  }
+  if (!value) return { status: "empty" };
+  try {
+    const protectedValue = getSensitiveSettingsProtector().migrate(value);
+    if (protectedValue !== value) {
+      db.run("UPDATE settings SET value = $value WHERE key = $key", {
+        $key: "aiProviderApiKey",
+        $value: JSON.stringify(protectedValue),
+      });
+      return { status: "migrated" };
+    }
+    return { status: "encrypted" };
+  } catch (error) {
+    warnSensitiveSettingOnce(
+      error?.code || "ERR_SECRET_MIGRATION",
+      "legacy plaintext API key remains disabled until OS-backed encryption is available",
+    );
+    return { status: "deferred", code: error?.code || "ERR_SECRET_MIGRATION" };
+  }
+}
+
+function readSensitiveSetting(value) {
+  if (!value) return "";
+  try {
+    return getSensitiveSettingsProtector().unprotect(value);
+  } catch (error) {
+    warnSensitiveSettingOnce(
+      error?.code || "ERR_SECRET_DECRYPT",
+      "stored API key is unavailable and will not be exposed to the renderer or AI provider",
+    );
+    return "";
+  }
+}
+
 function getSettings() {
   const rows = db.exec("SELECT key, value FROM settings ORDER BY key");
   const settings = {};
   for (const row of rows[0]?.values || []) {
+    let value;
     try {
-      settings[row[0]] = JSON.parse(row[1]);
+      value = JSON.parse(row[1]);
     } catch {
-      settings[row[0]] = row[1];
+      value = row[1];
     }
+    settings[row[0]] = isSensitiveSettingKey(row[0]) ? readSensitiveSetting(value) : value;
   }
   return settings;
 }
 
 function updateSettings(patch) {
+  const preparedSettings = [];
   for (const [key, value] of Object.entries(patch || {})) {
     if (isSensitiveSettingKey(key) && value === MASKED_SETTING_VALUE) {
       continue;
     }
+    const storedValue = isSensitiveSettingKey(key)
+      ? getSensitiveSettingsProtector().protect(value)
+      : value;
+    preparedSettings.push([key, storedValue]);
+  }
+  for (const [key, storedValue] of preparedSettings) {
     db.run(
       `INSERT INTO settings (key, value) VALUES ($key, $value)
        ON CONFLICT(key) DO UPDATE SET value = $value`,
-      { $key: key, $value: JSON.stringify(value) },
+      { $key: key, $value: JSON.stringify(storedValue) },
     );
   }
 }
@@ -6402,9 +6492,25 @@ function isSensitiveSettingKey(key) {
   return key === "aiProviderApiKey";
 }
 
+function storedSettingValue(key) {
+  const result = db.exec("SELECT value FROM settings WHERE key = $key", { $key: key });
+  const raw = result[0]?.values?.[0]?.[0];
+  if (raw == null) return "";
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function sensitiveSettingStatus(key, runtimeValue) {
+  return sensitiveSettingAvailability(storedSettingValue(key), runtimeValue);
+}
+
 function sanitizedSettings(settings = {}) {
   const next = { ...settings };
   if (Object.prototype.hasOwnProperty.call(next, "aiProviderApiKey")) {
+    next.aiProviderApiKeyStatus = sensitiveSettingStatus("aiProviderApiKey", next.aiProviderApiKey);
     next.aiProviderApiKey = next.aiProviderApiKey ? MASKED_SETTING_VALUE : "";
   }
   return next;
@@ -10281,6 +10387,16 @@ async function runE2EGovernanceProbe(options = {}) {
     throw new Error("A valid projectPath is required for the E2E governance probe.");
   }
   await ensureDatabase();
+  const expectedLegacyApiKey = String(options.expectedLegacyApiKey || "");
+  const migratedApiKeyResult = db.exec("SELECT value FROM settings WHERE key = $key", { $key: "aiProviderApiKey" });
+  const migratedApiKeyRaw = String(migratedApiKeyResult[0]?.values?.[0]?.[0] || "");
+  let migratedApiKeyValue = "";
+  try {
+    migratedApiKeyValue = JSON.parse(migratedApiKeyRaw);
+  } catch {
+    migratedApiKeyValue = migratedApiKeyRaw;
+  }
+  const migratedRuntimeApiKey = getSettings().aiProviderApiKey || "";
   updateSettings({ autoWatchChanges: false, autoInstallSkill: false });
   await saveDatabase();
 
@@ -10516,6 +10632,21 @@ async function runE2EGovernanceProbe(options = {}) {
     },
   });
 
+  const syntheticApiKey = ["synthetic", "provider", "key", "for", "e2e"].join("-");
+  updateSettings({ aiProviderApiKey: syntheticApiKey });
+  await saveDatabase();
+  const storedApiKeyResult = db.exec("SELECT value FROM settings WHERE key = $key", { $key: "aiProviderApiKey" });
+  const storedApiKeyRaw = String(storedApiKeyResult[0]?.values?.[0]?.[0] || "");
+  let storedApiKeyValue = "";
+  try {
+    storedApiKeyValue = JSON.parse(storedApiKeyRaw);
+  } catch {
+    storedApiKeyValue = storedApiKeyRaw;
+  }
+  const runtimeApiKeyValue = getSettings().aiProviderApiKey || "";
+  const rendererSettings = sanitizedSettings(getSettings());
+  const rendererApiKeyValue = rendererSettings.aiProviderApiKey || "";
+
   return {
     ok: true,
     storePath: dbPath(),
@@ -10523,6 +10654,18 @@ async function runE2EGovernanceProbe(options = {}) {
     importedCount: importResult.imported.length,
     memoryCardCount: listExperienceCards(projectPath, { includeGlobal: false, limit: 80 }).length,
     memoryFiles,
+    secretStorage: {
+      status: getSensitiveSettingsProtector().status,
+      legacyMigrated: expectedLegacyApiKey
+        ? isProtectedSensitiveSetting(migratedApiKeyValue) && !migratedApiKeyRaw.includes(expectedLegacyApiKey)
+        : null,
+      legacyRuntimeRoundTrip: expectedLegacyApiKey ? migratedRuntimeApiKey === expectedLegacyApiKey : null,
+      storedEncrypted: isProtectedSensitiveSetting(storedApiKeyValue),
+      storedPlaintextAbsent: !storedApiKeyRaw.includes(syntheticApiKey),
+      runtimeRoundTrip: runtimeApiKeyValue === syntheticApiKey,
+      rendererMasked: rendererApiKeyValue === MASKED_SETTING_VALUE,
+      rendererStatus: rendererSettings.aiProviderApiKeyStatus || null,
+    },
     inventory: {
       snapshotHash: inventory.snapshotHash,
       recordCount: inventory.records.length,

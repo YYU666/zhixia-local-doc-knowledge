@@ -37,7 +37,8 @@ For a useful private report, include:
 
 ## Known Residual Risks
 
-- API keys are still stored locally in the app database rather than an OS keychain. They are masked before returning to the renderer, but local disk compromise remains in scope.
+- AI Provider API keys are encrypted before SQLite persistence with Electron `safeStorage` and an integrity-checked `enc:v2` payload, migrated from legacy plaintext or `enc:v1` on startup, and remain masked at the renderer boundary. If OS-backed encryption is unavailable, Zhixia refuses to persist a new key and disables any legacy value; the active database can retain that disabled legacy value until encryption becomes available or the user clears it. The renderer receives only a present-but-unavailable state so clearing remains possible. Provider-controlled errors are redacted before renderer return or SQLite persistence. Pre-migration database backups may still contain legacy plaintext and should remain private.
+- Production dependencies are gated at high severity in CI. The current `electron-builder` development-only packaging chain can still report transitive high-severity advisories without a compatible upstream fix; those packages are not shipped as application runtime dependencies, and CI separately blocks critical advisories across the full dependency tree.
 - The app is still built around sql.js, which exports the full database on write; very large local stores can still hit performance and memory ceilings.
 - `electron/main.cjs` and `src/App.tsx` remain large files. Security-critical checks now have a policy module, but further module splitting is needed to reduce regression risk.
 - The product is Chinese-first and local-first. It should not be marketed as a complete international SaaS-style knowledge platform, cloud sync product, or unlimited memory graph.

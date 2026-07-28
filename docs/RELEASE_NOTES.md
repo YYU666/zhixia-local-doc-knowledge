@@ -21,6 +21,14 @@ This public staging copy intentionally contains a short release summary instead 
 - OpenClaw native durable memory stays disabled; raw sessions, local backup paths, credentials, and base64 payloads are not exposed to the provider packet.
 - Added verified migration, audit, junction/path confinement, JSON-secret redaction, token-budget, and regression coverage.
 
+## Post-0.9.0 - Security And CI Hardening
+
+- AI Provider API keys are encrypted with Electron safeStorage before SQLite persistence, with legacy plaintext migration and fail-closed unavailable/tampered handling.
+- Added unit and isolated Electron E2E coverage proving ciphertext-at-rest, main-process round-trip, and renderer masking.
+- AI Provider response streams are capped at 1 MiB and settle on aborted, error, incomplete close, timeout, or request failure so partial remote responses cannot leave the UI permanently busy.
+- Added a curated Windows GitHub Actions workflow for lockfile install, tests, build, production high-severity audit, and full-tree critical audit.
+- Updated electron-builder to 26.15.3; documented remaining development-only transitive advisories that have no compatible upstream fix and are not shipped as runtime dependencies.
+
 ## 0.8.3
 
 - Added safe-relief history preservation, compact thread recovery packets, conservative project classification, and metadata-first large-library startup behavior.

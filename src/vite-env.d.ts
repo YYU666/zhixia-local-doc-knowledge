@@ -48,6 +48,7 @@ export type AppSettings = {
   aiProviderBaseUrl?: string;
   aiProviderModel?: string;
   aiProviderApiKey?: string;
+  aiProviderApiKeyStatus?: "empty" | "available" | "unavailable";
   projectResumeConfirmations?: Record<string, {
     status: "confirmed";
     confirmedAt: string;

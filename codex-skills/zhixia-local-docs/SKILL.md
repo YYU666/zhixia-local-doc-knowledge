@@ -44,6 +44,15 @@ node scripts/read-project-knowledge.cjs <workspace-path> --recover-thread --thre
 node scripts/read-project-knowledge.cjs <workspace-path> --writeback-dry-run --evidence-json .codex-knowledge/evidence-input.json --json
 ```
 
+When Electron IPC is unavailable, use the strict-JSON headless runtime for real bounded writeback and receipts:
+
+```powershell
+'{"action":"retrieve_context","workspace":"<workspace>","taskGoal":"<goal>"}' | node scripts/memory-runtime-headless.cjs
+'{"action":"writeback_evidence","workspace":"<workspace>","decision":"accept","title":"<title>","summary":"<compact result>","sourceRefs":[{"kind":"canonical_doc","path":"docs/PRD.md","title":"PRD"}]}' | node scripts/memory-runtime-headless.cjs
+```
+
+Supported actions are `retrieve_context`, `retrieve_precedent`, `observe_event`, `writeback_evidence`, `continuity`, and `list_trigger_receipts`. See [references/headless-runtime-contract.md](references/headless-runtime-contract.md).
+
 OpenClaw legacy memory is a separate cold audit source. It is never searched by ordinary project retrieval:
 
 ```powershell
@@ -74,7 +83,7 @@ For runtime context and precedent, the helper may perform bounded logical read-o
 - It opens SQLite read-only and enables `query_only`.
 - It performs no SQL writes, schema migration, app launch, directory scan, or raw-session read.
 - Main database and WAL content remain unchanged; SQLite may update `-shm` coordination metadata while reading a live WAL database.
-- Missing SQLite support, schema mismatch, lock failure, or missing sidecar returns compact warnings and falls back to `.codex-knowledge` where the mode permits.
+- Missing SQLite support, schema mismatch, lock failure, or missing Memory Core returns `memoryMode="fallback_stale"`, `current=false`, and `recoveryReady=false`; it never impersonates normal layered memory.
 - Authority summaries never expose signing keys, trust contexts, receipt proofs, or raw receipts.
 
 ## Layered Recall
@@ -122,3 +131,4 @@ Do not run Guardian cleanup or session-body optimization automatically. Explicit
 - [references/memory-core-lifecycle.md](references/memory-core-lifecycle.md): exact helper lifecycle contracts and JSON shapes.
 - [references/context-bundle.md](references/context-bundle.md): context bundle fields and citation format.
 - [references/openclaw-cold-archive.md](references/openclaw-cold-archive.md): Codex audit retrieval and OpenClaw packet-injection boundary.
+- [references/headless-runtime-contract.md](references/headless-runtime-contract.md): strict-JSON lifecycle, project identity, writeback, and receipt contract.

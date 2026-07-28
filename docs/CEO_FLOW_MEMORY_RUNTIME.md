@@ -139,6 +139,9 @@ accepted 且 source-backed 的 writeback 还会进入 typed temporal MemoryFact�
 - `none`: No Memory Runtime lookup; CEO Flow proceeds from prompt context only.
 - `project-memory`: Use Zhixia project records, knowledge items, experience cards, working memory, and sourceRefs.
 - `zhixia-local-docs`: Use the packaged Codex helper under `codex-skills/zhixia-local-docs` for compact local files, old-thread recovery packets, and dry-run evidence packets.
+- When Electron IPC is unavailable, CEO Flow may call `codex-skills/zhixia-local-docs/scripts/memory-runtime-headless.cjs` with strict JSON for `retrieve_context`, `retrieve_precedent`, `observe_event`, `writeback_evidence`, `continuity`, and `list_trigger_receipts`. This is a real app-owned sidecar write path, not a dry run, and it preserves sourceRefs without opening the UI.
+- Every headless request is bound to `ProjectIdentityEnvelope` (`projectId`, `canonicalRepoId`, `canonicalRoot`, `worktreeRoot`, `baselineHead`, `projectIdentitySha256`). Linked worktrees inherit canonical memory; foreign project refs fail closed.
+- If Memory Core is missing or unavailable, providers must return `memoryMode=fallback_stale`, `current=false`, and `recoveryReady=false`. CEO Flow must not treat the fallback packet as current authority.
 - `guardian-history`: Use history/vault/pointer metadata for old-thread recovery; raw session body remains excluded by default.
 - `hybrid`: Combine project-memory, helper packets, and safe history metadata under token and sourceRef bounds.
 

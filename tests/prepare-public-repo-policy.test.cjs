@@ -13,6 +13,7 @@ const {
   sanitizePublicCodeText,
   sanitizePublicDocText,
   sanitizePublicStagingScript,
+  shouldIncludeFile,
 } = require("../scripts/prepare-public-repo.cjs");
 
 const privateTermPatterns = privatePublicationTermPatterns();
@@ -25,6 +26,14 @@ assert.equal(matchesPrivateTerm("yargs"), false, "private term scan must not mat
 assert.equal(matchesPrivateTerm("args"), false, "private term scan must not match generic args identifiers");
 assert.equal(matchesPrivateTerm("parseArgs"), false, "private term scan must not match camelCase parseArgs identifiers");
 assert.equal(matchesPrivateTerm("wakeup"), false, "private term scan must not match generic wakeup identifiers");
+assert.equal(shouldIncludeFile(".github/workflows/ci.yml"), true, "public staging must include the reviewed CI workflow");
+assert.equal(shouldIncludeFile(".github/workflows/private-release.yml"), false, "public staging must not copy unreviewed GitHub workflows");
+assert.equal(shouldIncludeFile(".github/maintainer-evidence.json"), false, "public staging must not copy private GitHub metadata");
+assert.match(
+  fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "ci.yml"), "utf8"),
+  /npm run test:electron-security/,
+  "public CI must run the isolated real Electron safeStorage migration probe",
+);
 
 const codeText = [
   'const yargs = require("yargs");',

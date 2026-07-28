@@ -3,6 +3,10 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { fileURLToPath } = require("node:url");
+const {
+  deriveProjectIdentityEnvelope,
+  pathBelongsToProject,
+} = require("./project-identity.cjs");
 
 const KNOWLEDGE_FILES = [
   { kind: "resume", fileName: "project-resume.md", maxChars: 360, status: "review", freshness: "review", humanConfirmation: true, priority: 26 },
@@ -64,6 +68,17 @@ const MIN_TOKEN_BUDGET = 200;
 const MAX_TOKEN_BUDGET = 4000;
 const MB = 1024 * 1024;
 const MAX_KNOWLEDGE_FILE_BYTES = 256 * 1024;
+const FRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const REVIEW_MAX_AGE_MS = 45 * 24 * 60 * 60 * 1000;
+const CANONICAL_FRESHNESS_FILES = [
+  "README.md",
+  "package.json",
+  "docs/PROGRAM_GOAL_BRIEF.md",
+  "docs/PRD.md",
+  "docs/TECHNICAL_DESIGN.md",
+  "docs/TEST_PLAN.md",
+  "docs/RELEASE_NOTES.md",
+];
 const MAX_RECOVERY_RECOMMENDED_DOC_BYTES = 768 * 1024;
 const RUNTIME_ALLOWED_KINDS = [
   "project_record",
@@ -518,6 +533,44 @@ function readKnowledgeFile(filePath) {
   }
 }
 
+function latestCanonicalDocumentMtime(workspace) {
+  let latest = 0;
+  const sources = [];
+  for (const relativePath of CANONICAL_FRESHNESS_FILES) {
+    const filePath = path.join(workspace, relativePath);
+    if (!fs.existsSync(filePath)) continue;
+    const stats = fs.statSync(filePath);
+    if (!stats.isFile()) continue;
+    latest = Math.max(latest, stats.mtimeMs);
+    sources.push({ path: filePath, updatedAt: stats.mtime.toISOString() });
+  }
+  return { latestMtimeMs: latest || null, sources };
+}
+
+function deriveKnowledgeFreshness(entry, stats, canonical, nowMs = Date.now()) {
+  const ageMs = Math.max(0, nowMs - Number(stats.mtimeMs || 0));
+  const ageDays = Number((ageMs / (24 * 60 * 60 * 1000)).toFixed(2));
+  const olderThanCanonical = Boolean(canonical.latestMtimeMs && stats.mtimeMs + 1000 < canonical.latestMtimeMs);
+  const corroboratedStatus = ["active", "ready", "curated"].includes(entry.status);
+  let freshness = "stale";
+  let freshnessBasis = "mtime_older_than_review_window";
+  if (olderThanCanonical) {
+    freshness = "stale";
+    freshnessBasis = "packet_mtime_older_than_canonical_document";
+  } else if (ageMs <= FRESH_MAX_AGE_MS && corroboratedStatus && !entry.humanConfirmation) {
+    freshness = "fresh";
+    freshnessBasis = canonical.latestMtimeMs
+      ? "recent_mtime_not_older_than_canonical_document"
+      : "recent_mtime_with_active_or_curated_status";
+  } else if (ageMs <= REVIEW_MAX_AGE_MS) {
+    freshness = "review";
+    freshnessBasis = entry.humanConfirmation
+      ? "recent_mtime_requires_human_confirmation"
+      : "mtime_within_review_window";
+  }
+  return { freshness, freshnessBasis, ageMs, ageDays, olderThanCanonical };
+}
+
 function splitBlocks(content) {
   const blocks = [];
   const lines = String(content || "").split(/\r?\n/);
@@ -645,6 +698,7 @@ function collectItems(workspace, options) {
   const items = [];
   const files = [];
   const warnings = [];
+  const canonicalFreshness = latestCanonicalDocumentMtime(workspace);
   const allowedKinds = new Set(options.includeKinds.length > 0 ? options.includeKinds : KNOWLEDGE_FILES.map((entry) => entry.kind));
 
   for (const entry of KNOWLEDGE_FILES) {
@@ -652,6 +706,7 @@ function collectItems(workspace, options) {
     const filePath = path.join(bundleDir, entry.fileName);
     if (!fs.existsSync(filePath)) continue;
     const { content: fileContent, stats, truncated, originalBytes, readBytes } = readKnowledgeFile(filePath);
+    const derivedFreshness = deriveKnowledgeFreshness(entry, stats, canonicalFreshness);
     if (truncated) {
       warnings.push(`${entry.fileName} exceeded ${MAX_KNOWLEDGE_FILE_BYTES} bytes; helper read only the first ${readBytes} bytes and omitted the remainder.`);
     }
@@ -663,7 +718,10 @@ function collectItems(workspace, options) {
       truncated,
       hash: hashText(fileContent),
       updatedAt: stats.mtime.toISOString(),
-      freshness: entry.freshness,
+      freshness: derivedFreshness.freshness,
+      freshnessBasis: derivedFreshness.freshnessBasis,
+      ageMs: derivedFreshness.ageMs,
+      ageDays: derivedFreshness.ageDays,
       status: entry.status,
     });
 
@@ -676,7 +734,7 @@ function collectItems(workspace, options) {
         { text: entry.kind, weight: 4 },
         { text: entry.fileName, weight: 3 },
       ]);
-      const baselineScore = entry.priority + (entry.freshness === "fresh" ? 5 : entry.freshness === "review" ? 1 : -5);
+      const baselineScore = entry.priority + (derivedFreshness.freshness === "fresh" ? 5 : derivedFreshness.freshness === "review" ? 1 : -5);
       const layerAdjustment = queryTypeKindAdjustment(entry, options, block, excerpt);
       const score = baselineScore + textScore + layerAdjustment.adjustment;
       if (tokens.length > 0 && textScore === 0) continue;
@@ -688,7 +746,10 @@ function collectItems(workspace, options) {
         sourcePath: filePath,
         sourceRefs: [buildSourceRef(entry, filePath, block, fileContent, stats)],
         status: entry.status,
-        freshness: entry.freshness,
+        freshness: derivedFreshness.freshness,
+        freshnessBasis: derivedFreshness.freshnessBasis,
+        ageMs: derivedFreshness.ageMs,
+        ageDays: derivedFreshness.ageDays,
         score,
         tokenEstimate: estimateTokens(`${block.title} ${excerpt}`),
         whyMatched: whyMatched(tokens, [
@@ -699,10 +760,11 @@ function collectItems(workspace, options) {
         ], [
           `source:${entry.kind}`,
           `status:${entry.status}`,
-          `freshness:${entry.freshness}`,
+          `freshness:${derivedFreshness.freshness}`,
+          `freshness_basis:${derivedFreshness.freshnessBasis}`,
           ...layerAdjustment.reasons,
         ]),
-        requiresHumanConfirmation: entry.humanConfirmation || entry.freshness !== "fresh",
+        requiresHumanConfirmation: entry.humanConfirmation || derivedFreshness.freshness !== "fresh",
         isMaintenance: layerAdjustment.maintenance,
       };
       item.memoryLayer = memoryLayerForHelperItem(entry, item, options);
@@ -1037,6 +1099,71 @@ function collectMemoryFactItems(workspace, options) {
         // Read failure is already represented by the compact fallback warning.
       }
     }
+  }
+}
+
+function collectHeadlessRuntimeItems(workspace, options) {
+  if (!options.runtimeContext && !options.precedent) return { requested: false, status: "not_requested", items: [], warnings: [] };
+  if (!options.projectIdentity || process.env.ZHIXIA_MEMORY_FACT_SQLITE_DISABLED === "1") {
+    return { requested: true, status: "unavailable", items: [], warnings: ["headless_runtime_sidecar_unavailable"] };
+  }
+  let DatabaseSync;
+  try { ({ DatabaseSync } = require("node:sqlite")); } catch {
+    return { requested: true, status: "sqlite_unavailable", items: [], warnings: ["headless_runtime_sqlite_unavailable"] };
+  }
+  const dbPath = memoryFactSidecarPath();
+  if (!fs.existsSync(dbPath)) return { requested: true, status: "missing", items: [], warnings: [] };
+  let db;
+  try {
+    db = new DatabaseSync(dbPath, { readOnly: true, enableForeignKeyConstraints: false });
+    db.exec(`PRAGMA busy_timeout = ${MEMORY_FACT_BUSY_TIMEOUT_MS}; PRAGMA query_only = ON;`);
+    const tables = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('headless_runtime_events','headless_evidence_writebacks')").all().map((row) => row.name));
+    if (tables.size === 0) return { requested: true, status: "schema_unavailable", items: [], warnings: [] };
+    const identity = options.projectIdentity;
+    const params = [identity.projectId, identity.canonicalRoot, Math.max(10, Math.min(80, options.limit * 5))];
+    const rows = [];
+    if (tables.has("headless_runtime_events")) {
+      rows.push(...db.prepare(`SELECT id, 'memory_episode' AS kind, title, summary, sourceRefsJson, createdAt, 'accepted' AS status
+        FROM headless_runtime_events WHERE projectId = ? AND canonicalRoot = ? ORDER BY createdAt DESC LIMIT ?`).all(...params));
+    }
+    if (tables.has("headless_evidence_writebacks")) {
+      rows.push(...db.prepare(`SELECT id, CASE WHEN decision='accept' THEN 'memory_decision' ELSE 'memory_episode' END AS kind,
+        title, summary, sourceRefsJson, createdAt, decision AS status
+        FROM headless_evidence_writebacks WHERE projectId = ? AND canonicalRoot = ? ORDER BY createdAt DESC LIMIT ?`).all(...params));
+    }
+    const tokens = tokenizeQuery(options.query || options.taskGoal);
+    const items = [];
+    for (const row of rows) {
+      if (isUnsafeMemoryFactText(`${row.id} ${row.title} ${row.summary} ${row.sourceRefsJson}`)) continue;
+      const refs = projectScopedSourceRefs(parseJsonOrNull(row.sourceRefsJson) || [], identity, workspace);
+      if (refs.length === 0) continue;
+      const textScore = scoreTokens(tokens, [
+        { text: row.title, weight: 18, exactWeight: 30 },
+        { text: row.summary, weight: 8 },
+        { text: row.kind, weight: 4 },
+      ]);
+      if (tokens.length > 0 && textScore === 0) continue;
+      const sourcePath = `memory-runtime://headless/${row.kind}/${encodeURIComponent(row.id)}`;
+      const why = whyMatched(tokens, [
+        { label: "title", text: row.title },
+        { label: "summary", text: row.summary },
+      ], ["source:headless_runtime_sidecar", "scope:project_identity_envelope", `persisted_status:${row.status}`, "authority:unverified_advisory"]);
+      items.push({
+        id: compact(row.id, 180), kind: row.kind, runtimeKind: row.kind,
+        title: compact(row.title, 220), excerpt: compact(row.summary, 480), sourcePath,
+        sourceRefs: [{ kind: row.kind, path: sourcePath, title: compact(row.title, 180), updatedAt: row.createdAt }, ...refs].slice(0, 20),
+        status: "review", freshness: "review", score: 42 + textScore,
+        tokenEstimate: Math.max(24, Math.min(280, estimateTokens(`${row.title} ${row.summary}`))),
+        whyMatched: why, whyRecalled: why, requiresHumanConfirmation: true,
+        authority: { status: "review", authoritative: false, authorityVerification: AUTHORITY_VERIFICATION_UNAVAILABLE, advisory: true, scope: "project_identity_envelope", sourceBacked: true, validity: "current", persistedTrust: "persisted_unverified", receiptProofIncluded: false, trustContextIncluded: false },
+        memoryLayer: "hot", recallDepth: "summary", rawSessionPolicy: "not_allowed", updatedAt: row.createdAt,
+      });
+    }
+    return { requested: true, status: "available", items, warnings: ["headless_runtime_rows_are_advisory_until_authority_verification"] };
+  } catch {
+    return { requested: true, status: "unavailable", items: [], warnings: ["headless_runtime_sidecar_read_failed"] };
+  } finally {
+    if (db) try { db.close(); } catch {}
   }
 }
 
@@ -1897,7 +2024,10 @@ function fallbackMemoryCorePacket(schemaVersion, mode, workspace, result) {
     provider: "zhixia_local_docs",
     mode,
     generatedAt: new Date().toISOString(),
-    project: { id: null, path: workspace, name: path.basename(workspace), status: "unavailable", freshness: "unknown", authority: null },
+    project: { id: null, path: workspace, name: path.basename(workspace), status: "fallback_stale", freshness: "stale", current: false, recoveryReady: false, authority: null },
+    memoryMode: "fallback_stale",
+    current: false,
+    recoveryReady: false,
     sidecar: result.sidecar,
     warnings: result.warnings || [],
     safety: {
@@ -2127,6 +2257,89 @@ function overallFreshness(items) {
   return "fresh";
 }
 
+function freshnessRank(value) {
+  return { fresh: 0, review: 1, stale: 2, unknown: 3 }[value] ?? 3;
+}
+
+function mergeUniqueObjects(values, keyBuilder, limit = 24) {
+  const merged = [];
+  const seen = new Set();
+  for (const value of values.flat().filter(Boolean)) {
+    const key = keyBuilder(value);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(value);
+    if (merged.length >= limit) break;
+  }
+  return merged;
+}
+
+function mergeDuplicateMemoryItems(items) {
+  const byId = new Map();
+  const duplicateIds = new Map();
+  for (const candidate of items) {
+    const id = cleanText(candidate.id) || hashText(`${candidate.kind}|${candidate.sourcePath}|${candidate.title}`).slice(0, 24);
+    if (!byId.has(id)) {
+      byId.set(id, { ...candidate, id });
+      continue;
+    }
+    const existing = byId.get(id);
+    duplicateIds.set(id, (duplicateIds.get(id) || 1) + 1);
+    const strongest = Number(candidate.score || 0) > Number(existing.score || 0) ? candidate : existing;
+    const weakestFreshness = freshnessRank(candidate.freshness) > freshnessRank(existing.freshness)
+      ? candidate.freshness
+      : existing.freshness;
+    byId.set(id, {
+      ...existing,
+      ...strongest,
+      id,
+      freshness: weakestFreshness,
+      score: Math.max(Number(existing.score || 0), Number(candidate.score || 0)),
+      tokenEstimate: Math.max(Number(existing.tokenEstimate || 0), Number(candidate.tokenEstimate || 0)),
+      sourceRefs: mergeUniqueObjects([existing.sourceRefs || [], candidate.sourceRefs || []], (ref) => [ref.kind, ref.id, ref.path, ref.uri, ref.hash, ref.title].join("|"), 24),
+      whyMatched: [...new Set([...(existing.whyMatched || []), ...(candidate.whyMatched || [])])].slice(0, 16),
+      whyRecalled: [...new Set([...(existing.whyRecalled || []), ...(candidate.whyRecalled || [])])].slice(0, 16),
+      reasons: [...new Set([
+        ...(existing.reasons || []), ...(candidate.reasons || []),
+        existing.reason, candidate.reason,
+      ].filter(Boolean))].slice(0, 16),
+      requiresHumanConfirmation: existing.requiresHumanConfirmation === true || candidate.requiresHumanConfirmation === true || weakestFreshness !== "fresh",
+      duplicateMergedCount: duplicateIds.get(id),
+    });
+  }
+  const diagnostics = [...duplicateIds.entries()].map(([id, count]) => ({
+    code: "duplicate_memory_item_id_merged",
+    severity: "review",
+    itemId: id,
+    inputCount: count,
+    mergedCount: count - 1,
+  }));
+  return { items: [...byId.values()], diagnostics };
+}
+
+function projectScopedSourceRefs(refs, projectIdentity, memoryWorkspace) {
+  if (!projectIdentity) return refs || [];
+  return (refs || []).filter((ref) => {
+    if (ref.projectId && ref.projectId !== projectIdentity.projectId) return false;
+    const raw = ref.path || ref.uri;
+    if (!raw) return true;
+    if (/^(?:memory-runtime|git):\/\//i.test(raw)) return true;
+    if (/^file:\/\//i.test(raw)) {
+      try { return pathBelongsToProject(fileURLToPath(raw), projectIdentity); } catch { return false; }
+    }
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return false;
+    const candidate = path.isAbsolute(raw) ? raw : path.resolve(memoryWorkspace, raw);
+    return pathBelongsToProject(candidate, projectIdentity);
+  });
+}
+
+function scopeItemsToProject(items, projectIdentity, memoryWorkspace) {
+  return items.map((item) => ({
+    ...item,
+    sourceRefs: projectScopedSourceRefs(item.sourceRefs, projectIdentity, memoryWorkspace),
+  })).filter((item) => item.sourceRefs.length > 0 || !item.sourcePath);
+}
+
 function compatibilityResults(items) {
   return items.map((item) => ({
     kind: item.kind,
@@ -2143,17 +2356,23 @@ function collectResults(workspace, options) {
   const { items: fileItems, files, warnings: collectionWarnings } = collectItems(workspace, options);
   const sidecar = collectMemoryFactItems(workspace, options);
   const memoryCore = collectMemoryCoreItems(workspace, options);
-  const items = [...fileItems, ...sidecar.items, ...memoryCore.items]
+  const headless = collectHeadlessRuntimeItems(workspace, options);
+  const scopedItems = scopeItemsToProject([...fileItems, ...sidecar.items, ...memoryCore.items, ...headless.items], options.projectIdentity, workspace);
+  const merged = mergeDuplicateMemoryItems(scopedItems);
+  const items = merged.items
     .sort((left, right) => (right.score !== left.score ? right.score - left.score : left.tokenEstimate - right.tokenEstimate));
   const trimmed = trimItemsToBudget(items, options.limit, options.tokenBudget);
-  const warnings = [...collectionWarnings, ...sidecar.warnings, ...memoryCore.warnings];
+  const warnings = [...collectionWarnings, ...sidecar.warnings, ...memoryCore.warnings, ...headless.warnings];
+  if (merged.diagnostics.length > 0) warnings.push(`duplicate_memory_item_id_merged:${merged.diagnostics.length}`);
   if (files.length === 0 && !options.allowParentKnowledge) {
     warnings.push("No .codex-knowledge files were found in the requested workspace. Parent directory knowledge was not used; pass --allow-parent-knowledge to opt into legacy upward search.");
   }
   const payload = {
     provider: "zhixia_local_docs",
     mode: "file_contract",
-    workspace,
+    workspace: options.requestWorkspace || workspace,
+    memoryWorkspace: workspace,
+    projectIdentity: options.projectIdentity || null,
     parentKnowledgeAllowed: options.allowParentKnowledge,
     queryType: options.queryType,
     query: options.query,
@@ -2163,6 +2382,8 @@ function collectResults(workspace, options) {
     freshness: overallFreshness(trimmed.items),
     generatedAt: new Date().toISOString(),
     warnings,
+    providerDiagnostics: merged.diagnostics,
+    headlessRuntimeSidecar: { status: headless.status, returnedCount: headless.items.length, uiRequired: false, mainDatabaseWrite: false },
     files,
     items: trimmed.items,
     results: compatibilityResults(trimmed.items),
@@ -2249,7 +2470,14 @@ function collectPacketSourceRefs(items) {
 }
 
 function buildRuntimeContextPacket(retrieval, options) {
-  const items = (retrieval.items || []).map(runtimeItemFromHelperItem).filter((item) => RUNTIME_ALLOWED_KINDS.includes(item.kind));
+  const memoryCoreStatus = retrieval.memoryCoreSidecar?.status || "missing";
+  const fallbackStale = memoryCoreStatus !== "available";
+  const items = (retrieval.items || []).map(runtimeItemFromHelperItem).filter((item) => RUNTIME_ALLOWED_KINDS.includes(item.kind)).map((item) => fallbackStale ? {
+    ...item,
+    freshness: "stale",
+    requiresHumanConfirmation: true,
+    authority: { ...item.authority, validity: "inactive", authoritative: false, advisory: true },
+  } : item);
   const memoryLayers = summarizeMemoryLayers(items);
   return {
     schemaVersion: 1,
@@ -2265,15 +2493,21 @@ function buildRuntimeContextPacket(retrieval, options) {
     project: {
       name: path.basename(retrieval.workspace),
       path: retrieval.workspace,
-      freshness: retrieval.freshness || "unknown",
-      status: items.some((item) => item.status === "active") ? "active" : "review",
+      freshness: fallbackStale ? "stale" : retrieval.freshness || "unknown",
+      status: fallbackStale ? "fallback_stale" : items.some((item) => item.status === "active") ? "active" : "review",
+      current: !fallbackStale,
+      recoveryReady: !fallbackStale,
       summary: items[0]?.summary || "",
       nextAction: "",
       blockers: [],
     },
     items,
     sourceRefs: collectPacketSourceRefs(items),
-    memoryMode: "layered",
+    memoryMode: fallbackStale ? "fallback_stale" : "layered",
+    current: !fallbackStale,
+    recoveryReady: !fallbackStale,
+    projectIdentity: retrieval.projectIdentity || null,
+    providerDiagnostics: retrieval.providerDiagnostics || [],
     memoryLayers,
     recallPlan: buildRecallPlan(options, memoryLayers),
     memoryFactSidecar: retrieval.memoryFactSidecar || null,
@@ -2283,6 +2517,7 @@ function buildRuntimeContextPacket(retrieval, options) {
       "no_giant_markdown_or_base64_default_output",
       "no_archive_compact_delete_move_restore",
       "layered_memory_hot_warm_default_cold_pointer_only",
+      ...(fallbackStale ? ["memory_core_unavailable_fallback_stale_not_current_not_recovery_ready"] : []),
       ...retrieval.warnings,
     ],
     tokenEstimate: retrieval.tokenEstimate,
@@ -2900,13 +3135,22 @@ function printText(payload) {
 
 function main() {
   const args = parseArgs(process.argv);
-  const workspace = findWorkspace(args.workspace, args.allowParentKnowledge);
+  const requestedWorkspace = findWorkspace(args.workspace, args.allowParentKnowledge);
+  const projectIdentity = deriveProjectIdentityEnvelope(requestedWorkspace);
+  const workspace = hasKnowledgeFiles(requestedWorkspace)
+    ? requestedWorkspace
+    : hasKnowledgeFiles(projectIdentity.canonicalRoot)
+      ? projectIdentity.canonicalRoot
+      : requestedWorkspace;
+  const runtimeArgs = { ...args, requestWorkspace: requestedWorkspace, projectIdentity };
   if (args.continuityStatus || args.memoryReviewQueue || args.memoryDiagnostics) {
     const packet = args.continuityStatus
-      ? buildMemoryCoreContinuityStatus(workspace, args)
+      ? buildMemoryCoreContinuityStatus(workspace, runtimeArgs)
       : args.memoryReviewQueue
-        ? buildMemoryCoreReviewQueue(workspace, args)
-        : buildMemoryCoreDiagnostics(workspace, args);
+        ? buildMemoryCoreReviewQueue(workspace, runtimeArgs)
+        : buildMemoryCoreDiagnostics(workspace, runtimeArgs);
+    packet.projectIdentity = projectIdentity;
+    packet.requestWorkspace = requestedWorkspace;
     if (args.json) {
       console.log(JSON.stringify(packet, null, 2));
     } else {
@@ -2920,7 +3164,7 @@ function main() {
     return;
   }
   if (args.evaluateCeoPressure) {
-    const packet = evaluateCeoThreadPressure({ ...args, workspace });
+    const packet = evaluateCeoThreadPressure({ ...runtimeArgs, workspace });
     if (args.json) {
       console.log(JSON.stringify(packet, null, 2));
     } else {
@@ -2933,7 +3177,7 @@ function main() {
     return;
   }
   if (args.writebackDryRun) {
-    const packet = buildEvidenceWritebackPacket(workspace, args);
+    const packet = buildEvidenceWritebackPacket(workspace, runtimeArgs);
     const outputPath = writeEvidenceOut(workspace, args.evidenceOut, packet);
     const payload = outputPath ? { ...packet, outputPath } : packet;
     if (args.json) {
@@ -2948,15 +3192,15 @@ function main() {
     }
     return;
   }
-  const payload = collectResults(workspace, args);
+  const payload = collectResults(workspace, runtimeArgs);
   const lifecyclePayload = args.precedent
-    ? buildRuntimePrecedentPacket(payload, args)
+    ? buildRuntimePrecedentPacket(payload, runtimeArgs)
     : args.ceoTakeover
-      ? buildCeoTakeoverBootstrapPacket(payload, args)
+      ? buildCeoTakeoverBootstrapPacket(payload, runtimeArgs)
     : args.recoverThread
-      ? buildThreadRecoveryPacket(payload, args)
+      ? buildThreadRecoveryPacket(payload, runtimeArgs)
       : args.runtimeContext
-      ? buildRuntimeContextPacket(payload, args)
+      ? buildRuntimeContextPacket(payload, runtimeArgs)
       : payload;
   if (args.json) {
     console.log(JSON.stringify(lifecyclePayload, null, 2));
@@ -2965,4 +3209,17 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = {
+  buildMemoryCoreContinuityStatus,
+  buildRuntimeContextPacket,
+  buildRuntimePrecedentPacket,
+  collectResults,
+  deriveKnowledgeFreshness,
+  findWorkspace,
+  hasKnowledgeFiles,
+  mergeDuplicateMemoryItems,
+  overallFreshness,
+  resolveWorkspaceContainedPath,
+};

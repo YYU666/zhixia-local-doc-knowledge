@@ -80,6 +80,7 @@ Verify before publication:
 
 - `settings:update` uses the settings whitelist and type normalization policy.
 - AI Provider Base URL rejects plaintext HTTP and untrusted hosts before document text or real API keys can be sent.
+- AI Provider API keys use Electron `safeStorage` plus an integrity-checked `enc:v2` payload before SQLite persistence; legacy plaintext/`enc:v1` migration, present-but-unavailable clearing, Provider-error redaction, unavailable-backend refusal, and ciphertext tamper failure are covered. Public Windows CI must also run `npm run test:electron-security` against an isolated temporary SQLite profile.
 - Project memory writes and tool inventory scans require registered workspace paths.
 - Electron has explicit sandbox, CSP, denied window opens, guarded navigation, and denied permission requests.
 - Guardian clean/optimize/compact/archive-queue IPCs require a user confirmation flag.
@@ -104,10 +105,13 @@ Run:
 ```powershell
 node tests\smoke-test.cjs
 node tests\security-policy.test.cjs
+node tests\sensitive-settings-policy.test.cjs
 npm test
 npm run build
 node scripts\prepare-public-repo.cjs
 ```
+
+The source-only staging repository must contain `.github/workflows/ci.yml`. The workflow runs `npm ci`, the default test suite, the production build, a high-severity production-dependency audit, and a critical-severity full dependency audit on Windows for pushes to `main` and pull requests. Development-only packaging advisories must remain documented until a compatible upstream fix exists; do not hide them with a breaking forced downgrade or unverified transitive override.
 
 Then run the public staging test from the staging directory:
 

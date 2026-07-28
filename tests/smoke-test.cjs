@@ -18,6 +18,8 @@ const memoryCoreRuntime = fs.readFileSync(path.join(root, "electron", "memoryCor
 const codexAutoIngestPolicy = fs.readFileSync(path.join(root, "electron", "codexThreadHistoryAutoIngestPolicy.cjs"), "utf8");
 const documentMetadataPolicy = fs.readFileSync(path.join(root, "electron", "documentMetadataPolicy.cjs"), "utf8");
 const databaseStartupPolicy = fs.readFileSync(path.join(root, "electron", "databaseStartupPolicy.cjs"), "utf8");
+const sensitiveSettingsPolicy = fs.readFileSync(path.join(root, "electron", "sensitiveSettingsPolicy.cjs"), "utf8");
+const aiProviderResponsePolicy = fs.readFileSync(path.join(root, "electron", "aiProviderResponsePolicy.cjs"), "utf8");
 const projectMemoryBackfillPolicy = fs.readFileSync(path.join(root, "electron", "projectMemoryBackfillPolicy.cjs"), "utf8");
 const projectArtifactPolicy = fs.readFileSync(path.join(root, "electron", "projectArtifactPolicy.cjs"), "utf8");
 const agentRuntimeMonitorPolicy = fs.readFileSync(path.join(root, "electron", "agentRuntimeMonitorPolicy.cjs"), "utf8");
@@ -32,6 +34,7 @@ const license = fs.readFileSync(path.join(root, "LICENSE"), "utf8");
 const securityDoc = fs.readFileSync(path.join(root, "SECURITY.md"), "utf8");
 const contributingDoc = fs.readFileSync(path.join(root, "CONTRIBUTING.md"), "utf8");
 const gitignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
+const ciWorkflow = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8");
 const prd = fs.readFileSync(path.join(root, "docs", "PRD.md"), "utf8");
 const technicalDesign = fs.readFileSync(path.join(root, "docs", "TECHNICAL_DESIGN.md"), "utf8");
 const testPlan = fs.readFileSync(path.join(root, "docs", "TEST_PLAN.md"), "utf8");
@@ -646,6 +649,21 @@ assert.match(main, /requiresHumanConfirmation/, "agent retrieval payload should 
 assert.match(main, /requiresHumanConfirmationCount/, "retrieval logs should include confirmation counts");
 assert.match(main, /aiProviderApiKey/, "AI provider key setting must exist");
 assert.match(main, /sanitizedSettings/, "AI provider key must be sanitized before renderer responses");
+assert.match(main, /safeStorage/, "AI provider key persistence must use Electron safeStorage");
+assert.match(main, /migrateSensitiveSettingsAtRest\(\)/, "startup schema migration must encrypt a legacy plaintext API key");
+assert.match(main, /getSensitiveSettingsProtector\(\)\.protect\(value\)/, "settings updates must encrypt API keys before SQLite persistence");
+assert.match(main, /const preparedSettings = \[\][\s\S]*preparedSettings\.push\(\[key, storedValue\]\)[\s\S]*for \(const \[key, storedValue\] of preparedSettings\)/, "settings updates must preflight secret encryption before mutating any setting row");
+assert.match(main, /readSensitiveSetting\(value\)/, "settings reads must decrypt API keys only inside the main process");
+assert.match(sensitiveSettingsPolicy, /SECRET_CIPHERTEXT_PREFIX = "enc:v2:"/, "encrypted API keys must use the integrity-checked v2 envelope");
+assert.match(sensitiveSettingsPolicy, /LEGACY_SECRET_CIPHERTEXT_PREFIX = "enc:v1:"/, "legacy v1 ciphertext must remain explicitly migratable");
+assert.match(sensitiveSettingsPolicy, /backend === "basic_text"/, "insecure Linux basic_text storage must fail closed");
+assert.match(sensitiveSettingsPolicy, /ERR_SECRET_LEGACY_PLAINTEXT/, "legacy plaintext must not silently reach provider runtime");
+assert.match(pkg.scripts.test, /sensitive-settings-policy\.test\.cjs/, "default npm test must include secret storage regression coverage");
+assert.match(ciWorkflow, /npm ci/, "public CI must install from the committed lockfile");
+assert.match(ciWorkflow, /npm test/, "public CI must run the default regression suite");
+assert.match(ciWorkflow, /npm run build/, "public CI must verify the production renderer build");
+assert.match(ciWorkflow, /npm audit --omit=dev --audit-level=high/, "public CI must block high-severity production dependency advisories");
+assert.match(ciWorkflow, /npm audit --audit-level=critical/, "public CI must block critical advisories across the full dependency tree");
 assert.match(main, /completion_ledger\.json/, "AutoFlow import must read the completion ledger");
 assert.match(main, /memory_cards\.json/, "AutoFlow import must read agent family memory cards");
 assert.doesNotMatch(main, /C:\\Users\\example\\Documents\\Playground\\ExampleStudio\\workflow/, "main process should not hardcode a personal workflow path");
@@ -975,6 +993,14 @@ assert.match(publicationChecklist, /Must Not Publish[\s\S]*\.codex-knowledge\/[\
 assert.match(publicRepoLayout, /Include[\s\S]*electron\/[\s\S]*src\/[\s\S]*tests\/[\s\S]*Exclude[\s\S]*vaults\/[\s\S]*evidence\//, "Public repo layout must explain source include/exclude paths");
 assert.match(pkg.scripts["prepare:public"], /node scripts\/prepare-public-repo\.cjs/, "package scripts must expose a safe public staging command");
 assert.match(pkg.scripts.test, /prepare-public-repo-policy\.test\.cjs/, "Default npm test must include public staging sanitizer behavior tests");
+assert.match(pkg.scripts.test, /sensitive-settings-policy\.test\.cjs/, "Default npm test must include sensitive settings policy tests");
+assert.match(pkg.scripts["test:electron-security"], /electron-governance-e2e\.test\.cjs/, "A dedicated public CI script must run the real Electron safeStorage migration probe");
+assert.match(ciWorkflow, /npm run test:electron-security/, "Windows CI must run the real Electron safeStorage migration probe");
+assert.match(appTsx, /aiProviderApiKeyStatus[\s\S]*hasStoredAiKey[\s\S]*clearAiProviderKey/, "AI settings UI must allow clearing a present but unavailable stored key");
+assert.match(main, /sanitizeSensitiveErrorMessage\(error, \[apiKey\]\)/, "AI provider errors must be redacted with the active key before renderer or persistence use");
+assert.match(main, /collectBoundedProviderResponse\(response[\s\S]*MAX_AI_PROVIDER_RESPONSE_BYTES/, "AI provider calls must use the bounded response policy");
+assert.match(aiProviderResponsePolicy, /response\.on\("aborted"[\s\S]*response\.on\("error"[\s\S]*response\.on\("close"[\s\S]*response\.complete/, "AI provider response streams must settle on interruption");
+assert.match(pkg.scripts.test, /ai-provider-response-policy\.test\.cjs/, "Default npm test must cover AI provider response interruption behavior");
 assert.match(preparePublicRepoScript, /assertOwnedStagingTarget[\s\S]*path\.relative\(resolvedRoot,\s*resolvedTarget\)[\s\S]*zhixia-local-doc-knowledge/, "Public staging script must verify it only recreates its owned staging directory");
 assert.match(preparePublicRepoScript, /const rootFiles = new Set[\s\S]*LICENSE[\s\S]*README\.md[\s\S]*package-lock\.json/, "Public staging script must copy root files from an explicit whitelist");
 assert.match(preparePublicRepoScript, /const publicDocs = new Set[\s\S]*CEO_FLOW_MEMORY_RUNTIME\.md[\s\S]*PUBLIC_REPO_LAYOUT\.md[\s\S]*TEST_PLAN\.md/, "Public staging script must whitelist public docs");
@@ -1311,6 +1337,7 @@ for (const docPath of [
   "docs/PRD.md",
   "docs/TECHNICAL_DESIGN.md",
   "docs/TEST_PLAN.md",
+  "docs/NATIVE_SQLITE_MIGRATION_PLAN.md",
   "docs/RELEASE_NOTES.md",
   ...(isPublicSourceStaging ? [] : ["docs/PROJECT_EVALUATION.md"]),
 ]) {
@@ -1322,6 +1349,10 @@ const skill = fs.readFileSync(path.join(skillPath, "SKILL.md"), "utf8");
 const openaiYaml = fs.readFileSync(path.join(skillPath, "agents", "openai.yaml"), "utf8");
 const helperPath = path.join(skillPath, "scripts", "read-project-knowledge.cjs");
 const helper = fs.readFileSync(helperPath, "utf8");
+const headlessPath = path.join(skillPath, "scripts", "memory-runtime-headless.cjs");
+const headless = fs.readFileSync(headlessPath, "utf8");
+const projectIdentityPath = path.join(skillPath, "scripts", "project-identity.cjs");
+const projectIdentity = fs.readFileSync(projectIdentityPath, "utf8");
 assert.match(skill, /name: zhixia-local-docs/, "Zhixia Codex skill must declare its name");
 assert.match(skill, /(?:\.codex-knowledge\/)?project-resume\.md/, "Skill must prioritize project resume packets");
 assert.match(skill, /(?:\.codex-knowledge\/)?retrieval-packet\.md/, "Skill must prioritize compact retrieval packets");
@@ -1334,6 +1365,7 @@ assert.match(skill, /(?:\.codex-knowledge\/)?experience-cards\.md/, "Skill must 
 assert.match(skill, /(?:\.codex-knowledge\/)?skill-candidates\.md/, "Skill must explain skill candidates");
 assert.match(skill, /(?:\.codex-knowledge\/)?tool-skill-inventory\.md/, "Skill must explain tool skill inventory");
 assert.match(skill, /read-project-knowledge\.cjs/, "Skill must document the retrieval helper");
+assert.match(skill, /memory-runtime-headless\.cjs/, "Skill must document the strict-JSON headless runtime");
 assert.match(helper, /--query/, "retrieval helper must support --query");
 assert.match(helper, /--query-type/, "retrieval helper must support --query-type");
 assert.match(helper, /--runtime-context/, "retrieval helper must support explicit runtime context packets");
@@ -1362,11 +1394,20 @@ assert.match(helper, /sourceRefs/, "retrieval helper must emit source refs");
 assert.match(helper, /freshness/, "retrieval helper must emit freshness");
 assert.match(helper, /whyMatched/, "retrieval helper must emit whyMatched");
 assert.match(helper, /requiresHumanConfirmation/, "retrieval helper must emit confirmation flags");
+assert.match(helper, /deriveKnowledgeFreshness[\s\S]*ageMs[\s\S]*freshnessBasis/, "knowledge freshness must derive from real age and evidence basis");
+assert.match(helper, /duplicate_memory_item_id_merged/, "provider must diagnose merged duplicate memory IDs");
+assert.match(helper, /fallback_stale[\s\S]*recoveryReady/, "missing Memory Core must fail to fallback_stale without recovery readiness");
+assert.match(headless, /retrieve_context[\s\S]*retrieve_precedent[\s\S]*observe_event[\s\S]*writeback_evidence[\s\S]*list_trigger_receipts/, "headless runtime must cover the lifecycle contract");
+assert.match(headless, /accepted_writeback_requires_source_refs/, "headless accepted writeback must require sourceRefs");
+assert.match(projectIdentity, /projectId[\s\S]*canonicalRepoId[\s\S]*canonicalRoot[\s\S]*worktreeRoot[\s\S]*baselineHead[\s\S]*projectIdentitySha256/, "ProjectIdentityEnvelope must expose stable project/worktree identity");
 assert.match(helper, /buildRuntimeContextPacket/, "retrieval helper must build RuntimeContextPacket-shaped output");
 assert.match(helper, /buildRuntimePrecedentPacket/, "retrieval helper must build RuntimePrecedentPacket-shaped output");
 assert.match(helper, /buildEvidenceWritebackPacket/, "retrieval helper must build EvidenceWritebackPacket dry-run output");
 assert.match(skill, /--recover-thread[\s\S]*ThreadRecoveryPacket-shaped/, "Skill docs must document old-thread recovery helper mode");
 assert.match(pkg.scripts.test, /zhixia-local-docs-helper\.test\.cjs/, "default npm test must include Zhixia local-docs helper lifecycle coverage");
+assert.match(pkg.scripts.test, /memory-benchmark-gate\.test\.cjs/, "default npm test must prove strategy failure is a nonzero gate");
+assert.match(pkg.scripts.test, /memory-runtime-headless\.test\.cjs/, "default npm test must cover UI-free writeback");
+assert.match(pkg.scripts.test, /native-document-sidecar-migration\.test\.cjs/, "default npm test must cover reversible native SQLite shadow migration");
 assert.match(skill, /freshness=review/, "Skill docs must explain non-authoritative review freshness");
 assert.match(skill, /skill-candidates\.md.*review-only|review-only draft material/s, "Skill docs must treat skill candidates as review material");
 assert.match(skill, /tool-skill-inventory\.md.*read-only candidate|read-only candidate material/s, "Skill docs must treat tool inventory as read-only candidate material");
@@ -1375,6 +1416,7 @@ assert.ok(
   fs.existsSync(helperPath),
   "Skill retrieval helper script must exist",
 );
+assert.ok(fs.existsSync(headlessPath), "Skill strict-JSON headless runtime must exist");
 if (isPublicSourceStaging) {
   assert.ok(!pkg.build, "Source-only staging should not advertise binary packaging configuration");
   assert.ok(!pkg.scripts["apply:win-icon"], "Source-only staging should not advertise packaging icon helper scripts");

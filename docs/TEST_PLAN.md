@@ -110,6 +110,8 @@ Maintainer release gates:
 
 2026-07 external-audit security hardening adds `tests/security-policy.test.cjs` to default `npm test`: renderer settings patches must be key/type whitelisted; AI Provider URLs must normalize to trusted HTTPS hosts; untrusted HTTP/host values must be rejected before document text or API keys can be sent; renderer-controlled `projectPath` values must stay inside registered workspace paths. Smoke/source checks also guard CSP/header injection, navigation/window/permission denial, explicit Electron sandbox, Guardian destructive confirmation signals, app-owned Guardian default path, public staging privacy scan, and source-only staging behavior.
 
+2026-07 API-key-at-rest hardening adds `tests/sensitive-settings-policy.test.cjs` to default `npm test`: API keys must round-trip through an Electron `safeStorage`-compatible provider, use an integrity-checked `enc:v2` envelope, migrate legacy plaintext/`enc:v1` during schema startup, reject malformed or successfully-decrypted-but-tampered payloads, redact reflected Provider errors, reject insecure Linux `basic_text`, and refuse new plaintext persistence when OS-backed encryption is unavailable. Empty-key clearing remains available, including when the renderer only knows that a stored key is unavailable. Public staging must include the reviewed GitHub Actions workflow, exclude unreviewed `.github` files, and run `npm run test:electron-security` on Windows CI.
+
 2026-07 public staging verification requires both app-root and staging-root tests. From the app root, run `node scripts\prepare-public-repo.cjs`; then from `public-staging\zhixia-local-doc-knowledge`, run `npm test`. Staging is intentionally source-only: installer scripts, release artifacts, private runlogs, `.codex-knowledge`, local databases, vaults, backups, evidence, screenshots and user data must be absent. The staging script performs a content-level scan for private Windows user paths, private project/tool codenames and real-looking Codex thread IDs; a hit blocks publication.
 
 2026-07-05 layered recall adds focused coverage in `tests/memory-runtime-policy.test.cjs` and `tests/zhixia-local-docs-helper.test.cjs`: RuntimeContextPacket must declare `memoryMode=layered`, expose Hot/Warm/Skill/Cold `memoryLayers`, return a `recallPlan` whose default read order is Hot -> Warm -> Skill, and keep Cold as sourceRef-only / defaultRead=false. Helper fixtures now include both Example Project accepted product progress and old-thread maintenance records; product/project queries must rank accepted product progress first and must not include cold maintenance history by default.
@@ -137,6 +139,7 @@ Fresh-user / second-machine release signoff is intentionally outside default `np
 - Large-library performance：默认 `documents:list` 必须 metadata-first，启动不得向 renderer 推送全量 `contentText`；选中文档正文必须通过 `documents:get` 按需读取。启动自动入库必须延迟、每日 cadence、小批次且 preservation-only；自动 watcher 默认关闭，开启后文件事件不得扫描全部 workspace roots。项目总览必须 map-based 派生，避免 projects × documents 级别重算。
 - Project detection：项目页只展示高置信项目卡片。分类必须正向依赖 PRD/技术设计/测试计划/README、Codex 项目历史、知识/记忆、多个相关来源等组合证据；单条链接/截图/视频/剪贴板、依赖/构建/备份/vault/生成知识目录、孤立工具或 Skill 记录不得成为普通项目卡片。低置信但可能有关联的资料进入“待整理线索”。
 - Security policy：设置更新必须经过键和类型白名单；AI Provider 只允许 trusted HTTPS endpoint；保存的 API Key 不得被转发到未信任 host；项目记忆写入和工具扫描必须限制在 registered workspace；Electron 必须有 CSP、sandbox、导航/开窗/权限拒绝；Guardian 清理、瘦身、compact 和 archive queue 生成必须要求用户确认；默认 Guardian 脚本路径必须位于应用自有 userData 或由显式环境变量覆盖。
+- AI Provider response stream 必须有 1 MiB 上限，并在 `aborted`、`error`、未完成 `close`、request error/timeout 时结束 Promise；不得让 AI 整理或连接测试永久停在 busy 状态。
 - Public staging hygiene：`prepare:public` 必须用白名单生成 staging，排除私有/生成目录，生成 public-safe release notes 和 manifest，改写或拦截私有路径、私有代号和真实形态 thread id。公开 staging 的 `npm test` 必须通过，且公开 README/package 不能宣传不存在的 installer/package 命令为普通用户默认流程。
 - Project / CEO Flow 记录：用固定文档、经验卡和 handoff fixtures 验证 ProjectRecord / CEOFlowRecord 是启发式运行时视图，并正确暴露 source refs、freshness 和 planned/governance 缺口提示。
 - Codex 工具与 Skill 资产图谱：`tests/tool-skill-inventory-policy.test.cjs` 用临时 `skills/`、`codex-skills/`、workflow script 和项目 `scripts/` fixtures 验证 ToolSkillRecord candidate 只读生成；`tests/agent-retrieve-policy.test.cjs` 验证 `tool_skill_record` 作为 compact metadata retrieval kind；`tests/smoke-test.cjs` 验证项目导出会写 `tool-skill-inventory.md/json`、`read-project-knowledge.cjs` 可按 `tool_inventory` 检索、主进程/预加载/类型/UI 提供 scan/read/confirm loop、一等工具页、per-record governance metadata 和 Agent retrieval support，且确认绑定 live inventory snapshot hash；不得读取 `.env`、token、完整 shell history 或 raw session，也不得自动安装/执行。
@@ -172,7 +175,7 @@ Fresh-user / second-machine release signoff is intentionally outside default `np
 27. 使用包含万级记录或约 200MB SQLite 的知识库启动应用，确认启动、文档列表和 watcher 状态查询不会触发 `sql.js` wasm `memory access out of bounds`；监听失败时会自动关闭 `autoWatchChanges` 而不是反复崩溃。
 28. 进入项目详情的“知识”分区，点击“整理”，确认生成知识条目、分类计数和来源路径可见。
 29. 在已扫描项目中确认 `.codex-knowledge/knowledge-items.json` 和 `knowledge-items.md` 已生成，内容是 compact 摘要和来源指针。
-30. 打开设置页，确认 DeepSeek/OpenAI 兼容 Base URL、模型、API Key 输入框可见；已保存 key 不显示明文。
+30. 打开设置页，确认 DeepSeek/OpenAI 兼容 Base URL、模型、API Key 输入框可见；已保存 key 不显示明文。检查 SQLite `settings.aiProviderApiKey` 使用完整性校验的 `enc:v2:` 密文 envelope，旧明文/`enc:v1` key 在首次启动后完成迁移；系统加密不可用时保存新 key 应失败而不是明文落盘，旧值显示为“不可用”但仍可清除。
 31. 未配置 API Key 时点击“AI 整理”，确认会本地降级或提示未使用网络，不阻断知识条目生成。
 32. 如有测试 API Key，点击“测试连接”和“AI 整理”，确认只在手动点击后联网，项目导出不包含 API Key。
 33. 尝试把 AI Provider Base URL 设置为 HTTP 或非 trusted host，确认设置被拒绝或连接测试失败；保存的 API Key 不应被发送到该端点。
@@ -240,3 +243,10 @@ Fresh-user / second-machine release signoff is intentionally outside default `np
 - 应用窗口、主 exe、桌面快捷方式、安装器、卸载器和安装器头部不再使用 Electron 默认图标。
 - 如果覆盖安装后桌面仍显示旧图标，删除旧快捷方式或卸载旧版后重装，并重新检查 `0.8.1` 快捷方式。
 - 卸载安装版时能干净删除知匣本地数据和自动安装的知匣 Skill；升级安装时不会误删数据。
+# 2026-07-28 Memory Runtime gates
+
+- `tests/knowledge-freshness-dedupe.test.cjs`: real age/canonical freshness and duplicate diagnostic merge.
+- `tests/project-identity-policy.test.cjs`: linked-worktree inheritance and foreign-project rejection.
+- `tests/memory-runtime-headless.test.cjs`: strict JSON, UI-free writeback/recall, sourceRef retention, idempotency, receipts, and unsafe-input rejection.
+- `tests/memory-benchmark-gate.test.cjs`: deliberate strategy failure must exit nonzero.
+- `tests/native-document-sidecar-migration.test.cjs`: exact snapshot hash, unchanged source, row-count parity, metadata-only shadow, absent body sentinel, deterministic rollback receipt.

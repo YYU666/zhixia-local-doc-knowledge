@@ -77,7 +77,7 @@ npm test
 npm run build
 ```
 
-公开 source-only 仓库默认不包含 Windows 安装器脚本或打包命令；二进制发布流程应在签名、安装器和分发策略完成后单独维护。公开 staging 的默认 `npm test` 运行源码级政策、契约和 helper 测试；依赖 `sql.js` 的数据库测试和 Electron 安装版 E2E 属于完整开发环境 / 维护者 release gate。
+公开 source-only 仓库默认不包含 Windows 安装器脚本或打包命令；二进制发布流程应在签名、安装器和分发策略完成后单独维护。公开 staging 的默认 `npm test` 运行源码级政策、契约和 helper 测试；Windows CI 另行运行 `npm run test:electron-security`，以隔离临时数据库验证真实 safeStorage 迁移。其余依赖 `sql.js` 的数据库测试和安装版 E2E 属于完整开发环境 / 维护者 release gate。
 
 
 在 source-only public staging 里，package metadata 会被收窄到开发、构建、测试和 `prepare:public`。安装包、签名、portable、fresh-user 验收属于维护者 release gate，不是普通公开源码使用者的默认流程。

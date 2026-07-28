@@ -49,14 +49,21 @@ const publicDocs = new Set([
   "PUBLIC_REPO_LAYOUT.md",
   "TECHNICAL_DESIGN.md",
   "TEST_PLAN.md",
+  "NATIVE_SQLITE_MIGRATION_PLAN.md",
 ]);
 
 const publicScripts = new Set([
   "audit-openclaw-memory-index.py",
   "clear-openclaw-memory-index.py",
+  "enforce-memory-benchmark-gate.cjs",
+  "plan-native-document-migration.cjs",
   "prepare-public-repo.cjs",
   "preserve-openclaw-memory.ps1",
   "remove-verified-openclaw-memory.ps1",
+]);
+
+const publicGitHubFiles = new Set([
+  "workflows/ci.yml",
 ]);
 
 const publicDirs = new Set([
@@ -157,7 +164,7 @@ function shouldExcludeRelative(relativePath) {
 function shouldIncludeTopLevel(entryName) {
   if (rootFiles.has(entryName)) return true;
   if (publicDirs.has(entryName)) return true;
-  if (entryName === "docs" || entryName === "scripts") return true;
+  if (entryName === ".github" || entryName === "docs" || entryName === "scripts") return true;
   return false;
 }
 
@@ -166,6 +173,7 @@ function shouldIncludeFile(relativePath) {
   if (shouldExcludeRelative(relativePath)) return false;
   const [top, second] = normalized.split("/");
   if (!shouldIncludeTopLevel(top)) return false;
+  if (top === ".github") return publicGitHubFiles.has(normalized.slice(".github/".length));
   if (top === "docs") return publicDocs.has(second || "");
   if (top === "scripts") return publicScripts.has(second || "");
   return true;
@@ -349,6 +357,14 @@ function writePublicReleaseNotes() {
     "- OpenClaw native durable memory stays disabled; raw sessions, local backup paths, credentials, and base64 payloads are not exposed to the provider packet.",
     "- Added verified migration, audit, junction/path confinement, JSON-secret redaction, token-budget, and regression coverage.",
     "",
+    "## Post-0.9.0 - Security And CI Hardening",
+    "",
+    "- AI Provider API keys are encrypted with Electron safeStorage before SQLite persistence, with legacy plaintext migration and fail-closed unavailable/tampered handling.",
+    "- Added unit and isolated Electron E2E coverage proving ciphertext-at-rest, main-process round-trip, and renderer masking.",
+    "- AI Provider response streams are capped at 1 MiB and settle on aborted, error, incomplete close, timeout, or request failure so partial remote responses cannot leave the UI permanently busy.",
+    "- Added a curated Windows GitHub Actions workflow for lockfile install, tests, build, production high-severity audit, and full-tree critical audit.",
+    "- Updated electron-builder to 26.15.3; documented remaining development-only transitive advisories that have no compatible upstream fix and are not shipped as runtime dependencies.",
+    "",
     "## 0.8.3",
     "",
     "- Added safe-relief history preservation, compact thread recovery packets, conservative project classification, and metadata-first large-library startup behavior.",
@@ -376,7 +392,12 @@ function writePublicPackageJson() {
       "dev:electron": sourcePackage.scripts["dev:electron"],
       build: sourcePackage.scripts.build,
       test: publicTestScript,
+      ...(sourcePackage.scripts["test:electron-security"]
+        ? { "test:electron-security": sourcePackage.scripts["test:electron-security"] }
+        : {}),
       "prepare:public": sourcePackage.scripts["prepare:public"],
+      "memory:gate": sourcePackage.scripts["memory:gate"],
+      "memory:migration:plan": sourcePackage.scripts["memory:migration:plan"],
     },
   };
   delete publicPackage.build;
@@ -389,7 +410,7 @@ function writePublicReadme() {
   let text = sanitizePublicDocText(fs.readFileSync(sourcePath, "utf8"));
   text = text.replace(
     /本地打包脚本存在，但公开源码仓库不应提交打包产物：\r?\n\r?\n```powershell\r?\nnpm run package:dir\r?\nnpm run package:portable\r?\nnpm run package:installer\r?\n```\r?\n/g,
-    "公开 source-only 仓库默认不包含 Windows 安装器脚本或打包命令；二进制发布流程应在签名、安装器和分发策略完成后单独维护。公开 staging 的默认 `npm test` 运行源码级政策、契约和 helper 测试；依赖 `sql.js` 的数据库测试和 Electron 安装版 E2E 属于完整开发环境 / 维护者 release gate。\n\n",
+    "公开 source-only 仓库默认不包含 Windows 安装器脚本或打包命令；二进制发布流程应在签名、安装器和分发策略完成后单独维护。公开 staging 的默认 `npm test` 运行源码级政策、契约和 helper 测试；Windows CI 另行运行 `npm run test:electron-security`，以隔离临时数据库验证真实 safeStorage 迁移。其余依赖 `sql.js` 的数据库测试和安装版 E2E 属于完整开发环境 / 维护者 release gate。\n\n",
   );
   fs.writeFileSync(targetPath, text, "utf8");
 }
@@ -549,5 +570,6 @@ module.exports = {
   sanitizePublicDocText,
   sanitizePublicCodeText,
   sanitizePublicStagingScript,
+  shouldIncludeFile,
   shouldSanitizeAsPublicDoc,
 };

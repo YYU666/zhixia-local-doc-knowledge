@@ -2201,9 +2201,23 @@ function App() {
   }
 
   async function saveAiProviderKey() {
-    await updateSettings({ aiProviderApiKey: aiKeyDraft });
-    setAiKeyDraft("");
-    setNotice(aiKeyDraft ? "AI Provider API Key 已保存到本机。" : "AI Provider API Key 已清空。");
+    try {
+      await updateSettings({ aiProviderApiKey: aiKeyDraft });
+      setAiKeyDraft("");
+      setNotice(aiKeyDraft ? "AI Provider API Key 已由系统加密保存。" : "AI Provider API Key 已清空。");
+    } catch (error) {
+      setNotice(`API Key 保存失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function clearAiProviderKey() {
+    try {
+      setAiKeyDraft("");
+      await updateSettings({ aiProviderApiKey: "" });
+      setNotice("AI Provider API Key 已清空。");
+    } catch (error) {
+      setNotice(`API Key 清除失败：${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async function confirmProjectResumePacket() {
@@ -3941,7 +3955,10 @@ function App() {
     [experienceCards, projectExperienceCards, selectedExperienceId],
   );
 
-  const hasSavedAiKey = settings.aiProviderApiKey === "••••••••";
+  const aiKeyStatus = settings.aiProviderApiKeyStatus
+    || (settings.aiProviderApiKey === "••••••••" ? "available" : "empty");
+  const hasSavedAiKey = aiKeyStatus === "available";
+  const hasStoredAiKey = aiKeyStatus !== "empty";
 
   const documentCards = useMemo<ScoredDocument[]>(() => {
     const scopedDocuments = docFilter === "project" && effectiveProjectPath ? projectDocuments : documents;
@@ -8031,7 +8048,13 @@ function App() {
                   type="password"
                   value={aiKeyDraft}
                   onChange={(event) => setAiKeyDraft(event.target.value)}
-                  placeholder={hasSavedAiKey ? "已保存 API Key（不显示）" : "可选；留空时只使用本地整理"}
+                  placeholder={
+                    hasSavedAiKey
+                      ? "已保存 API Key（不显示）"
+                      : aiKeyStatus === "unavailable"
+                        ? "已保存的 Key 不可解密，可清除后重设"
+                        : "可选；留空时只使用本地整理"
+                  }
                 />
               </dd>
             </dl>
@@ -8048,12 +8071,14 @@ function App() {
               <button className="ghost-button" onClick={saveAiProviderKey} disabled={busy || !aiKeyDraft}>
                 保存 Key
               </button>
-              <button className="ghost-button" onClick={() => { setAiKeyDraft(""); updateSettings({ aiProviderApiKey: "" }); }} disabled={busy || !hasSavedAiKey}>
+              <button className="ghost-button" onClick={clearAiProviderKey} disabled={busy || !hasStoredAiKey}>
                 清除 Key
               </button>
             </div>
             <p className="settings-note">
-              默认离线可用；只有点击“AI 整理”或“测试连接”才会向配置的 OpenAI 兼容接口发起请求。密钥只保存在本机。
+              {aiKeyStatus === "unavailable"
+                ? "已保存的 Key 当前无法由系统解密，不会发送给 AI Provider；可点击“清除 Key”后重新保存。"
+                : "默认离线可用；只有点击“AI 整理”或“测试连接”才会向配置的 OpenAI 兼容接口发起请求。密钥只保存在本机。"}
             </p>
           </section>
 

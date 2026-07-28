@@ -733,7 +733,11 @@ function main() {
     assert.ok(context.items.length > 0, "runtime context should return compact items");
     assert.ok(context.items.every((item) => item.rawSessionPolicy === "not_allowed"), "runtime context must forbid raw-session defaults");
     assert.ok(context.sourceRefs.length > 0, "runtime context should preserve sourceRefs");
-    assert.equal(context.memoryMode, "layered", "runtime context should use layered memory mode");
+    assert.equal(context.memoryMode, "fallback_stale", "missing Memory Core must be disclosed as fallback_stale");
+    assert.equal(context.current, false, "fallback memory must not claim to be current");
+    assert.equal(context.recoveryReady, false, "fallback memory must not claim recovery readiness");
+    assert.equal(context.project.freshness, "stale", "fallback project freshness must be stale");
+    assert.ok(context.items.every((item) => item.authority?.validity !== "current"), "fallback authority validity must not be current");
     assert.ok(context.memoryLayers.hot.count >= 1, "runtime context should expose hot working memory");
     assert.ok(context.recallPlan.defaultReadOrder.includes("warm"), "recall plan should include warm long-term summaries");
     assert.equal(context.recallPlan.coldLayer.defaultRead, false, "cold history must not be read by default");
@@ -809,6 +813,7 @@ function main() {
       "project_brain", "project_anchor", "module_memory", "memory_episode", "project_checkpoint",
     ].includes(item.kind));
     assert.equal(memoryCoreContext.memoryCoreSidecar.status, "available", "runtime context should report an available Memory Core sidecar");
+    assert.equal(memoryCoreContext.memoryMode, "layered", "available Memory Core should enable layered memory mode");
     assert.equal(memoryCoreContext.memoryCoreSidecar.schemaVersion, "zhixia.memory_core_sidecar.v1", "helper should detect the Memory Core logical schema");
     assert.ok(memoryCoreItems.length > 0, "runtime context should retain safe persisted Memory Core records as advisory review items");
     assert.ok(memoryCoreItems.every((item) => Array.isArray(item.whyRecalled) && item.whyRecalled.length > 0), "Memory Core items should explain why they were recalled");
