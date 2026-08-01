@@ -754,6 +754,11 @@ function main() {
       "8",
       "--json",
     ], { env: sidecarEnv });
+    assert.equal(sidecarContext.memoryMode, "fallback_stale", "helper-only authority must stay fallback_stale");
+    assert.equal(sidecarContext.current, false, "helper-only authority must never claim current");
+    assert.equal(sidecarContext.recoveryReady, false, "helper-only authority must never claim recovery readiness");
+    assert.equal(sidecarContext.project.current, false, "helper project status must fail closed");
+    assert.equal(sidecarContext.project.recoveryReady, false, "helper project recovery status must fail closed");
     const sidecarFacts = sidecarContext.items.filter((item) => item.kind === "memory_fact");
     const sidecarFactIds = sidecarFacts.map((item) => item.id);
     assert.equal(sidecarContext.memoryFactSidecar.status, "available", "runtime context should report an available read-only sidecar");
@@ -813,7 +818,7 @@ function main() {
       "project_brain", "project_anchor", "module_memory", "memory_episode", "project_checkpoint",
     ].includes(item.kind));
     assert.equal(memoryCoreContext.memoryCoreSidecar.status, "available", "runtime context should report an available Memory Core sidecar");
-    assert.equal(memoryCoreContext.memoryMode, "layered", "available Memory Core should enable layered memory mode");
+    assert.equal(memoryCoreContext.memoryMode, "fallback_stale", "unverified helper Memory Core must remain fallback_stale");
     assert.equal(memoryCoreContext.memoryCoreSidecar.schemaVersion, "zhixia.memory_core_sidecar.v1", "helper should detect the Memory Core logical schema");
     assert.ok(memoryCoreItems.length > 0, "runtime context should retain safe persisted Memory Core records as advisory review items");
     assert.ok(memoryCoreItems.every((item) => Array.isArray(item.whyRecalled) && item.whyRecalled.length > 0), "Memory Core items should explain why they were recalled");

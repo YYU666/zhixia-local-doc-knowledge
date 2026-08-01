@@ -5,20 +5,30 @@ description: "Use this skill for compact Zhixia project memory, runtime context,
 
 # Zhixia Local Docs
 
-Use Zhixia as the local source of truth. Treat `.codex-knowledge/` as the handoff boundary between the desktop app and Codex.
+Use Zhixia as the local source of truth. The app-owned Memory Core is the primary authority; `.codex-knowledge/` is a bounded compatibility and handoff boundary.
 
 ## Default Routing
 
-Read the smallest relevant local packet before broad repository or history scans:
+At project bootstrap, takeover, direction correction, long-thread recovery, or before dispatch after a continuity warning, call the verified app-owned route first:
+
+```powershell
+'{"operation":"verify","workspace":"<workspace>","taskGoal":"<goal>"}' | node scripts/invoke-app-memory-runtime.cjs
+'{"operation":"retrieve","workspace":"<workspace>","taskGoal":"<goal>","queryType":"thread_recovery","limit":12,"tokenBudget":3000}' | node scripts/invoke-app-memory-runtime.cjs
+```
+
+Use the result as current memory only when `memoryMode=app_owned_memory_core`, `authorityVerification=app_owned_verified`, `current=true`, `recoveryReady=true`, and retrieval is non-empty. Otherwise continue only with explicit stale/partial status.
+
+For compatibility fallback, read the smallest relevant local packet before broad repository or history scans:
 
 Canonical bundle paths are `.codex-knowledge/project-resume.md`, `.codex-knowledge/retrieval-packet.md`, `.codex-knowledge/project-index.md`, compatibility `.codex-knowledge/project-knowledge.md`, `.codex-knowledge/project-artifacts.md`, `.codex-knowledge/context.md`, `.codex-knowledge/knowledge-items.md`, `.codex-knowledge/experience-cards.md`, `.codex-knowledge/skill-candidates.md`, and `.codex-knowledge/tool-skill-inventory.md`.
 
-1. `project-resume.md` for a heuristic resume packet.
-2. `retrieval-packet.md/json` for compact worker or review dispatch.
-3. `project-index.md/json` for project structure and source pointers.
-4. `project-artifacts.md/json`, `knowledge-items.md/json`, and `experience-cards.md/json` for bounded metadata and summaries.
-5. `tool-skill-inventory.md/json` and `skill-candidates.md/json` only as review material.
-6. Task-level `context.md` when the user exported a specific source for the current task.
+1. `thread-recovery-packet.json` for the latest bounded app-generated compatibility view.
+2. `project-resume.md` for a heuristic resume packet.
+3. `retrieval-packet.md/json` for compact worker or review dispatch.
+4. `project-index.md/json` for project structure and source pointers.
+5. `project-artifacts.md/json`, `knowledge-items.md/json`, and `experience-cards.md/json` for bounded metadata and summaries.
+6. `tool-skill-inventory.md/json` and `skill-candidates.md/json` only as review material.
+7. Task-level `context.md` when the user exported a specific source for the current task.
 
 Do not load old chats, raw sessions, screenshots, base64, credentials, logs, or giant Markdown by default. Use source references to inspect a narrow canonical source only when compact context is insufficient.
 
@@ -67,6 +77,7 @@ Read [references/memory-core-lifecycle.md](references/memory-core-lifecycle.md) 
 
 ## Authority And Scope
 
+- Verified app-owned `verify/retrieve` is the only packaged Codex route that may claim `current=true` and `recoveryReady=true`. It binds exact project identity, baseline HEAD, canonical source hashes, complete continuity pagination, and a signed authority receipt.
 - The packaged helper has no constrained app-owned receipt verifier. Persisted MemoryFact and Memory Core statuses are therefore advisory only: output uses `authorityVerification="unavailable"`, `authoritative=false`, review freshness/status, and human confirmation where applicable.
 - Unverified accepted or curated rows cannot fill continuity slots and cannot make `recoveryReady=true`.
 - Continuity cursors carry an accumulated manifest-prefix digest. A forged offset-only or altered cursor is invalid.
@@ -132,3 +143,4 @@ Do not run Guardian cleanup or session-body optimization automatically. Explicit
 - [references/context-bundle.md](references/context-bundle.md): context bundle fields and citation format.
 - [references/openclaw-cold-archive.md](references/openclaw-cold-archive.md): Codex audit retrieval and OpenClaw packet-injection boundary.
 - [references/headless-runtime-contract.md](references/headless-runtime-contract.md): strict-JSON lifecycle, project identity, writeback, and receipt contract.
+- [references/app-owned-memory-runtime.md](references/app-owned-memory-runtime.md): verified bootstrap/recovery route and compatibility refresh contract.

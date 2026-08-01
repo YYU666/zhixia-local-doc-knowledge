@@ -6,17 +6,26 @@ const { DatabaseSync } = require("node:sqlite");
 const {
   MEMORY_RUNTIME_BUSY_TIMEOUT_MS,
   indexPath,
+  listSemanticMemoryEntities,
+  listSemanticMemoryRelations,
   listMemoryRuntimeTriggerReceipts,
   openMemoryRuntimeIndex,
   reconcileMemorySearchItems,
   listMemoryFacts,
   searchMemoryRuntimeIndex,
+  retrieveSemanticGraphPaths,
   tokenizeIndexText,
   upsertMemorySearchItems,
   upsertMemoryFact,
+  upsertSemanticGraphRecords,
   writeMemoryFactsFromEvidence,
   writeMemoryRuntimeTriggerReceipt,
 } = require("../electron/memoryRuntimeIndexStore.cjs");
+const {
+  buildSemanticGraphSeedFromRuntimeItems,
+  normalizeSemanticEntity,
+  normalizeSemanticRelation,
+} = require("../electron/semanticMemoryGraphPolicy.cjs");
 
 function main() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-memory-index-"));
@@ -346,6 +355,338 @@ function main() {
     });
     assert.equal(keySanitizedReceipt.rejected, true, "dangerous receipt object keys must fail closed");
     assert.equal(JSON.stringify(keySanitizedReceipt).includes("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"), false);
+
+    const graphProjectA = path.join(root, "semantic-project-a");
+    const graphProjectB = path.join(root, "semantic-project-b");
+    const subsetProject = path.join(root, "semantic-subset-project");
+    fs.mkdirSync(path.join(graphProjectA, "docs"), { recursive: true });
+    fs.mkdirSync(path.join(graphProjectB, "docs"), { recursive: true });
+    fs.mkdirSync(path.join(subsetProject, "docs"), { recursive: true });
+    const graphRefA = [{ kind: "canonical_doc", path: "docs/DECISIONS.md", hash: "project-a-decisions" }];
+    const graphRefB = [{ kind: "canonical_doc", path: "docs/DECISIONS.md", hash: "project-b-decisions" }];
+    function graphEntity(projectPath, input, sourceRefs) {
+      const result = normalizeSemanticEntity({
+        projectPath,
+        status: "active",
+        sourceRefs,
+        provenance: "human_confirmed",
+        ...input,
+      });
+      assert.equal(result.ok, true, JSON.stringify(result.reasonCodes));
+      return result.entity;
+    }
+    function graphRelation(projectPath, input, sourceRefs, acceptedSourceBackedEvidence = false) {
+      const result = normalizeSemanticRelation({
+        projectPath,
+        status: "active",
+        sourceRefs,
+        provenance: "explicit",
+        ...input,
+      }, { acceptedSourceBackedEvidence });
+      assert.equal(result.ok, true, JSON.stringify(result.reasonCodes));
+      return result.relation;
+    }
+
+    const subsetA = buildSemanticGraphSeedFromRuntimeItems([{
+      id: "subset-a-example_project-checkpoint",
+      kind: "project_artifact",
+      projectPath: subsetProject,
+      title: "Current engine architecture",
+      summary: "Accepted current engine direction",
+      status: "active",
+      sourceRefs: [{
+        kind: "canonical_doc",
+        path: "docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md",
+        updatedAt: "2026-08-01T01:00:00.000Z",
+      }],
+    }], { projectPath: subsetProject, projectName: "Subset Project" });
+    const subsetAWrite = upsertSemanticGraphRecords(root, subsetA, { projectPath: subsetProject });
+    assert.equal(subsetAWrite.entitiesWritten, 2);
+    assert.equal(subsetAWrite.relationsWritten, 1);
+    const persistedProjectAfterA = listSemanticMemoryEntities(root, { projectPath: subsetProject, limit: 20 })
+      .find((item) => item.kind === "project");
+    assert.equal(persistedProjectAfterA.createdAt, "1970-01-01T00:00:00.000Z");
+
+    const subsetB = buildSemanticGraphSeedFromRuntimeItems([{
+      id: "subset-b-rendering",
+      kind: "decision",
+      projectPath: subsetProject,
+      title: "Rendering pipeline decision",
+      summary: "Use the accepted modular rendering pipeline",
+      status: "active",
+      sourceRefs: [{
+        kind: "canonical_doc",
+        path: "docs/RENDERING.md",
+        updatedAt: "2026-08-01T02:00:00.000Z",
+      }],
+    }], { projectPath: subsetProject, projectName: "Subset Project" });
+    const subsetBWrite = upsertSemanticGraphRecords(root, subsetB, { projectPath: subsetProject });
+    assert.equal(subsetBWrite.entitiesWritten, 2, "subset B must add its item and update the reused project entity");
+    assert.equal(subsetBWrite.relationsWritten, 1);
+    const subsetEntities = listSemanticMemoryEntities(root, { projectPath: subsetProject, limit: 20 });
+    const subsetRelations = listSemanticMemoryRelations(root, { projectPath: subsetProject, limit: 20 });
+    assert.equal(subsetEntities.length, 3, "project plus both subset entities must remain valid and visible");
+    assert.equal(subsetRelations.length, 2, "both subset relations must remain connected");
+    assert.equal(subsetEntities.find((item) => item.kind === "project").createdAt, persistedProjectAfterA.createdAt, "project createdAt must remain immutable across subsets");
+    assert.ok(retrieveSemanticGraphPaths(root, { projectPath: subsetProject, taskGoal: "EXAMPLE_PROJECT 当前引擎架构" }).hitCount > 0, "source-ref basename alias must support the EXAMPLE_PROJECT architecture query");
+    assert.ok(retrieveSemanticGraphPaths(root, { projectPath: subsetProject, taskGoal: "rendering pipeline" }).hitCount > 0, "subset B must retain a connected query path");
+    const subsetBRepeat = upsertSemanticGraphRecords(root, subsetB, { projectPath: subsetProject });
+    assert.equal(subsetBRepeat.entitiesWritten, 0);
+    assert.equal(subsetBRepeat.entitiesUnchanged, 2);
+    assert.equal(subsetBRepeat.relationsWritten, 0);
+    assert.equal(subsetBRepeat.relationsUnchanged, 1);
+
+    const subsetBAtC = buildSemanticGraphSeedFromRuntimeItems([{
+      id: "subset-b-rendering",
+      kind: "decision",
+      projectPath: subsetProject,
+      title: "Rendering pipeline decision",
+      summary: "Use the accepted modular rendering pipeline",
+      status: "active",
+      sourceRefs: [{
+        kind: "canonical_doc",
+        path: "docs/RENDERING.md",
+        updatedAt: "2026-08-01T03:00:00.000Z",
+      }],
+    }], { projectPath: subsetProject, projectName: "Subset Project" });
+    const relationCreatedAtBeforeC = listSemanticMemoryRelations(root, { projectPath: subsetProject, limit: 20 })
+      .find((item) => item.id === subsetBAtC.relations[0].id).createdAt;
+    const subsetBAtCWrite = upsertSemanticGraphRecords(root, subsetBAtC, { projectPath: subsetProject });
+    assert.ok(subsetBAtCWrite.persistedCreatedAtPreserved >= 2, "reused item and relation hashes must preserve their persisted creation times");
+    const relationAfterC = listSemanticMemoryRelations(root, { projectPath: subsetProject, limit: 20 })
+      .find((item) => item.id === subsetBAtC.relations[0].id);
+    assert.equal(relationAfterC.createdAt, relationCreatedAtBeforeC);
+    const subsetBAtCRepeat = upsertSemanticGraphRecords(root, subsetBAtC, { projectPath: subsetProject });
+    assert.equal(subsetBAtCRepeat.entitiesWritten, 0);
+    assert.equal(subsetBAtCRepeat.relationsWritten, 0);
+
+    const alternateCreatedAtProject = normalizeSemanticEntity({
+      ...subsetBAtC.entities.find((item) => item.kind === "project"),
+      createdAt: "2026-08-01T02:00:00.000Z",
+    }).entity;
+    const corruptDb = openMemoryRuntimeIndex(root);
+    try {
+      corruptDb.prepare("UPDATE semantic_memory_entities SET contentHash = ? WHERE id = ?")
+        .run(alternateCreatedAtProject.contentHash, alternateCreatedAtProject.id);
+    } finally {
+      corruptDb.close();
+    }
+    assert.equal(listSemanticMemoryEntities(root, { projectPath: subsetProject, limit: 20 }).some((item) => item.id === alternateCreatedAtProject.id), false, "fixture must reproduce an existing retained-createdAt/hash mismatch");
+    const repairedSubset = upsertSemanticGraphRecords(root, subsetBAtC, { projectPath: subsetProject });
+    assert.ok(repairedSubset.existingRowsRehashed >= 1, "next bounded upsert must self-heal an already-corrupted hash");
+    const repairedProject = listSemanticMemoryEntities(root, { projectPath: subsetProject, limit: 20 })
+      .find((item) => item.id === alternateCreatedAtProject.id);
+    assert.equal(repairedProject.createdAt, persistedProjectAfterA.createdAt);
+    const repairedRepeat = upsertSemanticGraphRecords(root, subsetBAtC, { projectPath: subsetProject });
+    assert.equal(repairedRepeat.entitiesWritten, 0, "self-healed subset must return to idempotent upserts");
+
+    const projectEntityA = graphEntity(graphProjectA, { kind: "project", canonicalName: "Editor direction", aliases: ["shared editor alias"] }, graphRefA);
+    const currentDecision = graphEntity(graphProjectA, { kind: "decision", canonicalName: "Scene-first modular editor" }, graphRefA);
+    const oldDecision = graphEntity(graphProjectA, { kind: "decision", canonicalName: "Marketing-page editor", status: "superseded" }, graphRefA);
+    const currentPath = graphRelation(graphProjectA, {
+      fromEntityId: projectEntityA.id,
+      toEntityId: currentDecision.id,
+      predicate: "implemented_by",
+    }, graphRefA);
+    const oldPath = graphRelation(graphProjectA, {
+      fromEntityId: projectEntityA.id,
+      toEntityId: oldDecision.id,
+      predicate: "implemented_by",
+      status: "superseded",
+      validTo: "2026-07-31T00:00:00.000Z",
+    }, graphRefA);
+    const supersedesPath = graphRelation(graphProjectA, {
+      fromEntityId: currentDecision.id,
+      toEntityId: oldDecision.id,
+      predicate: "supersedes",
+    }, graphRefA);
+    const graphWrite = upsertSemanticGraphRecords(root, {
+      entities: [projectEntityA, currentDecision, oldDecision],
+      relations: [currentPath, oldPath, supersedesPath],
+    }, { projectPath: graphProjectA });
+    assert.equal(graphWrite.entitiesWritten, 3);
+    assert.equal(graphWrite.relationsWritten, 3);
+    assert.equal(graphWrite.rejected, 0);
+    const graphRepeat = upsertSemanticGraphRecords(root, {
+      entities: [projectEntityA, currentDecision, oldDecision],
+      relations: [currentPath, oldPath, supersedesPath],
+    }, { projectPath: graphProjectA });
+    assert.equal(graphRepeat.entitiesUnchanged, 3, "semantic graph upserts must be idempotent");
+    assert.equal(graphRepeat.relationsUnchanged, 3);
+
+    const projectEntityB = graphEntity(graphProjectB, { kind: "project", canonicalName: "Foreign editor", aliases: ["shared editor alias"] }, graphRefB);
+    const foreignDecision = graphEntity(graphProjectB, { kind: "decision", canonicalName: "Foreign-only editor decision" }, graphRefB);
+    const foreignPath = graphRelation(graphProjectB, {
+      fromEntityId: projectEntityB.id,
+      toEntityId: foreignDecision.id,
+      predicate: "implemented_by",
+    }, graphRefB);
+    upsertSemanticGraphRecords(root, { entities: [projectEntityB, foreignDecision], relations: [foreignPath] }, { projectPath: graphProjectB });
+
+    const currentGraph = retrieveSemanticGraphPaths(root, {
+      projectPath: graphProjectA,
+      taskGoal: "What is the current editor direction?",
+      maxPaths: 12,
+      tokenBudget: 1200,
+    });
+    assert.equal(currentGraph.attempted, true);
+    assert.ok(currentGraph.graphPaths.some((graphPath) => graphPath.to.id === currentDecision.id));
+    assert.equal(currentGraph.graphPaths.some((graphPath) => graphPath.to.id === oldDecision.id || graphPath.from.id === oldDecision.id), false, "default recall must exclude superseded endpoints");
+    assert.ok(currentGraph.graphPaths.length <= 12);
+    assert.ok(currentGraph.tokenEstimate <= 1200);
+    assert.equal(currentGraph.performance.oneHop, true);
+    assert.ok(currentGraph.performance.entityCandidates <= 96);
+    assert.ok(currentGraph.performance.relationCandidates <= 192);
+    assert.equal(currentGraph.performance.noRawBodyRead, true);
+    assert.equal(currentGraph.performance.noBackgroundRebuild, true);
+
+    const historicalGraph = retrieveSemanticGraphPaths(root, {
+      projectPath: graphProjectA,
+      taskGoal: "editor direction marketing page",
+      queryType: "review_gate",
+      maxPaths: 12,
+    });
+    assert.ok(historicalGraph.graphPaths.some((graphPath) => graphPath.status === "superseded" || graphPath.to.status === "superseded"), "review retrieval must expose superseded decision history");
+
+    const aliasIsolation = retrieveSemanticGraphPaths(root, {
+      projectPath: graphProjectA,
+      taskGoal: "shared editor alias",
+    });
+    assert.ok(aliasIsolation.graphPaths.length > 0);
+    assert.equal(JSON.stringify(aliasIsolation).includes("Foreign-only editor decision"), false, "same alias in another project must not leak");
+
+    const globalRef = [{ kind: "review_report", uri: "memory-runtime://review/global-semantic", hash: "global-review" }];
+    const globalFrom = normalizeSemanticEntity({ scope: "global", kind: "concept", canonicalName: "Global review pattern", status: "review", sourceRefs: globalRef, provenance: "explicit" }).entity;
+    const globalTo = normalizeSemanticEntity({ scope: "global", kind: "rule", canonicalName: "Global review destination", status: "review", sourceRefs: globalRef, provenance: "explicit" }).entity;
+    const globalRelation = normalizeSemanticRelation({ scope: "global", fromEntityId: globalFrom.id, toEntityId: globalTo.id, predicate: "applies_to", status: "review", sourceRefs: globalRef, provenance: "explicit" }).relation;
+    upsertSemanticGraphRecords(root, { entities: [globalFrom, globalTo], relations: [globalRelation] });
+    assert.equal(retrieveSemanticGraphPaths(root, { projectPath: graphProjectA, taskGoal: "Global review pattern", queryType: "review_gate" }).hitCount, 0, "global review material must remain opt-in");
+    const allowedGlobalReview = retrieveSemanticGraphPaths(root, { projectPath: graphProjectA, taskGoal: "Global review pattern", queryType: "review_gate", allowGlobalReview: true });
+    assert.ok(allowedGlobalReview.graphPaths.some((graphPath) => graphPath.id === globalRelation.id));
+    assert.equal(allowedGlobalReview.graphPaths.find((graphPath) => graphPath.id === globalRelation.id)?.status, "review", "global evidence must never masquerade as project current memory");
+
+    const unsupportedEvidence = graphRelation(graphProjectA, {
+      fromEntityId: currentDecision.id,
+      toEntityId: projectEntityA.id,
+      predicate: "supports",
+    }, graphRefA, true);
+    const unsupportedWrite = upsertSemanticGraphRecords(root, {
+      entities: [projectEntityA, currentDecision],
+      relations: [unsupportedEvidence],
+    }, { projectPath: graphProjectA });
+    assert.ok(unsupportedWrite.review >= 1, "supports without accepted fact evidence must be forced to review");
+    assert.equal(listSemanticMemoryRelations(root, { projectPath: graphProjectA }).find((relation) => relation.id === unsupportedEvidence.id)?.status, "review");
+
+    const acceptedEvidenceFact = upsertMemoryFact(root, {
+      projectPath: graphProjectA,
+      subject: "Scene-first benchmark",
+      predicate: "supports",
+      value: "Scene-first modular editor",
+      factType: "evidence",
+      status: "accepted",
+      observedAt: "2026-08-01T10:00:00.000Z",
+      sourceRefs: [{ kind: "accepted_evidence", path: "docs/DECISIONS.md", hash: "accepted-benchmark" }],
+    });
+    const supportedPath = graphRelation(graphProjectA, {
+      fromEntityId: projectEntityA.id,
+      toEntityId: currentDecision.id,
+      predicate: "supports",
+      factId: acceptedEvidenceFact.fact.id,
+    }, graphRefA, true);
+    const supportedWrite = upsertSemanticGraphRecords(root, {
+      entities: [projectEntityA, currentDecision],
+      relations: [supportedPath],
+    }, { projectPath: graphProjectA });
+    assert.equal(supportedWrite.rejected, 0);
+    assert.equal(listSemanticMemoryRelations(root, { projectPath: graphProjectA }).find((relation) => relation.id === supportedPath.id)?.status, "active");
+
+    const graphifyClaim = upsertMemoryFact(root, {
+      projectPath: graphProjectA,
+      subject: "70x token saving",
+      predicate: "derived_from",
+      value: "Graphify video 7668959622917580901",
+      factType: "claim",
+      status: "candidate",
+      confidence: 0.55,
+      observedAt: "2026-08-01T11:00:00.000Z",
+      sourceRefs: [{ kind: "social_video", uri: "https://www.douyin.com/video/7668959622917580901", hash: "graphify-video" }],
+    });
+    assert.ok(["candidate", "review"].includes(graphifyClaim.fact.status), "promotional token saving must stay a typed claim, not a current system fact");
+    const claimReviewGraph = retrieveSemanticGraphPaths(root, {
+      projectPath: graphProjectA,
+      taskGoal: "70x token saving Graphify",
+      queryType: "review_gate",
+    });
+    assert.ok(claimReviewGraph.graphPaths.some((graphPath) => graphPath.predicate === "derived_from" && graphPath.status === "review" && graphPath.factId === graphifyClaim.fact.id));
+    const claimDefaultGraph = retrieveSemanticGraphPaths(root, { projectPath: graphProjectA, taskGoal: "70x token saving Graphify" });
+    assert.equal(claimDefaultGraph.graphPaths.some((graphPath) => graphPath.factId === graphifyClaim.fact.id), false, "review claims must not masquerade as active current paths");
+
+    const entityCountBeforeUnsafe = listSemanticMemoryEntities(root, { projectPath: graphProjectA, limit: 500 }).length;
+    const unsafeGraphWrite = upsertSemanticGraphRecords(root, {
+      entities: [
+        { projectPath: graphProjectA, kind: "document", canonicalName: "raw", status: "active", provenance: "explicit", sourceRefs: [{ kind: "raw_session", path: "C:/demo/.codex/sessions/raw.jsonl" }] },
+        { projectPath: graphProjectA, kind: "document", canonicalName: "secret", status: "active", provenance: "explicit", sourceRefs: graphRefA, note: nakedToken },
+        { projectPath: graphProjectA, kind: "document", canonicalName: "base64", status: "active", provenance: "explicit", sourceRefs: graphRefA, image: `data:image/png;base64,${"A".repeat(240)}` },
+        { projectPath: graphProjectA, kind: "document", canonicalName: "giant", status: "active", provenance: "explicit", sourceRefs: graphRefA, body: "giant log ".repeat(2200) },
+      ],
+    }, { projectPath: graphProjectA });
+    assert.equal(unsafeGraphWrite.entitiesWritten, 0);
+    assert.equal(unsafeGraphWrite.rejected, 4);
+    assert.equal(listSemanticMemoryEntities(root, { projectPath: graphProjectA, limit: 500 }).length, entityCountBeforeUnsafe, "unsafe semantic fixtures must never persist");
+
+    const noHitGraph = retrieveSemanticGraphPaths(root, { projectPath: graphProjectA, taskGoal: "totally absent semantic sentinel" });
+    assert.equal(noHitGraph.hitCount, 0);
+    assert.deepEqual(noHitGraph.graphPaths, []);
+    assert.ok(noHitGraph.warnings.includes("semantic_graph_no_hit"));
+    const semanticReceipt = writeMemoryRuntimeTriggerReceipt(root, {
+      hook: "semantic_graph_recall",
+      queryType: "task_dispatch",
+      projectPath: graphProjectA,
+      returnedCount: currentGraph.hitCount,
+      tokenEstimate: currentGraph.tokenEstimate,
+      durationMs: currentGraph.performance.durationMs,
+      partial: currentGraph.partial,
+      warnings: currentGraph.warnings,
+      sourceRefs: currentGraph.graphPaths.flatMap((graphPath) => graphPath.sourceRefs),
+    });
+    assert.equal(semanticReceipt.hook, "semantic_graph_recall");
+    assert.equal(semanticReceipt.returnedCount, currentGraph.hitCount);
+    assert.equal(listMemoryRuntimeTriggerReceipts(root, { hook: "semantic_graph_recall", projectPath: graphProjectA }).length, 1);
+
+    const schemaDb = openMemoryRuntimeIndex(root);
+    try {
+      const entityColumns = new Set(schemaDb.prepare("PRAGMA table_info(semantic_memory_entities)").all().map((column) => column.name));
+      const relationColumns = new Set(schemaDb.prepare("PRAGMA table_info(semantic_memory_relations)").all().map((column) => column.name));
+      for (const column of ["projectPath", "projectId", "kind", "canonicalName", "aliasesJson", "status", "sourceRefsJson", "provenance", "confidence", "createdAt", "updatedAt", "contentHash"]) assert.ok(entityColumns.has(column));
+      for (const column of ["fromEntityId", "toEntityId", "predicate", "sourceRefsJson", "provenance", "confidence", "status", "validFrom", "validTo", "factId", "createdAt", "updatedAt", "contentHash"]) assert.ok(relationColumns.has(column));
+    } finally {
+      schemaDb.close();
+    }
+
+    const incompatibleRoot = path.join(root, "incompatible-semantic-schema");
+    fs.mkdirSync(incompatibleRoot, { recursive: true });
+    const incompatibleDb = new DatabaseSync(indexPath(incompatibleRoot));
+    incompatibleDb.exec("CREATE TABLE semantic_memory_entities (id INTEGER PRIMARY KEY, canonicalName TEXT)");
+    incompatibleDb.close();
+    assert.throws(() => upsertSemanticGraphRecords(incompatibleRoot, { entities: [], relations: [] }), /Incompatible semantic memory graph schema/, "incompatible semantic schemas must fail closed without rebuilding");
+    const preservedLegacyWrite = upsertMemorySearchItems(incompatibleRoot, [{
+      id: "legacy-provider-survives-semantic-failure",
+      kind: "project_artifact",
+      projectPath: graphProjectA,
+      title: "Legacy Hot Warm provider remains available",
+      summary: "An incompatible additive semantic schema must not disable existing retrieval.",
+      status: "current",
+      freshness: "fresh",
+      sourceRefs: graphRefA,
+    }]);
+    assert.equal(preservedLegacyWrite.indexed, 1, "semantic schema failure must remain isolated from legacy sidecar providers");
+    const preservedIncompatibleDb = new DatabaseSync(indexPath(incompatibleRoot));
+    try {
+      const preservedColumns = preservedIncompatibleDb.prepare("PRAGMA table_info(semantic_memory_entities)").all();
+      assert.deepEqual(preservedColumns.map((column) => column.name), ["id", "canonicalName"], "failed migration must preserve the incompatible table unchanged");
+    } finally {
+      preservedIncompatibleDb.close();
+    }
 
     const lockDb = new DatabaseSync(indexPath(root));
     let upsertLockLatencyMs = 0;

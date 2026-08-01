@@ -25,7 +25,7 @@
 
 CEO Flow 可以把知匣当作本地 Memory Runtime：
 
-1. 启动或续接项目时调用 `retrieve_context(task_goal)`，拿到当前项目的 compact context。
+1. 启动、接管或长线程恢复时先调用 app-owned strict-JSON `verify/retrieve`，只有精确项目身份、HEAD、canonical source hashes 和签名回执全部通过时才接受 `current/recoveryReady`；普通任务再调用 `retrieve_context(task_goal)` 获取 compact context。
 2. 派工前调用 `retrieve_precedent(task_type)`，查找相似任务、已接受经验和工具线索。
 3. 评审结束后调用 `writeback_evidence(result)`，把接受/修订/阻塞证据写入 app-owned inbox。
 4. 发现安全、可复用的模式时调用 `promote_memory(candidate)`，排队私有候选，等待人工 review。
@@ -37,8 +37,8 @@ CEO Flow 可以把知匣当作本地 Memory Runtime：
 - 文档导入和本地搜索：支持常见文本、Markdown、PDF、Word、CSV 等本地资料。
 - 项目识别：用 PRD、技术设计、测试计划、README、Codex 历史、知识/记忆等组合证据识别真实项目。
 - 个人库与待整理线索：单条链接、截图、剪贴板、视频、构建产物、备份、日志、依赖目录和生成知识文件不会作为普通项目卡片展示。
-- Memory Runtime：返回 compact context packet、precedent packet、evidence receipt、working memory 和私有候选。
-- Codex Skill helper：仓库内提供 `codex-skills/zhixia-local-docs`，便于 Codex 读取项目知识包或生成 evidence dry-run。
+- Memory Runtime：返回 compact context packet、precedent packet、evidence receipt、working memory、私有候选和不超过 3000 estimated tokens 的 source-backed ThreadRecoveryPacket。
+- Codex Skill：仓库内提供 `codex-skills/zhixia-local-docs`；启动/接管优先调用完整 app-owned Memory Core，文件 helper 只作为 `fallback_stale` advisory，并可生成 evidence dry-run。
 - 只读运行诊断：可展示本地进程和历史压力线索，但不 kill、不清理、不擅自修改 Codex 会话。
 - FlowSkill candidate bridge：接受且 source-backed 的 reusable pattern 可以生成私有 review 候选；不会自动安装、公开导出或执行。
 

@@ -14,6 +14,8 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
 const main = fs.readFileSync(path.join(root, "electron", "main.cjs"), "utf8");
 const agentRetrievePolicy = fs.readFileSync(path.join(root, "electron", "agentRetrievePolicy.cjs"), "utf8");
 const memoryRuntimePolicy = fs.readFileSync(path.join(root, "electron", "memoryRuntimePolicy.cjs"), "utf8");
+const memoryRuntimeIndexStore = fs.readFileSync(path.join(root, "electron", "memoryRuntimeIndexStore.cjs"), "utf8");
+const semanticMemoryGraphPolicy = fs.readFileSync(path.join(root, "electron", "semanticMemoryGraphPolicy.cjs"), "utf8");
 const memoryCoreRuntime = fs.readFileSync(path.join(root, "electron", "memoryCoreRuntime.cjs"), "utf8");
 const codexAutoIngestPolicy = fs.readFileSync(path.join(root, "electron", "codexThreadHistoryAutoIngestPolicy.cjs"), "utf8");
 const documentMetadataPolicy = fs.readFileSync(path.join(root, "electron", "documentMetadataPolicy.cjs"), "utf8");
@@ -493,6 +495,22 @@ assert.match(main, /retrieveHybridMemory/, "Memory Runtime must use deterministi
 assert.match(main, /writeMemoryFactsFromEvidence/, "accepted evidence writeback must feed temporal MemoryFact storage");
 assert.match(main, /writeMemoryRuntimeTriggerReceipt/, "Memory Runtime lifecycle hooks must leave trigger receipts");
 assert.match(main, /sidecarIndexWholeDatabaseExport:\s*false/, "sidecar memory index must not use whole-database export");
+assert.match(memoryRuntimeIndexStore, /CREATE TABLE IF NOT EXISTS semantic_memory_entities/, "semantic entities must live in the native Memory Runtime sidecar");
+assert.match(memoryRuntimeIndexStore, /CREATE TABLE IF NOT EXISTS semantic_memory_relations/, "semantic relations must live in the native Memory Runtime sidecar");
+assert.match(memoryRuntimeIndexStore, /withImmediateTransaction\(db,[\s\S]*semantic_memory_entities[\s\S]*semantic_memory_relations/, "semantic graph schema migration must be transactional and additive");
+assert.match(main, /retrieveMemoryRuntimeContext[\s\S]*retrieveSemanticGraphPaths\(memoryRuntimeRoot\(\)/, "task-time retrieve_context must automatically attempt semantic graph recall");
+assert.match(main, /buildSemanticGraphSeedFromRuntimeItems\(packet\.items[\s\S]*upsertSemanticGraphRecords\(memoryRuntimeRoot\(\)[\s\S]*retrieveSemanticGraphPaths\(memoryRuntimeRoot\(\)/, "task-time retrieve_context must seed from its bounded packet before semantic recall");
+assert.match(main, /deriveProjectIdentityEnvelope\(requestedSemanticGraphProjectPath\)[\s\S]*canonicalSemanticGraphProjectScope[\s\S]*acceptedProjectPaths:\s*semanticGraphScope\.acceptedProjectPaths/, "Electron graph seed/query must canonicalize linked worktrees through ProjectIdentityEnvelope");
+assert.match(main, /hook:\s*"semantic_graph_recall"[\s\S]*returnedCount:\s*semanticGraph\.hitCount/, "semantic graph recall must leave a bounded trigger receipt");
+assert.match(main, /warnings:\s*\[[\s\S]*?"semantic_graph_attempted"[\s\S]*?semantic_graph_seed_written/, "semantic graph receipt must explicitly prove the attempt and bounded seed result without storing task text");
+assert.match(main, /semanticGraphMaxPaths \|\| 12[\s\S]*semanticGraphTokenBudget \|\| 1200[\s\S]*semanticGraphMaxCandidates \|\| 96/, "semantic graph recall must keep hard path, token, and candidate caps");
+assert.match(semanticMemoryGraphPolicy, /provenance === "inferred"[\s\S]*status = "review"/, "inferred semantic relations must remain review-only");
+assert.match(semanticMemoryGraphPolicy, /rawBodyReads:\s*0[\s\S]*documentScans:\s*0/, "explicit graph extraction must not read raw bodies or scan documents");
+assert.match(semanticMemoryGraphPolicy, /MAX_RUNTIME_SEED_ITEMS\s*=\s*24[\s\S]*workspaceScans:\s*0[\s\S]*documentEnumerations:\s*0[\s\S]*generatedKnowledgeReads:\s*0/, "runtime graph population must stay bounded to compact packet metadata with no rescan");
+assert.match(semanticMemoryGraphPolicy, /runtimeSeedSourceAliases[\s\S]*basename[\s\S]*stem[\s\S]*createdAt:\s*new Date\(0\)\.toISOString\(\)/, "runtime graph seeds must use bounded source-ref aliases and deterministic project creation time");
+assert.match(memoryRuntimeIndexStore, /SELECT contentHash, createdAt FROM semantic_memory_entities[\s\S]*normalizeSemanticEntity\(\{ \.\.\.entity, createdAt: existingState\.createdAt \}/, "semantic upsert must preserve persisted createdAt when repairing replacement hashes");
+assert.match(semanticMemoryGraphPolicy, /backgroundTimer:\s*false[\s\S]*backgroundRebuild:\s*false/, "semantic one-hop assembly must not start timers or rebuild in background");
+assert.match(pkg.scripts.test, /semantic-memory-graph-policy\.test\.cjs/, "focused semantic graph coverage must run in default npm test");
 assert.match(memoryRuntimePolicy, /buildRuntimeContextPacket/, "Memory Runtime policy must build RuntimeContextPacket-shaped results");
 assert.match(memoryRuntimePolicy, /buildMemoryRouterPlan/, "Memory Runtime policy must expose a low-overhead MemoryRouter plan");
 assert.match(memoryRuntimePolicy, /hot_warm_cold_metadata_first/, "MemoryRouter must use hot/warm/cold metadata-first strategy");
@@ -1011,7 +1029,7 @@ assert.match(preparePublicRepoScript, /writePublicReleaseNotes[\s\S]*public-safe
 assert.match(preparePublicRepoScript, /function privatePublicationTermPatterns[\s\S]*\\b[\s\S]*sanitizePublicCodeText[\s\S]*replacePrivateTerms: false[\s\S]*module\.exports/, "Public staging sanitizer must use bounded private-term patterns and export code/doc sanitizers for behavior tests");
 assert.match(preparePublicRepoScript, /preserveStagingGitMetadata[\s\S]*restoreStagingGitMetadata/, "Public staging refresh must preserve the staging Git repository metadata");
 assert.match(preparePublicRepoScript, /entry\.name === "\.git"[\s\S]*continue/, "Public staging manifest must not enumerate Git internals");
-assert.match(preparePublicRepoScript, /Memory Core 0\.9\.0 adds an app-owned Authority Core/, "Public release notes must describe the current Memory Core release");
+assert.match(preparePublicRepoScript, /Memory Core 0\.9\.1 adds an app-owned strict-JSON recovery CLI/, "Public release notes must describe the verified long-thread recovery release");
 assert.match(preparePublicRepoScript, /node:sqlite sidecar stores compact Memory Core governance records/, "Public release notes must describe the current incremental Memory Core sidecar");
 assert.match(preparePublicRepoScript, /PUBLIC_STAGING_MANIFEST\.md/, "Public staging script must write a staging manifest");
 assert.match(preparePublicRepoScript, /Excluded Legacy Docs[\s\S]*zhixia-complete-product-goal\.md[\s\S]*RELEASE_COMPLETION_AUDIT\.md[\s\S]*private optimization monitors[\s\S]*private project evaluations/, "Public staging script must exclude private legacy doc categories without publishing private codenames");
@@ -1351,6 +1369,10 @@ const helperPath = path.join(skillPath, "scripts", "read-project-knowledge.cjs")
 const helper = fs.readFileSync(helperPath, "utf8");
 const headlessPath = path.join(skillPath, "scripts", "memory-runtime-headless.cjs");
 const headless = fs.readFileSync(headlessPath, "utf8");
+const appOwnedInvokerPath = path.join(skillPath, "scripts", "invoke-app-memory-runtime.cjs");
+const appOwnedInvoker = fs.readFileSync(appOwnedInvokerPath, "utf8");
+const appOwnedCliPath = path.join(root, "electron", "memoryRuntimeCli.cjs");
+const appOwnedCli = fs.readFileSync(appOwnedCliPath, "utf8");
 const projectIdentityPath = path.join(skillPath, "scripts", "project-identity.cjs");
 const projectIdentity = fs.readFileSync(projectIdentityPath, "utf8");
 assert.match(skill, /name: zhixia-local-docs/, "Zhixia Codex skill must declare its name");
@@ -1366,6 +1388,17 @@ assert.match(skill, /(?:\.codex-knowledge\/)?skill-candidates\.md/, "Skill must 
 assert.match(skill, /(?:\.codex-knowledge\/)?tool-skill-inventory\.md/, "Skill must explain tool skill inventory");
 assert.match(skill, /read-project-knowledge\.cjs/, "Skill must document the retrieval helper");
 assert.match(skill, /memory-runtime-headless\.cjs/, "Skill must document the strict-JSON headless runtime");
+assert.match(skill, /invoke-app-memory-runtime\.cjs[\s\S]*app_owned_memory_core[\s\S]*recoveryReady=true/, "Skill must route continuity triggers through the verified app-owned Memory Core before file fallback");
+assert.match(skill, /thread-recovery-packet\.json/, "Skill must document the bounded strict-JSON compatibility packet");
+assert.match(appOwnedInvoker, /app\.asar[\s\S]*memoryRuntimeCli\.cjs/, "repository Skill invoker must contain the packaged-source route for a future app.asar commander gate");
+assert.match(appOwnedInvoker, /ELECTRON_RUN_AS_NODE:\s*"1"/, "Skill invoker must run the packaged CLI in Node mode without opening Electron UI");
+assert.match(appOwnedCli, /function writeCompatibilityPackets[\s\S]*expectedProjectIdentitySha256[\s\S]*expectedScanSha256/, "app-owned CLI compatibility writes must require exact project and scan identity");
+assert.match(appOwnedCli, /case "write_compatibility": return writeCompatibilityPackets/, "strict-JSON CLI must expose the explicit compatibility refresh operation");
+assert.match(appOwnedCli, /compatibility-backups[\s\S]*COPYFILE_EXCL[\s\S]*MANIFEST\.json/, "compatibility refresh must back up generated packets before replacement");
+assert.match(appOwnedCli, /project_summary[\s\S]*accepted_progress[\s\S]*original_goal[\s\S]*architecture/, "thread recovery must combine Hot state with long-term corrective anchors");
+assert.match(appOwnedCli, /retrieveVerifiedSemanticGraph\(storeRoot, selectedItems[\s\S]*hook:\s*"semantic_graph_recall"/, "verified CLI retrieve must automatically expose graph recall and its receipt");
+assert.match(appOwnedCli, /unreadySemanticGraphSupplement[\s\S]*semantic_graph_memory_core_unready_no_seed[\s\S]*seed:[\s\S]*attempted:\s*false/, "unready CLI retrieve must still return an attempted zero-hit semantic graph without seeding");
+assert.match(appOwnedCli, /itemPacketTokenTarget[\s\S]*semanticGraph\.graphPaths\.length > 0[\s\S]*semanticGraph\.graphPaths = semanticGraph\.graphPaths\.slice\(0, -1\)/, "verified CLI must reserve total packet budget and trim graph paths first");
 assert.match(helper, /--query/, "retrieval helper must support --query");
 assert.match(helper, /--query-type/, "retrieval helper must support --query-type");
 assert.match(helper, /--runtime-context/, "retrieval helper must support explicit runtime context packets");
@@ -1408,6 +1441,7 @@ assert.match(pkg.scripts.test, /zhixia-local-docs-helper\.test\.cjs/, "default n
 assert.match(pkg.scripts.test, /memory-benchmark-gate\.test\.cjs/, "default npm test must prove strategy failure is a nonzero gate");
 assert.match(pkg.scripts.test, /memory-runtime-headless\.test\.cjs/, "default npm test must cover UI-free writeback");
 assert.match(pkg.scripts.test, /native-document-sidecar-migration\.test\.cjs/, "default npm test must cover reversible native SQLite shadow migration");
+assert.match(pkg.scripts.test, /example-project-memory-runtime-recovery\.test\.cjs/, "default npm test must cover verified EXAMPLE_PROJECT long-thread recovery and compatibility refresh");
 assert.match(skill, /freshness=review/, "Skill docs must explain non-authoritative review freshness");
 assert.match(skill, /skill-candidates\.md.*review-only|review-only draft material/s, "Skill docs must treat skill candidates as review material");
 assert.match(skill, /tool-skill-inventory\.md.*read-only candidate|read-only candidate material/s, "Skill docs must treat tool inventory as read-only candidate material");
@@ -1417,6 +1451,8 @@ assert.ok(
   "Skill retrieval helper script must exist",
 );
 assert.ok(fs.existsSync(headlessPath), "Skill strict-JSON headless runtime must exist");
+assert.ok(fs.existsSync(appOwnedInvokerPath), "Skill app-owned Memory Core invoker must exist");
+assert.ok(fs.existsSync(appOwnedCliPath), "app-owned Memory Runtime CLI must exist");
 if (isPublicSourceStaging) {
   assert.ok(!pkg.build, "Source-only staging should not advertise binary packaging configuration");
   assert.ok(!pkg.scripts["apply:win-icon"], "Source-only staging should not advertise packaging icon helper scripts");
@@ -1426,6 +1462,7 @@ if (isPublicSourceStaging) {
   assert.ok(!fs.existsSync(path.join(root, "scripts", "apply-windows-icon.cjs")), "Source-only staging should not include the packaging icon helper");
   assert.ok(!fs.existsSync(installerIncludePath), "Source-only staging should not include the installer include file");
 } else {
+  assert.ok(pkg.build.files.includes("electron/**/*") && pkg.build.files.includes("codex-skills/**/*"), "packaging config must include graph/CLI and repository Skill sources; physical app.asar proof remains post-package");
   assert.ok(
     pkg.build.files.includes("codex-skills/**/*"),
     "Packaged app must include bundled Codex skills",

@@ -2,9 +2,11 @@
 
 This public staging copy intentionally contains a short release summary instead of private operational runlogs.
 
-## 0.9.0 - Memory Core
+## 0.9.1 - Verified Long-Thread Recovery
 
-- Memory Core 0.9.0 adds an app-owned Authority Core with scoped capabilities, signed receipts, lifecycle transitions, restart rehydration, and fail-closed tamper/replay/revoke/expiry handling.
+- Memory Core 0.9.1 adds an app-owned strict-JSON recovery CLI with exact project identity, baseline HEAD, canonical source hashes, signed receipts, and non-empty continuity-first retrieval.
+- ThreadRecoveryPacket output is bounded to 3000 estimated tokens and deliberately combines Hot current state with original-goal and architecture anchors; raw sessions and generated giant packets remain outside authority.
+- Explicit compatibility refresh backs up former generated packets before replacing them with bounded Markdown views and a strict JSON handoff. Changed HEAD/source hashes and singleton goal conflicts fail closed.
 - ProjectBrain provides a fixed 14-slot continuity ledger for project identity, original goals, architecture, standing rules, modules, progress, tasks, blockers, failures, next actions, thread lineage, canonical documents, and checkpoints.
 - Mandatory continuity uses bounded multi-page manifests and opaque chained cursors. Invalid, cross-manifest, non-progressing, or truncated traversal remains partial and cannot claim recovery readiness.
 - The new node:sqlite sidecar stores compact Memory Core governance records, FTS5 indexes, temporal facts, trigger receipts, and non-destructive migrations without whole-database export.
@@ -13,7 +15,7 @@ This public staging copy intentionally contains a short release summary instead 
 - The project detail UI includes a read-only Project Memory view for continuity coverage, all 14 slots, missing/conflict/review status, trusted summaries, and bounded recall reasons.
 - Performance and privacy boundaries remain local-first and metadata-first: no default raw session bodies, giant Markdown, image/base64 payloads, credentials, background embedding, startup full scan, or Memory Core polling loop.
 
-## Post-0.9.0 - OpenClaw Memory Bridge
+## Post-0.9.1 - OpenClaw Memory Bridge
 
 - Added bounded OpenClaw session/runtime monitoring without a heartbeat polling loop.
 - Added an explicit sanitized cold-memory archive index for Codex audit and recovery queries.
@@ -21,13 +23,21 @@ This public staging copy intentionally contains a short release summary instead 
 - OpenClaw native durable memory stays disabled; raw sessions, local backup paths, credentials, and base64 payloads are not exposed to the provider packet.
 - Added verified migration, audit, junction/path confinement, JSON-secret redaction, token-budget, and regression coverage.
 
-## Post-0.9.0 - Security And CI Hardening
+## Post-0.9.1 - Security And CI Hardening
 
 - AI Provider API keys are encrypted with Electron safeStorage before SQLite persistence, with legacy plaintext migration and fail-closed unavailable/tampered handling.
 - Added unit and isolated Electron E2E coverage proving ciphertext-at-rest, main-process round-trip, and renderer masking.
 - AI Provider response streams are capped at 1 MiB and settle on aborted, error, incomplete close, timeout, or request failure so partial remote responses cannot leave the UI permanently busy.
 - Added a curated Windows GitHub Actions workflow for lockfile install, tests, build, production high-severity audit, and full-tree critical audit.
 - Updated electron-builder to 26.15.3; documented remaining development-only transitive advisories that have no compatible upstream fix and are not shipped as runtime dependencies.
+
+## Post-0.9.1 - Automatic Semantic Memory Graph
+
+- Added native SQLite semantic entities and relations as a bounded structural recall layer over authoritative project memory.
+- Task-time retrieval automatically seeds the graph from at most 24 compact authoritative items and performs bounded one-hop recall without a background timer or full-library scan.
+- Graph recall is isolated by exact project and worktree identity, and the final packet remains within the shared token budget and 32 KiB response ceiling.
+- Semantic graph matches remain advisory: they cannot set current or recovery-ready authority and cannot bypass continuity, freshness, or source-backed evidence gates.
+- Raw sessions, vault bodies, giant Markdown, images, and base64 payloads remain outside graph indexing and recall.
 
 ## 0.8.3
 

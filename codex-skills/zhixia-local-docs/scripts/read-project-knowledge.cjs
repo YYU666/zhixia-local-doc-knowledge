@@ -2471,7 +2471,7 @@ function collectPacketSourceRefs(items) {
 
 function buildRuntimeContextPacket(retrieval, options) {
   const memoryCoreStatus = retrieval.memoryCoreSidecar?.status || "missing";
-  const fallbackStale = memoryCoreStatus !== "available";
+  const fallbackStale = true;
   const items = (retrieval.items || []).map(runtimeItemFromHelperItem).filter((item) => RUNTIME_ALLOWED_KINDS.includes(item.kind)).map((item) => fallbackStale ? {
     ...item,
     freshness: "stale",
@@ -2517,7 +2517,9 @@ function buildRuntimeContextPacket(retrieval, options) {
       "no_giant_markdown_or_base64_default_output",
       "no_archive_compact_delete_move_restore",
       "layered_memory_hot_warm_default_cold_pointer_only",
-      ...(fallbackStale ? ["memory_core_unavailable_fallback_stale_not_current_not_recovery_ready"] : []),
+      ...(memoryCoreStatus === "available"
+        ? ["helper_memory_core_is_advisory_fallback_stale_not_current_not_recovery_ready"]
+        : ["memory_core_unavailable_fallback_stale_not_current_not_recovery_ready"]),
       ...retrieval.warnings,
     ],
     tokenEstimate: retrieval.tokenEstimate,

@@ -250,3 +250,28 @@ Fresh-user / second-machine release signoff is intentionally outside default `np
 - `tests/memory-runtime-headless.test.cjs`: strict JSON, UI-free writeback/recall, sourceRef retention, idempotency, receipts, and unsafe-input rejection.
 - `tests/memory-benchmark-gate.test.cjs`: deliberate strategy failure must exit nonzero.
 - `tests/native-document-sidecar-migration.test.cjs`: exact snapshot hash, unchanged source, row-count parity, metadata-only shadow, absent body sentinel, deterministic rollback receipt.
+## Example Project Memory Runtime Recovery
+
+- Run `node tests/Example Project-memory-runtime-recovery.test.cjs`.
+- Prove bounded scans always select `docs/Example Project_CURRENT_CHECKPOINT.md` among hundreds of docs.
+- Prove an app-owned seed reaches verified continuity and persists its scan SHA in signed sourceRefs.
+- Prove linked worktrees inherit at identical HEAD/hash, foreign projects do not, and HEAD or canonical hash changes immediately force stale until reseeded.
+- Prove helper-only and generated `.codex-knowledge` packets never claim current/readiness and unsafe bodies do not enter output packets.
+- Prove `thread_recovery` returns non-empty current summary/progress/task/action/thread items plus original-goal and architecture anchors under a 3000-token/32-KB hard bound.
+- Prove generated stale July UI text, raw-session body, base64, credential, and long-log sentinels do not enter retrieval, receipts, or compatibility outputs.
+- Prove exact-scan reseed supersedes a former singleton original goal instead of leaving two accepted goals and a continuity conflict.
+- Prove `write_compatibility` rejects a mismatched scan SHA, backs up existing generated packets with SHA-256 manifest evidence, writes three bounded outputs, and leaves canonical authority current.
+- Prove the repository Skill invoker's packaged-source route reaches the app-owned CLI without Electron UI and returns `app_owned_verified/current/recoveryReady/non-empty` output. Do not label this as physical installed-app proof; inspect the constructed `app.asar` only in the post-package commander gate.
+- Prove the first strict-JSON CLI retrieve seeds from its final compact authoritative Memory Core items and returns a source-backed one-hop path, the second retrieve writes zero records and reports unchanged records, and the repository Skill invoker route exposes the same supplement and receipt.
+- Before Memory Core seed, prove CLI retrieve returns attempted semantic recall with zero paths/hits/tokens, no seed/write, authority non-effects, unchanged false current/readiness, and a bounded in-packet receipt.
+- Assert the total strict-JSON response, including graph paths, diagnostics, and receipt, stays within the requested token budget and 32 KB; graph paths are trimmed before authoritative items. Record post-change duration, packet bytes, token estimate, and hit count.
+
+## P0 Semantic Memory Graph
+
+- Run `node tests/semantic-memory-graph-policy.test.cjs` for deterministic IDs, explicit compact extraction, frontmatter/tags/wikilinks/Markdown links, claim boundaries, inferred/evidence downgrades, one-hop/token caps, and raw-session/secret/base64/giant/accessor/path-escape rejection.
+- Run `node tests/memory-runtime-index-store.test.cjs` for additive table/index contracts, transactional/idempotent writes, incompatible-schema fail-closed behavior, exact-project alias isolation, opt-in global review, current-vs-superseded decisions, fact-backed `supports`, Graphify `70x` as review claim, no-hit behavior, bounded performance metadata, and `semantic_graph_recall` receipts.
+- Seed subset A at timestamp A and subset B at timestamp B, verify immutable project `createdAt`, both connected queries, repeat idempotency, and targeted self-heal after simulating a retained-createdAt/hash mismatch. Verify `docs/Example Project_CURRENT_CHECKPOINT.md` basename metadata supports `Example Project 当前引擎架构` without reading the file.
+- Combine the pure canonical-scope helper regression, existing real linked-worktree `ProjectIdentityEnvelope` test, and smoke wiring assertion to prove Electron uses canonical graph ownership while foreign envelope paths fall back without leakage.
+- `tests/smoke-test.cjs` must prove the semantic provider is sidecar-owned, automatically populated/called by Electron `retrieve_context` and verified CLI retrieve, hard-capped at 24 compact seed items and 12 paths/1200 tokens/96 query candidates, packaged with the Skill route, wired into default `npm test`, and free of timers/background rebuild/raw-body or additional workspace scans.
+- `node tests/Example Project-memory-runtime-recovery.test.cjs` remains the authority regression: semantic evidence must not change app-owned `current`, `recoveryReady`, authority verification, continuity pagination, or exact source binding.
+- All fixtures use temporary sidecars. Tests must not resolve or write the real user `memory-runtime-index.sqlite`, user data, Example Project data, sessions, Vaults, backups, or knowledge-base sources.

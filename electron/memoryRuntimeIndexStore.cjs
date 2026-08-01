@@ -13,6 +13,19 @@ const {
   queryMemoryFacts,
   scanPersistenceStructure,
 } = require("./memoryFactPolicy.cjs");
+const {
+  ACTIVE_EVIDENCE_PREDICATES,
+  SEMANTIC_MEMORY_GRAPH_SCHEMA,
+  assembleBoundedOneHopPaths,
+  normalizeProjectPath: normalizeSemanticProjectPath,
+  normalizeSemanticEntity,
+  normalizeSemanticRelation,
+  projectIdentityForPath,
+  rankSemanticEntity,
+  semanticGraphFromMemoryFacts,
+  semanticGraphReviewMode,
+  tokenizeSemanticQuery,
+} = require("./semanticMemoryGraphPolicy.cjs");
 
 const MEMORY_RUNTIME_INDEX_SCHEMA = "zhixia.memory_runtime_index.v1";
 const MEMORY_CORE_SIDECAR_SCHEMA = "zhixia.memory_core_sidecar.v1";
@@ -366,6 +379,16 @@ function withMemoryRuntimeIndex(storeRoot, operation) {
   }
 }
 
+function withSemanticMemoryRuntimeIndex(storeRoot, operation) {
+  const db = openMemoryRuntimeIndex(storeRoot);
+  try {
+    ensureSemanticMemoryGraphSchema(db);
+    return operation(db);
+  } finally {
+    closeDatabase(db);
+  }
+}
+
 function withImmediateTransaction(db, operation) {
   let transactionOpen = false;
   try {
@@ -505,6 +528,127 @@ function ensureMemoryCoreSidecarSchema(db) {
     if (spec.immutable) db.exec(`CREATE INDEX IF NOT EXISTS idx_${spec.table}_fingerprint ON ${spec.table}(fingerprint)`);
     if (spec.uniqueFingerprint) ensureAuthorityReceiptProofMigration(db, spec);
   }
+}
+
+const SEMANTIC_GRAPH_ENTITY_COLUMNS = Object.freeze([
+  "id", "scope", "projectPath", "projectId", "kind", "canonicalName", "aliasesJson", "status",
+  "sourceRefsJson", "provenance", "confidence", "createdAt", "updatedAt", "contentHash", "searchTerms",
+]);
+const SEMANTIC_GRAPH_ENTITY_TYPES = Object.freeze({
+  id: "TEXT", scope: "TEXT", projectPath: "TEXT", projectId: "TEXT", kind: "TEXT", canonicalName: "TEXT",
+  aliasesJson: "TEXT", status: "TEXT", sourceRefsJson: "TEXT", provenance: "TEXT", confidence: "REAL",
+  createdAt: "TEXT", updatedAt: "TEXT", contentHash: "TEXT", searchTerms: "TEXT",
+});
+const SEMANTIC_GRAPH_RELATION_COLUMNS = Object.freeze([
+  "id", "scope", "projectPath", "projectId", "fromEntityId", "toEntityId", "predicate", "sourceRefsJson",
+  "provenance", "confidence", "status", "validFrom", "validTo", "factId", "createdAt", "updatedAt", "contentHash",
+]);
+const SEMANTIC_GRAPH_RELATION_TYPES = Object.freeze({
+  id: "TEXT", scope: "TEXT", projectPath: "TEXT", projectId: "TEXT", fromEntityId: "TEXT", toEntityId: "TEXT",
+  predicate: "TEXT", sourceRefsJson: "TEXT", provenance: "TEXT", confidence: "REAL", status: "TEXT",
+  validFrom: "TEXT", validTo: "TEXT", factId: "TEXT", createdAt: "TEXT", updatedAt: "TEXT", contentHash: "TEXT",
+});
+const SEMANTIC_GRAPH_NULLABLE_COLUMNS = new Set(["projectPath", "projectId", "validTo", "factId"]);
+const SEMANTIC_GRAPH_INDEXES = Object.freeze([
+  "idx_semantic_entities_project_status",
+  "idx_semantic_entities_project_kind",
+  "idx_semantic_entities_updated",
+  "idx_semantic_relations_project_status",
+  "idx_semantic_relations_from",
+  "idx_semantic_relations_to",
+  "idx_semantic_relations_predicate",
+  "idx_semantic_relations_fact",
+]);
+
+function incompatibleSemanticGraphSchema(message, cause = null) {
+  const error = new Error(`Incompatible semantic memory graph schema: ${message}`);
+  error.code = "SEMANTIC_GRAPH_INCOMPATIBLE_SCHEMA";
+  if (cause) error.cause = cause;
+  return error;
+}
+
+function validateSemanticGraphTable(db, tableName, expectedColumns, expectedTypes) {
+  const object = db.prepare("SELECT type FROM sqlite_master WHERE name = ?").get(tableName);
+  if (!object) return false;
+  if (object.type !== "table") throw incompatibleSemanticGraphSchema(`${tableName} must be a table; destructive rebuild was refused.`);
+  const tableInfo = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  const idColumn = tableInfo.find((column) => column.name === "id");
+  const primaryKeyColumns = tableInfo.filter((column) => Number(column.pk) > 0);
+  if (!idColumn || Number(idColumn.pk) !== 1 || primaryKeyColumns.length !== 1 || !String(idColumn.type || "").toUpperCase().includes("TEXT")) {
+    throw incompatibleSemanticGraphSchema(`${tableName}.id must be the sole TEXT primary key; destructive rebuild was refused.`);
+  }
+  const columns = new Set(tableInfo.map((column) => column.name));
+  const missing = expectedColumns.filter((column) => !columns.has(column));
+  if (missing.length > 0) throw incompatibleSemanticGraphSchema(`${tableName} is missing required columns: ${missing.join(", ")}.`);
+  for (const column of tableInfo.filter((item) => expectedColumns.includes(item.name))) {
+    if (String(column.type || "").toUpperCase() !== expectedTypes[column.name]) {
+      throw incompatibleSemanticGraphSchema(`${tableName}.${column.name} must use ${expectedTypes[column.name]} affinity.`);
+    }
+    if (column.name !== "id" && !SEMANTIC_GRAPH_NULLABLE_COLUMNS.has(column.name) && Number(column.notnull) !== 1) {
+      throw incompatibleSemanticGraphSchema(`${tableName}.${column.name} must be NOT NULL.`);
+    }
+  }
+  return true;
+}
+
+function ensureSemanticMemoryGraphSchema(db) {
+  const entitiesReady = validateSemanticGraphTable(db, "semantic_memory_entities", SEMANTIC_GRAPH_ENTITY_COLUMNS, SEMANTIC_GRAPH_ENTITY_TYPES);
+  const relationsReady = validateSemanticGraphTable(db, "semantic_memory_relations", SEMANTIC_GRAPH_RELATION_COLUMNS, SEMANTIC_GRAPH_RELATION_TYPES);
+  const existingIndexes = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((row) => row.name));
+  const migrationRequired = !entitiesReady || !relationsReady || SEMANTIC_GRAPH_INDEXES.some((name) => !existingIndexes.has(name));
+  if (migrationRequired) {
+    withImmediateTransaction(db, () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS semantic_memory_entities (
+          id TEXT PRIMARY KEY,
+          scope TEXT NOT NULL,
+          projectPath TEXT,
+          projectId TEXT,
+          kind TEXT NOT NULL,
+          canonicalName TEXT NOT NULL,
+          aliasesJson TEXT NOT NULL,
+          status TEXT NOT NULL,
+          sourceRefsJson TEXT NOT NULL,
+          provenance TEXT NOT NULL,
+          confidence REAL NOT NULL,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL,
+          contentHash TEXT NOT NULL,
+          searchTerms TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS semantic_memory_relations (
+          id TEXT PRIMARY KEY,
+          scope TEXT NOT NULL,
+          projectPath TEXT,
+          projectId TEXT,
+          fromEntityId TEXT NOT NULL,
+          toEntityId TEXT NOT NULL,
+          predicate TEXT NOT NULL,
+          sourceRefsJson TEXT NOT NULL,
+          provenance TEXT NOT NULL,
+          confidence REAL NOT NULL,
+          status TEXT NOT NULL,
+          validFrom TEXT NOT NULL,
+          validTo TEXT,
+          factId TEXT,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL,
+          contentHash TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_semantic_entities_project_status ON semantic_memory_entities(scope, projectPath, projectId, status, updatedAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_semantic_entities_project_kind ON semantic_memory_entities(scope, projectPath, projectId, kind, canonicalName);
+        CREATE INDEX IF NOT EXISTS idx_semantic_entities_updated ON semantic_memory_entities(updatedAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_semantic_relations_project_status ON semantic_memory_relations(scope, projectPath, projectId, status, updatedAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_semantic_relations_from ON semantic_memory_relations(fromEntityId, status, updatedAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_semantic_relations_to ON semantic_memory_relations(toEntityId, status, updatedAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_semantic_relations_predicate ON semantic_memory_relations(predicate, status, updatedAt DESC);
+        CREATE INDEX IF NOT EXISTS idx_semantic_relations_fact ON semantic_memory_relations(factId);
+      `);
+    });
+  }
+  validateSemanticGraphTable(db, "semantic_memory_entities", SEMANTIC_GRAPH_ENTITY_COLUMNS, SEMANTIC_GRAPH_ENTITY_TYPES);
+  validateSemanticGraphTable(db, "semantic_memory_relations", SEMANTIC_GRAPH_RELATION_COLUMNS, SEMANTIC_GRAPH_RELATION_TYPES);
+  return { schemaVersion: SEMANTIC_MEMORY_GRAPH_SCHEMA, ready: true, migrated: migrationRequired };
 }
 
 function openMemoryRuntimeIndex(storeRoot) {
@@ -939,6 +1083,458 @@ function memoryFactToSearchItem(fact) {
   };
 }
 
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function rowToSemanticEntity(row) {
+  const candidate = {
+    id: row.id,
+    scope: row.scope,
+    projectPath: row.projectPath || null,
+    projectId: row.projectId || null,
+    kind: row.kind,
+    canonicalName: row.canonicalName,
+    aliases: parseJsonArray(row.aliasesJson),
+    status: row.status,
+    sourceRefs: parseJsonArray(row.sourceRefsJson),
+    provenance: row.provenance,
+    confidence: Number(row.confidence || 0),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+  const normalized = normalizeSemanticEntity(candidate, { projectPath: candidate.projectPath, projectId: candidate.projectId });
+  return normalized.ok && normalized.entity.contentHash === row.contentHash ? normalized.entity : null;
+}
+
+function rowToSemanticRelation(row, acceptedSourceBackedEvidence = false) {
+  const candidate = {
+    id: row.id,
+    scope: row.scope,
+    projectPath: row.projectPath || null,
+    projectId: row.projectId || null,
+    fromEntityId: row.fromEntityId,
+    toEntityId: row.toEntityId,
+    predicate: row.predicate,
+    sourceRefs: parseJsonArray(row.sourceRefsJson),
+    provenance: row.provenance,
+    confidence: Number(row.confidence || 0),
+    status: row.status,
+    validFrom: row.validFrom,
+    validTo: row.validTo || null,
+    factId: row.factId || null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+  const normalized = normalizeSemanticRelation(candidate, {
+    projectPath: candidate.projectPath,
+    projectId: candidate.projectId,
+    acceptedSourceBackedEvidence,
+  });
+  return normalized.ok && normalized.relation.contentHash === row.contentHash ? normalized.relation : null;
+}
+
+function semanticFactProvidesAcceptedEvidence(row, relation) {
+  if (!row || !["active", "accepted"].includes(String(row.status || "").toLowerCase())) return false;
+  const factProjectPath = row.scope === "project" ? normalizeSemanticProjectPath(row.projectPath) : null;
+  if (row.scope !== relation.scope || factProjectPath !== relation.projectPath) return false;
+  const sourceRefs = parseJsonArray(row.sourceRefsJson);
+  return sourceRefs.length > 0 && !containsUnsafePayload({ sourceRefs });
+}
+
+function acceptedSemanticEvidenceFactIds(db, relationRows = []) {
+  const factIds = [...new Set(safeArray(relationRows)
+    .filter((row) => ACTIVE_EVIDENCE_PREDICATES.has(row.predicate) && row.factId)
+    .map((row) => row.factId))]
+    .slice(0, 192);
+  if (factIds.length === 0) return new Set();
+  const params = {};
+  factIds.forEach((id, index) => { params[`fact${index}`] = id; });
+  const rows = db.prepare(`SELECT id, projectPath, scope, status, sourceRefsJson FROM memory_facts WHERE id IN (${factIds.map((_, index) => `:fact${index}`).join(", ")})`).all(params);
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  return new Set(safeArray(relationRows)
+    .filter((relation) => relation.factId && semanticFactProvidesAcceptedEvidence(rowById.get(relation.factId), {
+      scope: relation.scope,
+      projectPath: relation.projectPath || null,
+    }))
+    .map((relation) => relation.factId));
+}
+
+function upsertSemanticGraphRecords(storeRoot, graph = {}, options = {}) {
+  const projectPath = normalizeSemanticProjectPath(options.projectPath || graph.projectPath);
+  const projectId = compactText(options.projectId || graph.projectId, 180) || projectIdentityForPath(projectPath);
+  const normalizedEntities = [];
+  const relationInputs = [];
+  const warnings = [];
+  let rejected = 0;
+  for (const input of safeArray(graph.entities).slice(0, 240)) {
+    const normalized = normalizeSemanticEntity(input, { ...options, projectPath, projectId });
+    if (!normalized.ok) {
+      rejected += 1;
+      warnings.push(...normalized.reasonCodes);
+      continue;
+    }
+    normalizedEntities.push(normalized.entity);
+    warnings.push(...normalized.reasonCodes);
+  }
+  for (const input of safeArray(graph.relations).slice(0, 320)) {
+    const preliminary = normalizeSemanticRelation(input, {
+      ...options,
+      projectPath,
+      projectId,
+      acceptedSourceBackedEvidence: true,
+    });
+    if (!preliminary.ok) {
+      rejected += 1;
+      warnings.push(...preliminary.reasonCodes);
+      continue;
+    }
+    relationInputs.push({ input, preliminary: preliminary.relation });
+  }
+  return withSemanticMemoryRuntimeIndex(storeRoot, (db) => {
+    const selectEntityState = db.prepare("SELECT contentHash, createdAt FROM semantic_memory_entities WHERE id = ?");
+    const selectRelationState = db.prepare("SELECT contentHash, createdAt FROM semantic_memory_relations WHERE id = ?");
+    const selectEntity = db.prepare("SELECT id, scope, projectPath, projectId FROM semantic_memory_entities WHERE id = ?");
+    const selectFact = db.prepare("SELECT projectPath, scope, status, sourceRefsJson FROM memory_facts WHERE id = ?");
+    const upsertEntity = db.prepare(`
+      INSERT INTO semantic_memory_entities (
+        id, scope, projectPath, projectId, kind, canonicalName, aliasesJson, status,
+        sourceRefsJson, provenance, confidence, createdAt, updatedAt, contentHash, searchTerms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        scope=excluded.scope, projectPath=excluded.projectPath, projectId=excluded.projectId,
+        kind=excluded.kind, canonicalName=excluded.canonicalName, aliasesJson=excluded.aliasesJson,
+        status=excluded.status, sourceRefsJson=excluded.sourceRefsJson, provenance=excluded.provenance,
+        confidence=excluded.confidence, updatedAt=excluded.updatedAt, contentHash=excluded.contentHash,
+        searchTerms=excluded.searchTerms
+    `);
+    const upsertRelation = db.prepare(`
+      INSERT INTO semantic_memory_relations (
+        id, scope, projectPath, projectId, fromEntityId, toEntityId, predicate, sourceRefsJson,
+        provenance, confidence, status, validFrom, validTo, factId, createdAt, updatedAt, contentHash
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        scope=excluded.scope, projectPath=excluded.projectPath, projectId=excluded.projectId,
+        fromEntityId=excluded.fromEntityId, toEntityId=excluded.toEntityId, predicate=excluded.predicate,
+        sourceRefsJson=excluded.sourceRefsJson, provenance=excluded.provenance, confidence=excluded.confidence,
+        status=excluded.status, validFrom=excluded.validFrom, validTo=excluded.validTo, factId=excluded.factId,
+        updatedAt=excluded.updatedAt, contentHash=excluded.contentHash
+    `);
+    let entitiesWritten = 0;
+    let entitiesUnchanged = 0;
+    let relationsWritten = 0;
+    let relationsUnchanged = 0;
+    let persistedCreatedAtPreserved = 0;
+    let existingRowsRehashed = 0;
+    const storedRelations = [];
+    withImmediateTransaction(db, () => {
+      for (const incomingEntity of normalizedEntities) {
+        let entity = incomingEntity;
+        const existingState = selectEntityState.get(entity.id);
+        if (existingState?.createdAt && existingState.createdAt !== entity.createdAt) {
+          const preserved = normalizeSemanticEntity({ ...entity, createdAt: existingState.createdAt }, {
+            ...options,
+            projectPath: entity.projectPath,
+            projectId: entity.projectId,
+          });
+          if (!preserved.ok) {
+            rejected += 1;
+            warnings.push("semantic_entity_created_at_preservation_failed_closed");
+            continue;
+          }
+          entity = preserved.entity;
+          persistedCreatedAtPreserved += 1;
+        }
+        if (existingState?.contentHash === entity.contentHash) {
+          entitiesUnchanged += 1;
+          continue;
+        }
+        upsertEntity.run(
+          entity.id, entity.scope, entity.projectPath, entity.projectId, entity.kind, entity.canonicalName,
+          JSON.stringify(entity.aliases), entity.status, JSON.stringify(entity.sourceRefs), entity.provenance,
+          entity.confidence, entity.createdAt, entity.updatedAt, entity.contentHash,
+          tokenizeSemanticQuery([entity.canonicalName, ...entity.aliases].join(" ")).join(" "),
+        );
+        entitiesWritten += 1;
+        if (existingState) existingRowsRehashed += 1;
+      }
+      for (const relationInput of relationInputs) {
+        const preliminary = relationInput.preliminary;
+        const from = selectEntity.get(preliminary.fromEntityId);
+        const to = selectEntity.get(preliminary.toEntityId);
+        const endpointsMatch = from && to
+          && from.scope === preliminary.scope && to.scope === preliminary.scope
+          && (from.projectPath || null) === preliminary.projectPath && (to.projectPath || null) === preliminary.projectPath
+          && (from.projectId || null) === preliminary.projectId && (to.projectId || null) === preliminary.projectId;
+        if (!endpointsMatch) {
+          rejected += 1;
+          warnings.push("relation_endpoint_project_identity_mismatch");
+          continue;
+        }
+        const factRow = preliminary.factId ? selectFact.get(preliminary.factId) : null;
+        if (preliminary.factId && !factRow) {
+          rejected += 1;
+          warnings.push("relation_fact_id_not_found");
+          continue;
+        }
+        const acceptedEvidence = semanticFactProvidesAcceptedEvidence(factRow, preliminary);
+        const normalized = normalizeSemanticRelation(relationInput.input, {
+          ...options,
+          projectPath: preliminary.projectPath,
+          projectId: preliminary.projectId,
+          acceptedSourceBackedEvidence: acceptedEvidence,
+        });
+        if (!normalized.ok) {
+          rejected += 1;
+          warnings.push(...normalized.reasonCodes);
+          continue;
+        }
+        let relation = normalized.relation;
+        warnings.push(...normalized.reasonCodes);
+        if (ACTIVE_EVIDENCE_PREDICATES.has(relation.predicate) && relation.status === "active" && !acceptedEvidence) {
+          rejected += 1;
+          warnings.push("active_evidence_relation_failed_closed");
+          continue;
+        }
+        const existingState = selectRelationState.get(relation.id);
+        if (existingState?.createdAt && existingState.createdAt !== relation.createdAt) {
+          const preserved = normalizeSemanticRelation({ ...relation, createdAt: existingState.createdAt }, {
+            ...options,
+            projectPath: relation.projectPath,
+            projectId: relation.projectId,
+            acceptedSourceBackedEvidence: acceptedEvidence,
+          });
+          if (!preserved.ok) {
+            rejected += 1;
+            warnings.push("semantic_relation_created_at_preservation_failed_closed");
+            continue;
+          }
+          relation = preserved.relation;
+          persistedCreatedAtPreserved += 1;
+        }
+        storedRelations.push(relation);
+        if (existingState?.contentHash === relation.contentHash) {
+          relationsUnchanged += 1;
+          continue;
+        }
+        upsertRelation.run(
+          relation.id, relation.scope, relation.projectPath, relation.projectId, relation.fromEntityId,
+          relation.toEntityId, relation.predicate, JSON.stringify(relation.sourceRefs), relation.provenance,
+          relation.confidence, relation.status, relation.validFrom, relation.validTo, relation.factId,
+          relation.createdAt, relation.updatedAt, relation.contentHash,
+        );
+        relationsWritten += 1;
+        if (existingState) existingRowsRehashed += 1;
+      }
+    });
+    return {
+      schemaVersion: SEMANTIC_MEMORY_GRAPH_SCHEMA,
+      path: indexPath(storeRoot),
+      attempted: safeArray(graph.entities).length + safeArray(graph.relations).length,
+      entitiesWritten,
+      entitiesUnchanged,
+      relationsWritten,
+      relationsUnchanged,
+      persistedCreatedAtPreserved,
+      existingRowsRehashed,
+      rejected,
+      review: normalizedEntities.filter((entity) => entity.status === "review").length
+        + storedRelations.filter((relation) => relation.status === "review").length,
+      warnings: [...new Set(warnings)].slice(0, 24),
+    };
+  });
+}
+
+function listSemanticMemoryEntities(storeRoot, options = {}) {
+  if (!fs.existsSync(indexPath(storeRoot))) return [];
+  const projectPath = normalizeSemanticProjectPath(options.projectPath);
+  const scope = options.scope === "global" ? "global" : "project";
+  if (scope === "project" && !projectPath) return [];
+  const projectId = scope === "project" ? compactText(options.projectId, 180) || projectIdentityForPath(projectPath) : null;
+  return withSemanticMemoryRuntimeIndex(storeRoot, (db) => {
+    const rows = scope === "global"
+      ? db.prepare("SELECT * FROM semantic_memory_entities WHERE scope = 'global' AND projectPath IS NULL AND projectId IS NULL ORDER BY updatedAt DESC LIMIT ?").all(Math.max(1, Math.min(Number(options.limit || 200), 500)))
+      : db.prepare("SELECT * FROM semantic_memory_entities WHERE scope = 'project' AND projectPath = ? AND projectId = ? ORDER BY updatedAt DESC LIMIT ?").all(projectPath, projectId, Math.max(1, Math.min(Number(options.limit || 200), 500)));
+    return rows.map(rowToSemanticEntity).filter(Boolean);
+  });
+}
+
+function listSemanticMemoryRelations(storeRoot, options = {}) {
+  if (!fs.existsSync(indexPath(storeRoot))) return [];
+  const projectPath = normalizeSemanticProjectPath(options.projectPath);
+  const scope = options.scope === "global" ? "global" : "project";
+  if (scope === "project" && !projectPath) return [];
+  const projectId = scope === "project" ? compactText(options.projectId, 180) || projectIdentityForPath(projectPath) : null;
+  return withSemanticMemoryRuntimeIndex(storeRoot, (db) => {
+    const rows = scope === "global"
+      ? db.prepare("SELECT * FROM semantic_memory_relations WHERE scope = 'global' AND projectPath IS NULL AND projectId IS NULL ORDER BY updatedAt DESC LIMIT ?").all(Math.max(1, Math.min(Number(options.limit || 300), 600)))
+      : db.prepare("SELECT * FROM semantic_memory_relations WHERE scope = 'project' AND projectPath = ? AND projectId = ? ORDER BY updatedAt DESC LIMIT ?").all(projectPath, projectId, Math.max(1, Math.min(Number(options.limit || 300), 600)));
+    const acceptedFactIds = acceptedSemanticEvidenceFactIds(db, rows);
+    return rows.map((row) => rowToSemanticRelation(row, !ACTIVE_EVIDENCE_PREDICATES.has(row.predicate) || acceptedFactIds.has(row.factId))).filter(Boolean);
+  });
+}
+
+function retrieveSemanticGraphPaths(storeRoot, options = {}) {
+  const startedAt = Date.now();
+  const taskGoal = compactText(options.taskGoal || options.task_goal || options.query, 1200);
+  const projectPath = normalizeSemanticProjectPath(options.projectPath);
+  const projectId = compactText(options.projectId, 180) || projectIdentityForPath(projectPath);
+  const maxPaths = Math.max(1, Math.min(Number(options.maxPaths || options.limit || 12), 12));
+  const tokenBudget = Math.max(120, Math.min(Number(options.tokenBudget || 1200), 1200));
+  const maxCandidates = Math.max(8, Math.min(Number(options.maxCandidates || 96), 96));
+  const timeBudgetMs = Math.max(25, Math.min(Number(options.timeBudgetMs || 160), 400));
+  const reviewMode = semanticGraphReviewMode(options);
+  const allowGlobalReview = reviewMode && options.allowGlobalReview === true;
+  const base = {
+    schemaVersion: SEMANTIC_MEMORY_GRAPH_SCHEMA,
+    attempted: true,
+    projectPath,
+    projectId,
+    graphPaths: [],
+    hitCount: 0,
+    tokenEstimate: 0,
+    partial: false,
+    warnings: [],
+    authority: {
+      additiveEvidenceOnly: true,
+      maySetCurrent: false,
+      maySetRecoveryReady: false,
+      maySetAuthorityVerification: false,
+      mayFillContinuitySlots: false,
+      mayAcceptEvidence: false,
+    },
+  };
+  if (!taskGoal || !projectPath || !projectId) {
+    return {
+      ...base,
+      partial: true,
+      warnings: [!taskGoal ? "semantic_graph_task_goal_required" : "semantic_graph_exact_project_identity_required"],
+      performance: { durationMs: Date.now() - startedAt, oneHop: true, boundedCandidates: true, noRawBodyRead: true, noBackgroundRebuild: true },
+    };
+  }
+  if (!fs.existsSync(indexPath(storeRoot))) {
+    return {
+      ...base,
+      warnings: ["semantic_graph_sidecar_missing_no_hit"],
+      performance: { durationMs: Date.now() - startedAt, oneHop: true, boundedCandidates: true, noRawBodyRead: true, noBackgroundRebuild: true },
+    };
+  }
+  const queryTerms = tokenizeSemanticQuery(taskGoal);
+  return withSemanticMemoryRuntimeIndex(storeRoot, (db) => {
+    if (queryTerms.length === 0) {
+      return {
+        ...base,
+        warnings: ["semantic_graph_no_safe_query_terms"],
+        performance: { durationMs: Date.now() - startedAt, oneHop: true, boundedCandidates: true, noRawBodyRead: true, noBackgroundRebuild: true },
+      };
+    }
+    const statusValues = reviewMode ? ["active", "review", "superseded", "disputed", "stale"] : ["active"];
+    const params = { projectPath, projectId, candidateLimit: maxCandidates };
+    statusValues.forEach((status, index) => { params[`status${index}`] = status; });
+    queryTerms.forEach((term, index) => { params[`term${index}`] = `%${term}%`; });
+    const scopeFilter = allowGlobalReview
+      ? "((scope = 'project' AND projectPath = :projectPath AND projectId = :projectId) OR (scope = 'global' AND projectPath IS NULL AND projectId IS NULL AND status = 'review'))"
+      : "scope = 'project' AND projectPath = :projectPath AND projectId = :projectId";
+    const lexicalFilter = queryTerms.map((_, index) => `(searchTerms LIKE :term${index} OR lower(canonicalName) LIKE :term${index} OR lower(aliasesJson) LIKE :term${index})`).join(" OR ");
+    const entityRows = db.prepare(`
+      SELECT * FROM semantic_memory_entities
+      WHERE ${scopeFilter}
+        AND status IN (${statusValues.map((_, index) => `:status${index}`).join(", ")})
+        AND (${lexicalFilter})
+      ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'review' THEN 1 ELSE 2 END, updatedAt DESC
+      LIMIT :candidateLimit
+    `).all(params);
+    const matchedEntities = entityRows
+      .map(rowToSemanticEntity)
+      .filter(Boolean)
+      .map((entity) => ({ entity, ...rankSemanticEntity(entity, queryTerms) }))
+      .filter((entry) => entry.score > 0)
+      .sort((left, right) => right.score - left.score || left.entity.id.localeCompare(right.entity.id))
+      .slice(0, maxCandidates);
+    if (matchedEntities.length === 0) {
+      return {
+        ...base,
+        warnings: ["semantic_graph_no_hit"],
+        performance: {
+          durationMs: Date.now() - startedAt, oneHop: true, boundedCandidates: true,
+          entityCandidates: entityRows.length, relationCandidates: 0, noRawBodyRead: true,
+          noFullTextBodyRead: true, noVaultScan: true, noBackgroundTimer: true, noBackgroundRebuild: true,
+          maxCandidates, maxPaths, tokenBudget, timeBudgetMs,
+        },
+      };
+    }
+    const seedIds = matchedEntities.map((entry) => entry.entity.id);
+    const edgeParams = { projectPath, projectId, relationLimit: Math.min(maxCandidates * 2, 192) };
+    seedIds.forEach((id, index) => { edgeParams[`seed${index}`] = id; });
+    statusValues.forEach((status, index) => { edgeParams[`status${index}`] = status; });
+    const placeholders = seedIds.map((_, index) => `:seed${index}`).join(", ");
+    const relationScopeFilter = allowGlobalReview
+      ? "((scope = 'project' AND projectPath = :projectPath AND projectId = :projectId) OR (scope = 'global' AND projectPath IS NULL AND projectId IS NULL AND status = 'review'))"
+      : "scope = 'project' AND projectPath = :projectPath AND projectId = :projectId";
+    const relationRows = db.prepare(`
+      SELECT * FROM semantic_memory_relations
+      WHERE ${relationScopeFilter}
+        AND status IN (${statusValues.map((_, index) => `:status${index}`).join(", ")})
+        AND (fromEntityId IN (${placeholders}) OR toEntityId IN (${placeholders}))
+      ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'review' THEN 1 ELSE 2 END, confidence DESC, updatedAt DESC
+      LIMIT :relationLimit
+    `).all(edgeParams);
+    const endpointIds = [...new Set(relationRows.flatMap((row) => [row.fromEntityId, row.toEntityId]))].slice(0, 192);
+    const endpointParams = {};
+    endpointIds.forEach((id, index) => { endpointParams[`endpoint${index}`] = id; });
+    const endpointRows = endpointIds.length > 0
+      ? db.prepare(`SELECT * FROM semantic_memory_entities WHERE id IN (${endpointIds.map((_, index) => `:endpoint${index}`).join(", ")})`).all(endpointParams)
+      : [];
+    const entityMap = new Map(endpointRows.map(rowToSemanticEntity).filter(Boolean).map((entity) => [entity.id, entity]));
+    const acceptedFactIds = acceptedSemanticEvidenceFactIds(db, relationRows);
+    const relations = relationRows.map((row) => rowToSemanticRelation(row, !ACTIVE_EVIDENCE_PREDICATES.has(row.predicate) || acceptedFactIds.has(row.factId))).filter(Boolean).filter((relation) => {
+      const from = entityMap.get(relation.fromEntityId);
+      const to = entityMap.get(relation.toEntityId);
+      if (!from || !to || from.scope !== relation.scope || to.scope !== relation.scope) return false;
+      if (relation.scope === "global") return allowGlobalReview && relation.status === "review" && from.status === "review" && to.status === "review";
+      return relation.projectPath === projectPath && relation.projectId === projectId
+        && from.projectPath === projectPath && to.projectPath === projectPath
+        && from.projectId === projectId && to.projectId === projectId
+        && (reviewMode || (relation.status === "active" && from.status === "active" && to.status === "active"));
+    });
+    const assembled = assembleBoundedOneHopPaths({ matchedEntities, relations, entityMap }, { maxPaths, tokenBudget, maxCandidates });
+    const durationMs = Date.now() - startedAt;
+    const timeExceeded = durationMs > timeBudgetMs;
+    return {
+      ...base,
+      graphPaths: assembled.graphPaths,
+      hitCount: assembled.hitCount,
+      tokenEstimate: assembled.tokenEstimate,
+      partial: assembled.partial || timeExceeded,
+      warnings: [
+        ...(assembled.hitCount === 0 ? ["semantic_graph_no_connected_one_hop_path"] : []),
+        ...(timeExceeded ? ["semantic_graph_time_budget_exceeded_partial"] : []),
+      ],
+      performance: {
+        ...assembled.performance,
+        durationMs,
+        entityCandidates: entityRows.length,
+        matchedSeeds: matchedEntities.length,
+        relationCandidates: relationRows.length,
+        endpointRows: endpointRows.length,
+        boundedCandidates: true,
+        noRawBodyRead: true,
+        noFullTextBodyRead: true,
+        noVaultScan: true,
+        noBackgroundTimer: true,
+        noBackgroundRebuild: true,
+        timeBudgetMs,
+        timeBudgetExceeded: timeExceeded,
+      },
+    };
+  });
+}
+
 function upsertMemoryFact(storeRoot, input = {}, options = {}) {
   const incoming = normalizeMemoryFact(input, { now: options.now, preserveId: false });
   const existing = listMemoryFacts(storeRoot, {
@@ -966,6 +1562,25 @@ function upsertMemoryFact(storeRoot, input = {}, options = {}) {
     withImmediateTransaction(db, () => writeMemoryFactRows(db, writes));
   });
   upsertMemorySearchItems(storeRoot, writes.map(memoryFactToSearchItem));
+  let semanticGraphWriteback = null;
+  try {
+    const semanticGraph = semanticGraphFromMemoryFacts(writes, {
+      projectPath: plan.incoming.projectPath,
+      now: options.now,
+    });
+    semanticGraphWriteback = semanticGraph.entities.length > 0 || semanticGraph.relations.length > 0
+      ? upsertSemanticGraphRecords(storeRoot, semanticGraph, { projectPath: plan.incoming.projectPath, now: options.now })
+      : { schemaVersion: SEMANTIC_MEMORY_GRAPH_SCHEMA, attempted: 0, entitiesWritten: 0, relationsWritten: 0, rejected: 0, warnings: [] };
+  } catch {
+    semanticGraphWriteback = {
+      schemaVersion: SEMANTIC_MEMORY_GRAPH_SCHEMA,
+      attempted: 0,
+      entitiesWritten: 0,
+      relationsWritten: 0,
+      rejected: 0,
+      warnings: ["semantic_graph_additive_writeback_unavailable_fact_preserved"],
+    };
+  }
   return {
     schemaVersion: MEMORY_RUNTIME_INDEX_SCHEMA,
     action: plan.action,
@@ -975,6 +1590,7 @@ function upsertMemoryFact(storeRoot, input = {}, options = {}) {
     supersessions: plan.supersessions,
     blockers: plan.evaluation?.blockers || [],
     warnings: plan.evaluation?.warnings || [],
+    semanticGraphWriteback,
   };
 }
 
@@ -1349,6 +1965,7 @@ module.exports = {
   buildFtsMatchQuery,
   containsUnsafePayload,
   ensureMemoryCoreSidecarSchema,
+  ensureSemanticMemoryGraphSchema,
   getAuthorityReceipt,
   getMemoryConstraint,
   getMemoryCoreRecord,
@@ -1373,6 +1990,8 @@ module.exports = {
   listMemoryFacts,
   listMemoryPrincipals,
   listMemoryRuntimeTriggerReceipts,
+  listSemanticMemoryEntities,
+  listSemanticMemoryRelations,
   listModuleMemories,
   listProjectAnchors,
   listProjectBindings,
@@ -1384,6 +2003,7 @@ module.exports = {
   normalizeSearchItem,
   openMemoryRuntimeIndex,
   reconcileMemorySearchItems,
+  retrieveSemanticGraphPaths,
   searchMemoryRuntimeIndex,
   tokenizeIndexText,
   upsertMemoryConstraint,
@@ -1392,6 +2012,7 @@ module.exports = {
   upsertMemoryEpisode,
   upsertMemoryEvent,
   upsertMemorySearchItems,
+  upsertSemanticGraphRecords,
   upsertMemoryFact,
   upsertMemoryPrincipal,
   upsertModuleMemory,

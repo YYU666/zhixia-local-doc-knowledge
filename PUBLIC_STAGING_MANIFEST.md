@@ -1,6 +1,6 @@
 # Public Staging Manifest
 
-Generated at: 2026-07-27T23:58:05.629Z
+Generated at: 2026-08-01T21:22:05.634Z
 
 Source app root: canonical app source directory
 Staging path: public-staging/zhixia-local-doc-knowledge
@@ -61,7 +61,7 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 
 ## File Count
 
-- 127 files
+- 133 files
 
 ## Manifest Hash Sample
 
@@ -71,28 +71,30 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - assets/icon.png sha256=c29ae2848e3e1d64
 - assets/icon.svg sha256=8c0af5d51c379b71
 - codex-skills/zhixia-local-docs/agents/openai.yaml sha256=90c5530730f02678
+- codex-skills/zhixia-local-docs/references/app-owned-memory-runtime.md sha256=73ac79683b54baf7
 - codex-skills/zhixia-local-docs/references/context-bundle.md sha256=6bb6756ca36f9f66
 - codex-skills/zhixia-local-docs/references/headless-runtime-contract.md sha256=8cc31aa06c509a45
 - codex-skills/zhixia-local-docs/references/memory-core-lifecycle.md sha256=1fb5ba5117372a92
 - codex-skills/zhixia-local-docs/references/openclaw-cold-archive.md sha256=cfd949bb6061391b
+- codex-skills/zhixia-local-docs/scripts/invoke-app-memory-runtime.cjs sha256=fb2a3d27d2d01247
 - codex-skills/zhixia-local-docs/scripts/memory-runtime-headless.cjs sha256=b7e468fc9bbed9d6
 - codex-skills/zhixia-local-docs/scripts/openclaw-memory-archive-index.cjs sha256=942628f99cd84cf2
 - codex-skills/zhixia-local-docs/scripts/project-identity.cjs sha256=7adaab2ce9fd2b2b
 - codex-skills/zhixia-local-docs/scripts/read-openclaw-memory-archive.cjs sha256=606e790405cf6421
-- codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=a69590943f098bb3
-- codex-skills/zhixia-local-docs/SKILL.md sha256=5b0c4eea69c57b17
+- codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=cca84589993b59d3
+- codex-skills/zhixia-local-docs/SKILL.md sha256=9d52bfaf2a8d8e7f
 - CONTRIBUTING.md sha256=7b777bd01d6faec6
 - docs/AGENT_RUNTIME_MONITOR_DESIGN.md sha256=6855a4f3094a4869
 - docs/CEO_FLOW_MEMORY_RUNTIME.md sha256=5da82cf75d2f7dab
 - docs/EXTERNAL_AUDIT_REQUIREMENTS.md sha256=c0ae0f4d4090ce2f
 - docs/NATIVE_SQLITE_MIGRATION_PLAN.md sha256=708c82e1c958d874
 - docs/OPENCLAW_MEMORY_CONTEXT_INTEGRATION.md sha256=03ad0ba184be5cb7
-- docs/PRD.md sha256=df9350a06b21b315
+- docs/PRD.md sha256=637e43c3f2c3e674
 - docs/PUBLIC_REPO_LAYOUT.md sha256=814587691adc2356
 - docs/PUBLICATION_CHECKLIST.md sha256=6a0448a40b513866
-- docs/RELEASE_NOTES.md sha256=31d5b16d6265265b
-- docs/TECHNICAL_DESIGN.md sha256=dfedf3dde9ed2076
-- docs/TEST_PLAN.md sha256=2da3103b2007bb41
+- docs/RELEASE_NOTES.md sha256=8246afcd691d57ed
+- docs/TECHNICAL_DESIGN.md sha256=e55bdafda42ab9aa
+- docs/TEST_PLAN.md sha256=3dabeb97d8e16857
 - electron/agentRetrievePolicy.cjs sha256=7b7397d96d50f602
 - electron/agentRuntimeMonitorPolicy.cjs sha256=5e27d2d074b14245
 - electron/aiProviderResponsePolicy.cjs sha256=1dae7a11bbc375d3
@@ -103,5 +105,3 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - electron/databaseStartupPolicy.cjs sha256=2cdf7273a0572801
 - electron/documentMetadataPolicy.cjs sha256=7be0330b6d7d3f0c
 - electron/hybridMemoryRetrievalPolicy.cjs sha256=fcdb9863de0670e3
-- electron/main.cjs sha256=240763655df91cba
-- electron/memoryAuthorityPolicy.cjs sha256=e0346a8f677e8ece

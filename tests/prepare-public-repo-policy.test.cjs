@@ -10,8 +10,11 @@ const {
   calculatePublicStagingPaths,
   privatePublicationTerms,
   privatePublicationTermPatterns,
+  mapPublicRelativePath,
+  publicRecoveryTestFilename,
   sanitizePublicCodeText,
   sanitizePublicDocText,
+  sanitizePublicPrivateCodeText,
   sanitizePublicStagingScript,
   shouldIncludeFile,
 } = require("../scripts/prepare-public-repo.cjs");
@@ -68,11 +71,31 @@ assert.equal(sanitizedLock.includes("Example Project"), false, "lockfile sanitiz
 const privateTerms = privatePublicationTerms();
 if (privateTerms.length > 0) {
   const [privateProjectName, privateAcronym] = [privateTerms[2], privateTerms[3]];
+  assert.equal(matchesPrivateTerm(`docs/${privateAcronym}_CURRENT_CHECKPOINT.md`), true, "private term scan must catch underscore-delimited project acronyms");
   const docText = `${privateAcronym} and ${privateProjectName} notes should not remain in public docs.`;
   const sanitizedDoc = sanitizePublicDocText(docText);
   assert.equal(sanitizedDoc.includes(privateAcronym), false, "doc sanitization should remove standalone private acronyms");
   assert.equal(sanitizedDoc.includes(privateProjectName), false, "doc sanitization should remove private project names");
   assert.equal(sanitizedDoc.includes("Example Project"), true, "doc sanitization should replace private terms with public examples");
+
+  const privateRecoveryFilename = `${privateAcronym.toLowerCase()}-memory-runtime-recovery.test.cjs`;
+  assert.equal(
+    mapPublicRelativePath(path.join("tests", privateRecoveryFilename)),
+    path.join("tests", publicRecoveryTestFilename),
+    "public staging must rename the private integration fixture to a generic project fixture",
+  );
+  const privateCode = [
+    `node tests/${privateRecoveryFilename}`,
+    `const recoveryPattern = /${privateRecoveryFilename.replace(/\./g, "\\.")}/;`,
+    `const project = "${privateProjectName} Game Studio";`,
+    `const checkpoint = "${privateAcronym}_CURRENT_CHECKPOINT.md";`,
+  ].join("\n");
+  const sanitizedPrivateCode = sanitizePublicPrivateCodeText(privateCode);
+  assert.equal(sanitizedPrivateCode.includes(privateRecoveryFilename), false, "public code must replace private test filename references");
+  assert.equal(sanitizedPrivateCode.includes(privateProjectName), false, "public code must remove private project names");
+  assert.equal(sanitizedPrivateCode.includes(privateAcronym), false, "public code must remove private project acronyms");
+  assert.equal(sanitizedPrivateCode.includes(publicRecoveryTestFilename), true, "public code must retain the generic recovery test filename");
+  assert.equal(sanitizedPrivateCode.includes(publicRecoveryTestFilename.replace(/\./g, "\\.")), true, "public code must retain generic regex filename references");
 } else {
   assert.deepEqual(privatePublicationTermPatterns(), [], "public policy tests must accept an intentionally empty private catalog");
 }

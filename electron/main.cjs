@@ -93,12 +93,21 @@ const {
   memoryFactToSearchItem,
   openMemoryRuntimeIndex,
   reconcileMemorySearchItems,
+  retrieveSemanticGraphPaths,
   searchMemoryRuntimeIndex,
   upsertMemorySearchItems,
   upsertMemoryFact,
+  upsertSemanticGraphRecords,
   writeMemoryFactsFromEvidence,
   writeMemoryRuntimeTriggerReceipt,
 } = require("./memoryRuntimeIndexStore.cjs");
+const {
+  buildSemanticGraphSeedFromRuntimeItems,
+  canonicalSemanticGraphProjectScope,
+} = require("./semanticMemoryGraphPolicy.cjs");
+const {
+  deriveProjectIdentityEnvelope,
+} = require("../codex-skills/zhixia-local-docs/scripts/project-identity.cjs");
 const { evaluateArchiveCandidate, inferArchiveThreadRole, normalizeArchiveCandidateEvidence } = require("./archiveCandidatePolicy.cjs");
 const { buildProjectResumePacket } = require("./projectResumePolicy.cjs");
 const { buildProjectMemoryBackfillCards } = require("./projectMemoryBackfillPolicy.cjs");
@@ -9147,9 +9156,158 @@ async function retrieveMemoryRuntimeContext(options = {}) {
     threadId: options.threadId || null,
     maxNodes: Math.max(12, Math.min(Number(options.memoryGraphMaxNodes || options.maxResults || 32), 64)),
   });
+  const requestedSemanticGraphProjectPath = options.projectPath || retrieval.projectPath || null;
+  let semanticGraphIdentityEnvelope = null;
+  let semanticGraphIdentityWarnings = [];
+  if (requestedSemanticGraphProjectPath) {
+    const gitMarker = path.join(path.resolve(requestedSemanticGraphProjectPath), ".git");
+    if (fsNative.existsSync(gitMarker)) {
+      try {
+        semanticGraphIdentityEnvelope = deriveProjectIdentityEnvelope(requestedSemanticGraphProjectPath);
+      } catch (error) {
+        semanticGraphIdentityWarnings = [`semantic_graph_project_identity_envelope_failed:${sanitizeAgentRetrieveErrorMessage(error)}`];
+      }
+    } else {
+      semanticGraphIdentityWarnings = ["semantic_graph_non_git_exact_project_identity_fallback"];
+    }
+  }
+  const semanticGraphScope = canonicalSemanticGraphProjectScope(
+    requestedSemanticGraphProjectPath,
+    semanticGraphIdentityEnvelope,
+  );
+  const semanticGraphProjectPath = semanticGraphScope.projectPath;
+  semanticGraphIdentityWarnings.push(...safeArray(semanticGraphScope.warnings));
+  const semanticGraphSeedStartedAt = Date.now();
+  let semanticGraphSeed = {
+    attempted: true,
+    candidatesConsidered: 0,
+    eligibleCandidates: 0,
+    rejectedCandidates: 0,
+    recordsPrepared: 0,
+    recordsWritten: 0,
+    recordsUnchanged: 0,
+    recordsRejected: 0,
+    workspaceScans: 0,
+    documentEnumerations: 0,
+    rawBodyReads: 0,
+    fullTextBodyReads: 0,
+    vaultScans: 0,
+    generatedKnowledgeReads: 0,
+    backgroundTimer: false,
+    backgroundRebuild: false,
+    projectIdentityCanonicalized: semanticGraphScope.canonicalized === true,
+    projectIdentityFallback: semanticGraphIdentityWarnings.length > 0,
+    warnings: semanticGraphIdentityWarnings.slice(0, 20),
+  };
+  try {
+    const seedGraph = buildSemanticGraphSeedFromRuntimeItems(packet.items, {
+      projectPath: semanticGraphProjectPath,
+      projectName: semanticGraphProjectPath ? path.basename(semanticGraphProjectPath) : null,
+      acceptedProjectPaths: semanticGraphScope.acceptedProjectPaths,
+    });
+    const writeback = seedGraph.entities.length > 0 || seedGraph.relations.length > 0
+      ? upsertSemanticGraphRecords(memoryRuntimeRoot(), seedGraph, {
+        projectPath: semanticGraphProjectPath,
+        projectId: semanticGraphScope.projectId,
+      })
+      : { entitiesWritten: 0, entitiesUnchanged: 0, relationsWritten: 0, relationsUnchanged: 0, rejected: 0, warnings: [] };
+    semanticGraphSeed = {
+      ...seedGraph.seed,
+      recordsWritten: Number(writeback.entitiesWritten || 0) + Number(writeback.relationsWritten || 0),
+      recordsUnchanged: Number(writeback.entitiesUnchanged || 0) + Number(writeback.relationsUnchanged || 0),
+      recordsRejected: Number(seedGraph.seed?.rejectedCandidates || 0) + Number(writeback.rejected || 0),
+      projectIdentityCanonicalized: semanticGraphScope.canonicalized === true,
+      projectIdentityFallback: semanticGraphIdentityWarnings.length > 0,
+      warnings: [...new Set([...semanticGraphIdentityWarnings, ...safeArray(seedGraph.warnings), ...safeArray(writeback.warnings)])].slice(0, 20),
+    };
+  } catch (error) {
+    semanticGraphSeed.warnings = [`semantic_graph_seed_failed_closed:${sanitizeAgentRetrieveErrorMessage(error)}`];
+  }
+  semanticGraphSeed.durationMs = Date.now() - semanticGraphSeedStartedAt;
+  let semanticGraph;
+  try {
+    semanticGraph = retrieveSemanticGraphPaths(memoryRuntimeRoot(), {
+      taskGoal,
+      queryType: routerPlan.queryType || options.queryType || "task_dispatch",
+      projectPath: semanticGraphProjectPath,
+      projectId: semanticGraphScope.projectId || null,
+      reviewMode: options.reviewMode === true,
+      allowGlobalReview: options.allowGlobalSemanticReview === true,
+      maxPaths: Math.max(1, Math.min(Number(options.semanticGraphMaxPaths || 12), 12)),
+      tokenBudget: Math.max(120, Math.min(Number(options.semanticGraphTokenBudget || 1200), 1200)),
+      maxCandidates: Math.max(8, Math.min(Number(options.semanticGraphMaxCandidates || 96), 96)),
+      timeBudgetMs: Math.max(25, Math.min(Number(options.semanticGraphTimeBudgetMs || 160), 400)),
+    });
+  } catch (error) {
+    semanticGraph = {
+      schemaVersion: "zhixia.semantic_memory_graph.v1",
+      attempted: true,
+      projectPath: options.projectPath || retrieval.projectPath || null,
+      projectId: null,
+      graphPaths: [],
+      hitCount: 0,
+      tokenEstimate: 0,
+      partial: true,
+      warnings: [`semantic_graph_recall_failed_closed:${sanitizeAgentRetrieveErrorMessage(error)}`],
+      authority: {
+        additiveEvidenceOnly: true,
+        maySetCurrent: false,
+        maySetRecoveryReady: false,
+        maySetAuthorityVerification: false,
+        mayFillContinuitySlots: false,
+        mayAcceptEvidence: false,
+      },
+      performance: {
+        durationMs: 0,
+        oneHop: true,
+        boundedCandidates: true,
+        noRawBodyRead: true,
+        noFullTextBodyRead: true,
+        noVaultScan: true,
+        noBackgroundTimer: true,
+        noBackgroundRebuild: true,
+      },
+    };
+  }
+  semanticGraph = {
+    ...semanticGraph,
+    seed: semanticGraphSeed,
+    warnings: [...new Set([...safeArray(semanticGraph.warnings), ...safeArray(semanticGraphSeed.warnings)])].slice(0, 24),
+    performance: {
+      ...semanticGraph.performance,
+      seedDurationMs: semanticGraphSeed.durationMs,
+      totalDurationMs: Number(semanticGraph.performance?.durationMs || 0) + Number(semanticGraphSeed.durationMs || 0),
+      seedWorkspaceScans: 0,
+      seedDocumentEnumerations: 0,
+      seedRawBodyReads: 0,
+      seedFullTextBodyReads: 0,
+    },
+  };
+  const semanticGraphTriggerReceipt = bestEffortMemoryRuntimeTriggerReceipt({
+    hook: "semantic_graph_recall",
+    queryType: routerPlan.queryType || options.queryType || "task_dispatch",
+    projectPath: semanticGraphProjectPath,
+    threadId: options.threadId || options.parentCeoThreadId || options.ceoThreadId || null,
+    returnedCount: semanticGraph.hitCount,
+    tokenEstimate: semanticGraph.tokenEstimate,
+    durationMs: semanticGraph.performance?.totalDurationMs || semanticGraph.performance?.durationMs || 0,
+    partial: semanticGraph.partial === true,
+    warnings: [
+      "semantic_graph_attempted",
+      `semantic_graph_seed_written:${semanticGraphSeed.recordsWritten}`,
+      `semantic_graph_seed_unchanged:${semanticGraphSeed.recordsUnchanged}`,
+      `semantic_graph_seed_rejected:${semanticGraphSeed.recordsRejected}`,
+      ...safeArray(semanticGraph.warnings),
+    ],
+    sourceRefs: safeArray(semanticGraph.graphPaths).flatMap((graphPath) => safeArray(graphPath.sourceRefs)).slice(0, 12),
+  });
   const result = getMemoryCoreRuntime().decorateRetrievalResult({
     ...packet,
     memoryGraph: mergeMemoryGraphs(packet.memoryGraph, activatedGraph),
+    semanticGraph: {
+      ...semanticGraph,
+      triggerReceipt: semanticGraphTriggerReceipt,
+    },
     activatedMemory: {
       nodeCount: safeArray(activatedGraph.nodes).length,
       edgeCount: safeArray(activatedGraph.edges).length,
@@ -9172,12 +9330,33 @@ async function retrieveMemoryRuntimeContext(options = {}) {
       memoryGraphSeedEdges: activatedGraph.performance?.boundedSeedEdges || 0,
       sidecarIndexWholeDatabaseExport: false,
       sidecarIndexBackgroundTimer: false,
+      semanticGraphAttempted: semanticGraph.attempted === true,
+      semanticGraphHitCount: semanticGraph.hitCount,
+      semanticGraphDurationMs: semanticGraph.performance?.durationMs || 0,
+      semanticGraphTotalDurationMs: semanticGraph.performance?.totalDurationMs || 0,
+      semanticGraphSeedAttempted: semanticGraphSeed.attempted === true,
+      semanticGraphSeedCandidates: semanticGraphSeed.candidatesConsidered,
+      semanticGraphSeedEligible: semanticGraphSeed.eligibleCandidates,
+      semanticGraphSeedWritten: semanticGraphSeed.recordsWritten,
+      semanticGraphSeedUnchanged: semanticGraphSeed.recordsUnchanged,
+      semanticGraphSeedRejected: semanticGraphSeed.recordsRejected,
+      semanticGraphProjectIdentityCanonicalized: semanticGraphScope.canonicalized === true,
+      semanticGraphProjectIdentityFallback: semanticGraphIdentityWarnings.length > 0,
+      semanticGraphPartial: semanticGraph.partial === true,
+      semanticGraphOneHop: true,
+      semanticGraphMaxPaths: 12,
+      semanticGraphTokenBudget: 1200,
+      semanticGraphRawBodyRead: false,
+      semanticGraphWorkspaceScan: false,
+      semanticGraphDocumentEnumeration: false,
+      semanticGraphBackgroundRebuild: false,
     },
     warnings: [
       ...safeArray(packet.warnings),
       "memory_graph_activation_metadata_only",
       "hybrid_bm25_sidecar_index_enabled",
       ...safeArray(activatedGraph.warnings),
+      ...(semanticGraph.partial === true ? ["semantic_graph_recall_partial"] : []),
     ].filter((warning, index, array) => array.indexOf(warning) === index),
   }, retrieval.memoryCoreContinuity || {
     ...retrieval.memoryCoreAuthority,
@@ -9201,7 +9380,7 @@ async function retrieveMemoryRuntimeContext(options = {}) {
     triggerReceipt,
     memoryCore: {
       ...(result.memoryCore || {}),
-      triggerReceiptCounts: { retrieveContext: 1, returnedCount: result.items.length },
+      triggerReceiptCounts: { retrieveContext: 1, semanticGraphRecall: 1, returnedCount: result.items.length, semanticGraphHitCount: semanticGraph.hitCount },
     },
   };
 }
