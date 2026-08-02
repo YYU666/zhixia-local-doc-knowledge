@@ -919,6 +919,9 @@ export type MemoryGraphNode = {
   sourceId?: string | null;
   freshness?: string;
   status?: string;
+  provenance?: string;
+  confidence?: number;
+  aliases?: string[];
   tags?: string[];
   sourceRefs?: SourceRef[];
   activation?: number;
@@ -928,10 +931,18 @@ export type MemoryGraphNode = {
 };
 
 export type MemoryGraphEdge = {
+  id?: string;
   from: string;
   to: string;
   kind: string;
   weight: number;
+  status?: string;
+  provenance?: string;
+  confidence?: number;
+  sourceRefs?: SourceRef[];
+  validFrom?: string | null;
+  validTo?: string | null;
+  factId?: string | null;
 };
 
 export type MemoryGraph = {
@@ -950,8 +961,20 @@ export type MemoryGraph = {
     boundedSeedNodes?: number;
     boundedSeedEdges?: number;
     maxNodes?: number;
+    maxEdges?: number;
+    readOnly?: boolean;
+    queryDurationMs?: number;
   };
   warnings?: string[];
+  diagnostics?: {
+    projectPath?: string | null;
+    projectId?: string | null;
+    totalEntities?: number;
+    totalRelations?: number;
+    returnedNodes?: number;
+    returnedEdges?: number;
+    partial?: boolean;
+  };
 };
 
 export type AgentRetrieveItem = {
@@ -2165,6 +2188,7 @@ declare global {
       retrieveAgentContext: (options?: AgentRetrieveOptions) => Promise<AgentRetrieveResult>;
       retrieveMemoryRuntimeContext: (options?: AgentRetrieveOptions & { taskGoal?: string; threadId?: string | null; allowedKinds?: AgentRetrieveKind[] }) => Promise<RuntimeContextPacket>;
       activateMemoryRuntimeGraph: (options?: AgentRetrieveOptions & { taskGoal?: string; threadId?: string | null; maxNodes?: number; seedLimit?: number }) => Promise<MemoryGraph & { sync?: { nodes: number; edges: number; projectCount: number; projectPath?: string | null; limit: number } }>;
+      getSemanticMemoryGraphView: (options: { projectPath: string; taskGoal?: string; maxNodes?: number; maxEdges?: number; centerNodeId?: string | null }) => Promise<MemoryGraph>;
       retrieveMemoryRuntimePrecedent: (options?: { taskType?: string; task_type?: string; query?: string; projectPath?: string | null; parentCeoThreadId?: string | null; tokenBudget?: number; maxResults?: number; allowedKinds?: AgentRetrieveKind[] }) => Promise<RuntimeContextPacket>;
       recoverMemoryRuntimeThread: (options?: { threadId?: string | null; ceoThreadId?: string | null; title?: string; threadTitle?: string; query?: string; taskGoal?: string; projectPath?: string | null; tokenBudget?: number; maxResults?: number; replacementThreadId?: string | null; takeoverThreadId?: string | null; observeRuntimeEvent?: boolean }) => Promise<ThreadRecoveryPacket>;
       evaluateCeoThreadPressure: (options?: CeoThreadPressureMetrics & { threadId?: string | null; currentThreadId?: string | null; projectPath?: string | null }) => Promise<CeoThreadPressureReport>;

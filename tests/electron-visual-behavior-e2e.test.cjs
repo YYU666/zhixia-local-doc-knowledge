@@ -135,6 +135,8 @@ function rendererScript() {
         if (element.classList.contains("detail-code") || element.classList.contains("skill-draft-preview")) return false;
         const elementOverflow = element.scrollWidth - element.clientWidth;
         const viewportOverflow = rect.right - window.innerWidth;
+        if (["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName)) return viewportOverflow > 3;
+        if (["hidden", "clip"].includes(style.overflowX)) return viewportOverflow > 3;
         return elementOverflow > 3 || viewportOverflow > 3;
       })
       .slice(0, 5)
@@ -212,7 +214,37 @@ function rendererScript() {
   }
   if (!memoryText.includes("最多返回 4 条") || !memoryText.includes("700 个令牌")) throw new Error("Project memory recall bounds were not shown");
   assertNoHorizontalOverflow("memory workspace");
-  if (${JSON.stringify(captureVisuals)}) await sleep(5000);
+
+  clickButtonText("记忆图谱");
+  await waitForSelector('[data-e2e="memory-graph-explorer"]');
+  await waitFor(() => Number(document.querySelector('[data-e2e="memory-graph-node-count"]')?.textContent || 0) > 0, "non-empty semantic graph", 30000);
+  await waitFor(() => {
+    const canvases = Array.from(document.querySelectorAll('[data-e2e="memory-graph-canvas"] canvas'));
+    return canvases.some((canvas) => {
+      if (!canvas.width || !canvas.height) return false;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return false;
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const step = Math.max(4, Math.floor(pixels.length / 12000 / 4) * 4);
+      for (let index = 3; index < pixels.length; index += step) {
+        if (pixels[index] > 0) return true;
+      }
+      return false;
+    });
+  }, "nonblank Cytoscape canvas", 30000);
+  if (${JSON.stringify(captureVisuals)}) {
+    window.__ZHIXIA_E2E_GRAPH_CAPTURE_READY = true;
+    await waitFor(() => window.__ZHIXIA_E2E_GRAPH_CAPTURE_DONE === true, "memory graph screenshot capture", 20000);
+  }
+  const graphExplorer = document.querySelector('[data-e2e="memory-graph-explorer"]');
+  const listModeButton = Array.from(graphExplorer.querySelectorAll("button")).find((button) => button.innerText.trim().endsWith("列表"));
+  if (!listModeButton) throw new Error("Missing graph/list mode control");
+  listModeButton.click();
+  await waitForSelector('[data-e2e="memory-graph-node-row"]');
+  click('[data-e2e="memory-graph-node-row"]');
+  await waitForSelector('[data-e2e="memory-graph-inspector"]');
+  await waitForText("来源证据");
+  assertNoHorizontalOverflow("memory graph workspace");
 
   clickButtonText("智能优化");
   await waitForText("一键优化规则");
@@ -264,6 +296,7 @@ function rendererScript() {
     navChecked: true,
     toolsChecked: true,
     memoryChecked: true,
+    memoryGraphChecked: true,
     agentChecked: true,
     archiveChecked: true,
     viewportWidth: window.innerWidth,
@@ -290,58 +323,90 @@ async function waitForDevToolsTarget(port) {
   throw new Error(`Timed out waiting for Electron DevTools target on ${port}`);
 }
 
-async function captureMemoryCoreScreenshot(port, filePath, viewport) {
-  const target = await waitForDevToolsTarget(port);
-  const socket = new WebSocket(target.webSocketDebuggerUrl);
-  const pending = new Map();
-  let nextId = 0;
-  await new Promise((resolve, reject) => {
-    socket.addEventListener("open", resolve, { once: true });
-    socket.addEventListener("error", reject, { once: true });
-  });
-  socket.addEventListener("message", (event) => {
-    const message = JSON.parse(String(event.data));
-    if (!message.id || !pending.has(message.id)) return;
-    const { resolve, reject } = pending.get(message.id);
-    pending.delete(message.id);
-    if (message.error) reject(new Error(message.error.message));
-    else resolve(message.result || {});
-  });
-  const send = (method, params = {}) => new Promise((resolve, reject) => {
-    const id = ++nextId;
-    pending.set(id, { resolve, reject });
-    socket.send(JSON.stringify({ id, method, params }));
-  });
-  try {
-    await send("Runtime.enable");
-    const started = Date.now();
-    let memoryCoreReady = false;
-    while (Date.now() - started < 20000) {
-      const result = await send("Runtime.evaluate", {
-        expression: `Boolean(document.querySelector('[data-e2e="project-memory-core"]')) && document.body.innerText.includes('为什么会想起这些内容')`,
-        returnByValue: true,
+async function captureMemoryGraphScreenshot(port, filePath, viewport) {
+  const deadline = Date.now() + 30000;
+  let lastError = null;
+
+  // The fixture reloads once after seeding app data. Reconnect when that reload
+  // closes the first DevTools socket instead of leaving a pending promise alive.
+  while (Date.now() < deadline) {
+    let socket = null;
+    const pending = new Map();
+    let nextId = 0;
+    try {
+      const target = await waitForDevToolsTarget(port);
+      socket = new WebSocket(target.webSocketDebuggerUrl);
+      await new Promise((resolve, reject) => {
+        socket.addEventListener("open", resolve, { once: true });
+        socket.addEventListener("error", reject, { once: true });
       });
-      if (result.result?.value === true) {
-        memoryCoreReady = true;
-        break;
+      const rejectPending = (error) => {
+        for (const request of pending.values()) request.reject(error);
+        pending.clear();
+      };
+      socket.addEventListener("message", (event) => {
+        const message = JSON.parse(String(event.data));
+        if (!message.id || !pending.has(message.id)) return;
+        const request = pending.get(message.id);
+        pending.delete(message.id);
+        clearTimeout(request.timer);
+        if (message.error) request.reject(new Error(message.error.message));
+        else request.resolve(message.result || {});
+      });
+      socket.addEventListener("close", () => rejectPending(new Error("Electron DevTools socket closed")));
+      socket.addEventListener("error", () => rejectPending(new Error("Electron DevTools socket failed")));
+      const send = (method, params = {}) => new Promise((resolve, reject) => {
+        if (socket.readyState !== WebSocket.OPEN) {
+          reject(new Error("Electron DevTools socket is not open"));
+          return;
+        }
+        const id = ++nextId;
+        const timer = setTimeout(() => {
+          pending.delete(id);
+          reject(new Error(`Electron DevTools command timed out: ${method}`));
+        }, 5000);
+        pending.set(id, { resolve, reject, timer });
+        socket.send(JSON.stringify({ id, method, params }));
+      });
+
+      await send("Runtime.enable");
+      while (Date.now() < deadline) {
+        const result = await send("Runtime.evaluate", {
+          expression: `window.__ZHIXIA_E2E_GRAPH_CAPTURE_READY === true && Number(document.querySelector('[data-e2e="memory-graph-node-count"]')?.textContent || 0) > 0 && Boolean(document.querySelector('[data-e2e="memory-graph-canvas"] canvas'))`,
+          returnByValue: true,
+        });
+        if (result.result?.value === true) {
+          await send("Emulation.setDeviceMetricsOverride", {
+            width: viewport.captureWidth || viewport.width,
+            height: viewport.height,
+            deviceScaleFactor: 1,
+            mobile: false,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 180));
+          const page = await send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
+          fs.mkdirSync(path.dirname(filePath), { recursive: true });
+          fs.writeFileSync(filePath, Buffer.from(page.data, "base64"));
+          await send("Runtime.evaluate", {
+            expression: `window.__ZHIXIA_E2E_GRAPH_CAPTURE_DONE = true`,
+            returnByValue: true,
+          });
+          return filePath;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 80));
       }
-      await new Promise((resolve) => setTimeout(resolve, 80));
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    } finally {
+      for (const request of pending.values()) {
+        clearTimeout(request.timer);
+        request.reject(new Error("Electron DevTools screenshot attempt ended"));
+      }
+      pending.clear();
+      if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
     }
-    if (!memoryCoreReady) throw new Error("Project Memory Core view was not ready for screenshot capture");
-    await send("Emulation.setDeviceMetricsOverride", {
-      width: viewport.captureWidth || viewport.width,
-      height: viewport.height,
-      deviceScaleFactor: 1,
-      mobile: false,
-    });
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    const page = await send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, Buffer.from(page.data, "base64"));
-    return filePath;
-  } finally {
-    socket.close();
   }
+  throw new Error(`Project Memory Graph screenshot capture failed: ${lastError?.message || "timed out"}`);
 }
 
 function runElectronVisualProbe(viewport = {}, index = 0) {
@@ -349,7 +414,7 @@ function runElectronVisualProbe(viewport = {}, index = 0) {
     const port = 9320 + index;
     const screenshotPath = path.join(
       visualOutputDir,
-      `memory-core-project-${viewport.captureWidth || viewport.width}x${viewport.height}.png`,
+      `memory-graph-project-${viewport.captureWidth || viewport.width}x${viewport.height}.png`,
     );
     const child = spawn(electronExe, [
       root,
@@ -377,7 +442,13 @@ function runElectronVisualProbe(viewport = {}, index = 0) {
 
     let stdout = "";
     let stderr = "";
-    const screenshotPromise = captureVisuals ? captureMemoryCoreScreenshot(port, screenshotPath, viewport) : Promise.resolve(null);
+    let screenshotError = null;
+    const screenshotPromise = captureVisuals
+      ? captureMemoryGraphScreenshot(port, screenshotPath, viewport).catch((error) => {
+          screenshotError = error;
+          return null;
+        })
+      : Promise.resolve(null);
     const timer = setTimeout(() => {
       child.kill();
       reject(new Error(`Electron visual behavior e2e timed out.\nstdout:\n${stdout}\nstderr:\n${stderr}`));
@@ -404,6 +475,7 @@ function runElectronVisualProbe(viewport = {}, index = 0) {
       try {
         const result = JSON.parse(match[1]);
         result.screenshotPath = await screenshotPromise;
+        if (screenshotError) throw screenshotError;
         resolve(result);
       } catch (error) {
         reject(new Error(`Electron visual behavior e2e returned invalid JSON: ${error.message}\n${match[1]}`));
@@ -432,6 +504,7 @@ function cleanupTempRoot() {
       assert.equal(result.navChecked, true, "visual probe should exercise primary navigation");
       assert.equal(result.toolsChecked, true, "visual probe should check Tools safety copy");
       assert.equal(result.memoryChecked, true, "visual probe should check Memory curation UI");
+      assert.equal(result.memoryGraphChecked, true, "visual probe should check the on-demand Memory Graph UI");
       assert.equal(result.agentChecked, true, "visual probe should check Agent/runtime monitor UI");
       assert.equal(result.archiveChecked, true, "visual probe should check archive candidate read-only UI");
       assert.equal(result.noHorizontalOverflowChecked, true, "visual probe should check horizontal overflow");

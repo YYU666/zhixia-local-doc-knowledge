@@ -1,6 +1,6 @@
 # Public Staging Manifest
 
-Generated at: 2026-08-01T21:22:05.634Z
+Generated at: 2026-08-02T01:24:40.765Z
 
 Source app root: canonical app source directory
 Staging path: public-staging/zhixia-local-doc-knowledge
@@ -61,7 +61,7 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 
 ## File Count
 
-- 133 files
+- 135 files
 
 ## Manifest Hash Sample
 
@@ -79,7 +79,7 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - codex-skills/zhixia-local-docs/scripts/invoke-app-memory-runtime.cjs sha256=fb2a3d27d2d01247
 - codex-skills/zhixia-local-docs/scripts/memory-runtime-headless.cjs sha256=b7e468fc9bbed9d6
 - codex-skills/zhixia-local-docs/scripts/openclaw-memory-archive-index.cjs sha256=942628f99cd84cf2
-- codex-skills/zhixia-local-docs/scripts/project-identity.cjs sha256=7adaab2ce9fd2b2b
+- codex-skills/zhixia-local-docs/scripts/project-identity.cjs sha256=bba8f93e41220103
 - codex-skills/zhixia-local-docs/scripts/read-openclaw-memory-archive.cjs sha256=606e790405cf6421
 - codex-skills/zhixia-local-docs/scripts/read-project-knowledge.cjs sha256=cca84589993b59d3
 - codex-skills/zhixia-local-docs/SKILL.md sha256=9d52bfaf2a8d8e7f
@@ -89,12 +89,12 @@ Staging path: public-staging/zhixia-local-doc-knowledge
 - docs/EXTERNAL_AUDIT_REQUIREMENTS.md sha256=c0ae0f4d4090ce2f
 - docs/NATIVE_SQLITE_MIGRATION_PLAN.md sha256=708c82e1c958d874
 - docs/OPENCLAW_MEMORY_CONTEXT_INTEGRATION.md sha256=03ad0ba184be5cb7
-- docs/PRD.md sha256=637e43c3f2c3e674
+- docs/PRD.md sha256=e7b5fdc63e093f78
 - docs/PUBLIC_REPO_LAYOUT.md sha256=814587691adc2356
 - docs/PUBLICATION_CHECKLIST.md sha256=6a0448a40b513866
-- docs/RELEASE_NOTES.md sha256=8246afcd691d57ed
-- docs/TECHNICAL_DESIGN.md sha256=e55bdafda42ab9aa
-- docs/TEST_PLAN.md sha256=3dabeb97d8e16857
+- docs/RELEASE_NOTES.md sha256=a4251f725a8ed99e
+- docs/TECHNICAL_DESIGN.md sha256=aceb0874a0805c6b
+- docs/TEST_PLAN.md sha256=5fd5ebd3441536f5
 - electron/agentRetrievePolicy.cjs sha256=7b7397d96d50f602
 - electron/agentRuntimeMonitorPolicy.cjs sha256=5e27d2d074b14245
 - electron/aiProviderResponsePolicy.cjs sha256=1dae7a11bbc375d3

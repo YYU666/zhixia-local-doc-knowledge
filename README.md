@@ -41,6 +41,7 @@ CEO Flow 可以把知匣当作本地 Memory Runtime：
 - Codex Skill：仓库内提供 `codex-skills/zhixia-local-docs`；启动/接管优先调用完整 app-owned Memory Core，文件 helper 只作为 `fallback_stale` advisory，并可生成 evidence dry-run。
 - 只读运行诊断：可展示本地进程和历史压力线索，但不 kill、不清理、不擅自修改 Codex 会话。
 - FlowSkill candidate bridge：接受且 source-backed 的 reusable pattern 可以生成私有 review 候选；不会自动安装、公开导出或执行。
+- 项目记忆图谱：在项目页按需打开局部实体关系图，支持搜索、类型筛选、证据详情和重新聚焦；画布关闭即销毁，不在后台持续布局。
 
 ## 本地优先隐私模型
 
@@ -110,7 +111,7 @@ npm run build
 知匣已包含可执行的 Memory Runtime policy、IPC、helper tests、Electron e2e 和 smoke guards，但仍处于快速产品化阶段：
 
 - Memory Runtime 和项目识别策略是 conservative heuristic + tests，不是云端权威知识图谱。
-- 图谱/“神经网络式记忆”是 bounded metadata activation：默认快速读取 Hot/Warm/Skill，Cold 长历史只作为恢复/审计等显式场景的 source pointer，不会后台全量读 raw history。
+- 图谱/“神经网络式记忆”是 bounded metadata activation：默认快速读取 Hot/Warm/Skill，Cold 长历史只作为恢复/审计等显式场景的 source pointer；可视化只展示当前项目的局部关系，不会后台全量读 raw history 或渲染全库。
 - FlowSkill 输出仍是私有 candidate/review，不是自动推广系统。
 - Archive/compact/restore/delete 等破坏性动作不属于默认 Memory Runtime 行为。
 - `sql.js` 仍适合个人/小团队本地库；超大库和长期高频写入需要未来迁移到更强的存储/索引架构。

@@ -185,7 +185,11 @@ function cleanupTempRoot() {
     assert.equal(result.memoryRuntime.triggerReceiptCount >= 2, true, "writeback and retrieve_context should leave trigger receipts");
     assert.equal(result.memoryRuntime.triggerHooks.includes("writeback_evidence"), true, "writeback trigger receipt should be present");
     assert.equal(result.memoryRuntime.triggerHooks.includes("retrieve_context"), true, "retrieve_context trigger receipt should be present");
-    assert.equal(result.memoryRuntime.benchmarkPassed, true, "bounded synthetic memory benchmark should pass in Electron");
+    assert.equal(
+      result.memoryRuntime.benchmarkPassed,
+      true,
+      `bounded synthetic memory benchmark should pass in Electron: ${JSON.stringify(result.memoryRuntime.benchmark || result.memoryRuntime)}`,
+    );
     assert.equal(result.memoryRuntime.benchmarkRecallAtK, 1, "synthetic Electron benchmark should retain all anchors");
     assert.equal(result.memoryRuntime.rejectedWritebackStatus, "rejected", "unsafe evidence should be rejected in the real Electron main process");
     assert.equal(result.memoryRuntime.rejectedWritebackFactCountUnchanged, true, "rejected evidence must not create current MemoryFact rows");

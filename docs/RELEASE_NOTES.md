@@ -39,6 +39,14 @@ This public staging copy intentionally contains a short release summary instead 
 - Semantic graph matches remain advisory: they cannot set current or recovery-ready authority and cannot bypass continuity, freshness, or source-backed evidence gates.
 - Raw sessions, vault bodies, giant Markdown, images, and base64 payloads remain outside graph indexing and recall.
 
+## Post-0.9.1 - Project Memory Graph UI
+
+- Added an on-demand Cytoscape.js project graph with search, entity-kind filters, fit/reset controls, list mode, selected-node highlighting, and compact source evidence details.
+- The graph is code-split and mounted only after the user opens the project Memory Graph tab. Layout is non-animated, bounded to a local subgraph, and destroyed when the view unmounts.
+- Opening or refreshing the graph reads only the native Memory Runtime sidecar. It does not prewarm legacy sql.js retrieval, export the main database, start a timer, or scan raw history.
+- ProjectIdentityEnvelope.projectId is the primary graph scope. Existing path-hash rows are available only through an exact-canonical-path read-only compatibility lookup with diagnostics.
+- Added three-viewport Electron visual checks for a nonblank graph canvas and horizontal-overflow protection, plus native IPC isolation and bounded-output tests.
+
 ## 0.8.3
 
 - Added safe-relief history preservation, compact thread recovery packets, conservative project classification, and metadata-first large-library startup behavior.

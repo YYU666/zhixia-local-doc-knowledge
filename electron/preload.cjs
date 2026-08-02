@@ -56,6 +56,7 @@ const docKnowledgeApi = {
   listFlowSkillCandidates: (options) => ipcRenderer.invoke("memoryRuntime:listFlowSkillCandidates", options),
   listMemoryFacts: (options) => ipcRenderer.invoke("memoryRuntime:listFacts", options),
   listMemoryRuntimeTriggerReceipts: (options) => ipcRenderer.invoke("memoryRuntime:listTriggerReceipts", options),
+  getSemanticMemoryGraphView: (options) => ipcRenderer.invoke("memoryRuntime:getSemanticGraphView", options),
   evaluateMemoryRuntimeBenchmark: (options) => ipcRenderer.invoke("memoryRuntime:evaluateBenchmark", options),
   getMemoryCoreDiagnostics: (options) => ipcRenderer.invoke("memoryRuntime:getCoreDiagnostics", options),
   listMemoryCoreReviewQueue: (options) => ipcRenderer.invoke("memoryRuntime:listCoreReviewQueue", options),

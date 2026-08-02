@@ -36,6 +36,17 @@ function runGit(workspace, args) {
   }
 }
 
+function hasGitMetadataUpward(workspace) {
+  let current = realPath(workspace);
+  for (let depth = 0; depth < 16; depth += 1) {
+    if (fs.existsSync(path.join(current, ".git"))) return true;
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return false;
+}
+
 function canonicalWorktreeRoot(workspace, fallbackRoot) {
   const worktrees = runGit(workspace, ["worktree", "list", "--porcelain"]);
   const first = worktrees.split(/\r?\n/).find((line) => line.startsWith("worktree "));
@@ -44,12 +55,13 @@ function canonicalWorktreeRoot(workspace, fallbackRoot) {
 
 function deriveProjectIdentityEnvelope(workspace, options = {}) {
   const requestedRoot = realPath(workspace);
-  const gitRootRaw = runGit(requestedRoot, ["rev-parse", "--show-toplevel"]);
+  const hasGitMetadata = hasGitMetadataUpward(requestedRoot);
+  const gitRootRaw = hasGitMetadata ? runGit(requestedRoot, ["rev-parse", "--show-toplevel"]) : "";
   const worktreeRoot = gitRootRaw ? realPath(gitRootRaw) : requestedRoot;
-  const gitCommonDirRaw = runGit(worktreeRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  const gitCommonDirRaw = gitRootRaw ? runGit(worktreeRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]) : "";
   const canonicalRoot = gitRootRaw ? canonicalWorktreeRoot(worktreeRoot, worktreeRoot) : requestedRoot;
-  const baselineHead = runGit(worktreeRoot, ["rev-parse", "HEAD"]) || null;
-  const remote = runGit(worktreeRoot, ["config", "--get", "remote.origin.url"]);
+  const baselineHead = gitRootRaw ? runGit(worktreeRoot, ["rev-parse", "HEAD"]) || null : null;
+  const remote = gitRootRaw ? runGit(worktreeRoot, ["config", "--get", "remote.origin.url"]) : "";
   const repositorySeed = remote
     ? `remote:${remote.trim().replace(/\\/g, "/").toLowerCase()}`
     : `local:${identityPath(gitCommonDirRaw || canonicalRoot)}`;

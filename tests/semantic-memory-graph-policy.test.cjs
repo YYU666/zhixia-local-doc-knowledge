@@ -200,6 +200,8 @@ function main() {
     worktreeRoot: linkedProjectA,
   });
   assert.equal(canonicalScope.projectPath, normalizeProjectPath(projectA));
+  assert.equal(canonicalScope.projectId, "shared-envelope-project-a", "semantic graph scope must use the stable ProjectIdentityEnvelope projectId");
+  assert.ok(canonicalScope.legacyProjectIds.includes(projectIdentityForPath(projectA)), "the path-hash ID must remain available only for read-only compatibility");
   assert.equal(canonicalScope.canonicalized, true);
   assert.ok(canonicalScope.acceptedProjectPaths.includes(normalizeProjectPath(linkedProjectA)));
   const foreignScope = canonicalSemanticGraphProjectScope(projectB, {
@@ -233,6 +235,19 @@ function main() {
   assert.ok(sourceAliasEntity.aliases.some((alias) => alias.toLowerCase() === "example_project_current_checkpoint"));
   assert.equal(sourceAliasEntity.sourceRefs[0].path.toLowerCase(), "docs/example_project_current_checkpoint.md", "linked source refs must become stable project-relative metadata");
   assert.equal(sourceAliasSeed.entities.find((item) => item.kind === "project").createdAt, "1970-01-01T00:00:00.000Z", "runtime project creation time must not depend on the retrieved subset");
+
+  const envelopeSeed = buildSemanticGraphSeedFromRuntimeItems([{
+    projectPath: projectA,
+    title: "Envelope-scoped memory",
+    status: "active",
+    sourceRefs,
+  }], {
+    projectPath: projectA,
+    projectId: "shared-envelope-project-a",
+    projectName: "Semantic Project A",
+  });
+  assert.equal(envelopeSeed.projectId, "shared-envelope-project-a");
+  assert.ok(envelopeSeed.entities.every((item) => item.projectId === "shared-envelope-project-a"));
 
   const project = entity({ kind: "project", canonicalName: "Zhixia Memory Runtime" });
   const relations = Array.from({ length: 30 }, (_, index) => {

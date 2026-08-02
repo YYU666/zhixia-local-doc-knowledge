@@ -30,6 +30,7 @@ const ceoMemoryRuntimeGuardPolicy = fs.readFileSync(path.join(root, "electron", 
 const preload = fs.readFileSync(path.join(root, "electron", "preload.cjs"), "utf8");
 const viteEnv = fs.readFileSync(path.join(root, "src", "vite-env.d.ts"), "utf8");
 const appTsx = fs.readFileSync(path.join(root, "src", "App.tsx"), "utf8");
+const memoryGraphExplorer = fs.readFileSync(path.join(root, "src", "MemoryGraphExplorer.tsx"), "utf8");
 const styles = fs.readFileSync(path.join(root, "src", "styles.css"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const license = fs.readFileSync(path.join(root, "LICENSE"), "utf8");
@@ -511,6 +512,19 @@ assert.match(semanticMemoryGraphPolicy, /runtimeSeedSourceAliases[\s\S]*basename
 assert.match(memoryRuntimeIndexStore, /SELECT contentHash, createdAt FROM semantic_memory_entities[\s\S]*normalizeSemanticEntity\(\{ \.\.\.entity, createdAt: existingState\.createdAt \}/, "semantic upsert must preserve persisted createdAt when repairing replacement hashes");
 assert.match(semanticMemoryGraphPolicy, /backgroundTimer:\s*false[\s\S]*backgroundRebuild:\s*false/, "semantic one-hop assembly must not start timers or rebuild in background");
 assert.match(pkg.scripts.test, /semantic-memory-graph-policy\.test\.cjs/, "focused semantic graph coverage must run in default npm test");
+assert.match(pkg.scripts.test, /semantic-memory-graph-view\.test\.cjs/, "read-only semantic graph view coverage must run in default npm test");
+assert.ok(pkg.dependencies.cytoscape, "project graph UI must use the reviewed Cytoscape.js renderer");
+assert.match(main, /memoryRuntime:getSemanticGraphView/, "main process must expose the read-only native-sidecar graph view IPC");
+assert.match(main, /getSemanticMemoryGraphView[\s\S]*listSemanticMemoryEntities[\s\S]*listSemanticMemoryRelations/, "graph view must read native semantic entities and relations");
+assert.doesNotMatch(main.match(/function getSemanticMemoryGraphView[\s\S]*?\n}/)?.[0] || "", /saveDatabase|db\.export|activateMemoryRuntimeGraph/, "graph view must not route through legacy sql.js save/export activation");
+assert.match(preload, /getSemanticMemoryGraphView[\s\S]*memoryRuntime:getSemanticGraphView/, "preload must expose the read-only graph view IPC");
+assert.match(appTsx, /lazy\(\(\) => import\("\.\/MemoryGraphExplorer"\)\)/, "graph renderer must be code-split and loaded only when requested");
+assert.match(appTsx, /key: "graph", label: "记忆图谱"/, "project detail must expose a visible Memory Graph tab");
+assert.match(appTsx, /projectTab !== "graph"[\s\S]*loadProjectMemoryGraph/, "graph data must load only when the graph tab is active");
+assert.doesNotMatch(appTsx.match(/async function loadProjectMemoryGraph[\s\S]*?\n  async function runMemoryRuntimeProbe/)?.[0] || "", /retrieveMemoryRuntimeContext|activateMemoryRuntimeGraph/, "opening the graph tab must not enter legacy sql.js retrieval or activation");
+assert.match(memoryGraphExplorer, /cy\.destroy\(\)/, "Cytoscape instances must be destroyed when the graph unmounts");
+assert.match(memoryGraphExplorer, /animate:\s*false/, "graph layout must not run continuous animation");
+assert.match(memoryGraphExplorer, /slice\(0, 80\)/, "renderer must retain a defensive node cap");
 assert.match(memoryRuntimePolicy, /buildRuntimeContextPacket/, "Memory Runtime policy must build RuntimeContextPacket-shaped results");
 assert.match(memoryRuntimePolicy, /buildMemoryRouterPlan/, "Memory Runtime policy must expose a low-overhead MemoryRouter plan");
 assert.match(memoryRuntimePolicy, /hot_warm_cold_metadata_first/, "MemoryRouter must use hot/warm/cold metadata-first strategy");

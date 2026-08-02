@@ -19,7 +19,7 @@ import {
   Trash2,
   Wrench,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   AgentRuntimeAction,
@@ -55,6 +55,7 @@ import type {
   MemoryCoreDiagnostics,
   MemoryCoreReviewQueue,
   MemoryOverview,
+  MemoryGraph,
   MemoryFact,
   MemoryRuntimeTriggerReceipt,
   ParseStatus,
@@ -70,8 +71,10 @@ import type {
   ZhixiaSkillDefinition,
 } from "./vite-env";
 
+const MemoryGraphExplorer = lazy(() => import("./MemoryGraphExplorer"));
+
 type ViewKey = "project" | "vault" | "documents" | "knowledge" | "memory" | "tools" | "agent" | "settings";
-type ProjectTabKey = "overview" | "documents" | "knowledge" | "memory" | "handoff";
+type ProjectTabKey = "overview" | "documents" | "knowledge" | "memory" | "graph" | "handoff";
 type DocFilterKey = "project" | "all" | "favorite" | "failed" | "recent" | "codex";
 type VaultSectionKey = "inbox" | "notes" | "maps" | "sources" | "docs" | "other";
 type Tone = "teal" | "amber" | "red" | "slate";
@@ -287,6 +290,7 @@ const artifactTypeLabels: Record<string, string> = {
 
 const RUNTIME_MONITOR_REFRESH_COOLDOWN_MS = 10_000;
 const RUNTIME_MONITOR_VISIBLE_AUTO_REFRESH_MS = 0;
+const DEFAULT_MEMORY_GRAPH_GOAL = "理解当前项目的目标、架构、关键决策、证据和下一步";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -1551,8 +1555,13 @@ function App() {
   const [projectMemoryRecallByPath, setProjectMemoryRecallByPath] = useState<Record<string, RuntimeContextPacket>>({});
   const [projectMemoryRecallLoadingPaths, setProjectMemoryRecallLoadingPaths] = useState<string[]>([]);
   const [projectMemoryRecallErrors, setProjectMemoryRecallErrors] = useState<Record<string, true>>({});
+  const [projectMemoryGraphByPath, setProjectMemoryGraphByPath] = useState<Record<string, MemoryGraph>>({});
+  const [projectMemoryGraphLoadingPaths, setProjectMemoryGraphLoadingPaths] = useState<string[]>([]);
+  const [projectMemoryGraphErrors, setProjectMemoryGraphErrors] = useState<Record<string, string>>({});
+  const [projectMemoryGraphGoals, setProjectMemoryGraphGoals] = useState<Record<string, string>>({});
   const projectMemoryCoreStartedRef = useRef(new Set<string>());
   const projectMemoryRecallStartedRef = useRef(new Set<string>());
+  const projectMemoryGraphStartedRef = useRef(new Set<string>());
   const [historyQuery, setHistoryQuery] = useState("CEO Flow");
   const [historyEnvelope, setHistoryEnvelope] = useState<CodexGuardianHistoryEnvelope | null>(null);
   const [selectedHistoryThreadId, setSelectedHistoryThreadId] = useState<string | null>(null);
@@ -1715,6 +1724,38 @@ function App() {
     ]);
     setMemoryRuntimeFacts(factsResult.facts);
     setMemoryRuntimeTriggerReceipts(receiptsResult.receipts);
+  }
+
+  async function loadProjectMemoryGraph(projectPath: string, force = false) {
+    if (typeof window.docKnowledge.getSemanticMemoryGraphView !== "function") {
+      setProjectMemoryGraphErrors((current) => ({ ...current, [projectPath]: "当前安装版还没有只读语义图谱接口。" }));
+      return;
+    }
+    if (!force && projectMemoryGraphStartedRef.current.has(projectPath)) return;
+    projectMemoryGraphStartedRef.current.add(projectPath);
+    setProjectMemoryGraphLoadingPaths((current) => (current.includes(projectPath) ? current : [...current, projectPath]));
+    setProjectMemoryGraphErrors((current) => {
+      const next = { ...current };
+      delete next[projectPath];
+      return next;
+    });
+    try {
+      const taskGoal = projectMemoryGraphGoals[projectPath] || DEFAULT_MEMORY_GRAPH_GOAL;
+      const graph = await window.docKnowledge.getSemanticMemoryGraphView({
+        projectPath,
+        taskGoal,
+        maxNodes: 72,
+        maxEdges: 160,
+      });
+      setProjectMemoryGraphByPath((current) => ({ ...current, [projectPath]: graph }));
+    } catch (error) {
+      setProjectMemoryGraphErrors((current) => ({
+        ...current,
+        [projectPath]: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      setProjectMemoryGraphLoadingPaths((current) => current.filter((item) => item !== projectPath));
+    }
   }
 
   async function runMemoryRuntimeProbe() {
@@ -1991,11 +2032,14 @@ function App() {
       for (const projectPath of result.projects || []) {
         projectMemoryCoreStartedRef.current.delete(projectPath);
         projectMemoryRecallStartedRef.current.delete(projectPath);
+        projectMemoryGraphStartedRef.current.delete(projectPath);
       }
       const scannedProjects = new Set(result.projects || []);
       setProjectMemoryCoreByPath((current) => Object.fromEntries(Object.entries(current).filter(([projectPath]) => !scannedProjects.has(projectPath))));
       setProjectMemoryRecallByPath((current) => Object.fromEntries(Object.entries(current).filter(([projectPath]) => !scannedProjects.has(projectPath))));
       setProjectMemoryRecallErrors((current) => Object.fromEntries(Object.entries(current).filter(([projectPath]) => !scannedProjects.has(projectPath))));
+      setProjectMemoryGraphByPath((current) => Object.fromEntries(Object.entries(current).filter(([projectPath]) => !scannedProjects.has(projectPath))));
+      setProjectMemoryGraphErrors((current) => Object.fromEntries(Object.entries(current).filter(([projectPath]) => !scannedProjects.has(projectPath))));
       await loadMemory();
       await loadKnowledge();
       if (result.imported.length > 0) setSelectedId(result.imported[0].id);
@@ -3843,6 +3887,11 @@ function App() {
   }, [activeProject, projectMemoryCoreByPath, projectTab, view]);
 
   useEffect(() => {
+    if (view !== "project" || projectTab !== "graph" || !activeProject) return;
+    loadProjectMemoryGraph(activeProject).catch(() => undefined);
+  }, [activeProject, projectTab, view]);
+
+  useEffect(() => {
     loadToolSkillInventory(effectiveProjectPath).catch(() => {
       setToolSkillInventory(null);
       setToolSkillInventoryError("Tool/Skill inventory 读取失败。");
@@ -4186,6 +4235,10 @@ function App() {
   const projectMemoryRecallPacket = effectiveProjectPath ? projectMemoryRecallByPath[effectiveProjectPath] || null : null;
   const projectMemoryRecallLoading = Boolean(effectiveProjectPath && projectMemoryRecallLoadingPaths.includes(effectiveProjectPath));
   const projectMemoryRecallError = Boolean(effectiveProjectPath && projectMemoryRecallErrors[effectiveProjectPath]);
+  const projectMemoryGraph = effectiveProjectPath ? projectMemoryGraphByPath[effectiveProjectPath] || null : null;
+  const projectMemoryGraphLoading = Boolean(effectiveProjectPath && projectMemoryGraphLoadingPaths.includes(effectiveProjectPath));
+  const projectMemoryGraphError = effectiveProjectPath ? projectMemoryGraphErrors[effectiveProjectPath] || null : null;
+  const projectMemoryGraphGoal = effectiveProjectPath ? projectMemoryGraphGoals[effectiveProjectPath] || DEFAULT_MEMORY_GRAPH_GOAL : DEFAULT_MEMORY_GRAPH_GOAL;
   const projectMemoryCoreInitialized = Boolean(
     projectMemoryCoreSnapshot?.diagnostics?.initialized ??
       (projectMemoryCoreSnapshot?.diagnostics?.privateStateReady && projectMemoryCoreSnapshot?.diagnostics?.sidecarReady) ??
@@ -6517,6 +6570,7 @@ function App() {
               { key: "documents", label: "历史" },
               { key: "knowledge", label: "知识条目" },
               { key: "memory", label: "项目记忆" },
+              { key: "graph", label: "记忆图谱" },
               { key: "handoff", label: "决策与交接" },
             ].map((tab) => (
               <button
@@ -6874,6 +6928,18 @@ function App() {
           {projectTab === "documents" ? renderDocumentCollection(projectDocumentCards, "项目历史", `${projectDocumentCards.length} 条项目来源仍可直接查看和导出。`) : null}
           {projectTab === "knowledge" ? renderKnowledgeCollection(filteredKnowledgeItems, "项目知识条目", `${filteredKnowledgeItems.length} 条整理结果，保留来源路径和提供者信息。`) : null}
           {projectTab === "memory" ? renderProjectMemoryCore() : null}
+          {projectTab === "graph" && effectiveProjectPath ? (
+            <Suspense fallback={<div className="memory-core-state" role="status"><RefreshCw size={18} className="spin" /><span>正在加载图谱画布。</span></div>}>
+              <MemoryGraphExplorer
+                graph={projectMemoryGraph}
+                loading={projectMemoryGraphLoading}
+                error={projectMemoryGraphError}
+                taskGoal={projectMemoryGraphGoal}
+                onTaskGoalChange={(value) => setProjectMemoryGraphGoals((current) => ({ ...current, [effectiveProjectPath]: value }))}
+                onRefresh={() => loadProjectMemoryGraph(effectiveProjectPath, true)}
+              />
+            </Suspense>
+          ) : null}
 
           {projectTab === "handoff" ? (
             <section className="collection-shell">

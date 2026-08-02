@@ -275,3 +275,10 @@ Fresh-user / second-machine release signoff is intentionally outside default `np
 - `tests/smoke-test.cjs` must prove the semantic provider is sidecar-owned, automatically populated/called by Electron `retrieve_context` and verified CLI retrieve, hard-capped at 24 compact seed items and 12 paths/1200 tokens/96 query candidates, packaged with the Skill route, wired into default `npm test`, and free of timers/background rebuild/raw-body or additional workspace scans.
 - `node tests/Example Project-memory-runtime-recovery.test.cjs` remains the authority regression: semantic evidence must not change app-owned `current`, `recoveryReady`, authority verification, continuity pagination, or exact source binding.
 - All fixtures use temporary sidecars. Tests must not resolve or write the real user `memory-runtime-index.sqlite`, user data, Example Project data, sessions, Vaults, backups, or knowledge-base sources.
+
+## Project Memory Graph UI
+
+- `tests/semantic-memory-graph-view.test.cjs` must prove exact-project/worktree isolation, node/edge caps, metadata-only mapping, read-only sidecar access, no sql.js `saveDatabase/db.export`, and empty/partial diagnostics.
+- Smoke tests must verify the project `graph` tab, preload/IPC/type contract, Cytoscape dependency, lazy component boundary, unmount destruction, non-animated layout, and default-test wiring.
+- Electron visual behavior E2E must open a project, enter “记忆图谱”, wait for the graph surface, verify a nonblank canvas/node count, select a node to expose the evidence pane, and check desktop/narrow viewport overflow.
+- Performance acceptance: no graph IPC at app startup or project-list render; first tab open returns at most 72 nodes/160 edges; local search does not call IPC; no timer, watcher, continuous layout tick, raw history, Vault body, image/base64, or whole-database export is allowed.

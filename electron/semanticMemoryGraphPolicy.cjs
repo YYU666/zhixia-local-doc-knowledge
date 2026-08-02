@@ -72,6 +72,7 @@ function canonicalSemanticGraphProjectScope(projectPath, envelope = null) {
   const fallback = {
     projectPath: requestedProjectPath,
     projectId: projectIdentityForPath(requestedProjectPath),
+    legacyProjectIds: [],
     acceptedProjectPaths: requestedProjectPath ? [requestedProjectPath] : [],
     canonicalized: false,
     envelopeProjectId: null,
@@ -88,7 +89,8 @@ function canonicalSemanticGraphProjectScope(projectPath, envelope = null) {
   }
   return {
     projectPath: canonicalRoot,
-    projectId: projectIdentityForPath(canonicalRoot),
+    projectId: envelopeProjectId,
+    legacyProjectIds: [projectIdentityForPath(canonicalRoot)].filter((value) => value && value !== envelopeProjectId),
     acceptedProjectPaths,
     canonicalized: requestedProjectPath !== canonicalRoot,
     envelopeProjectId,
@@ -607,7 +609,7 @@ function runtimeSeedSourceAliases(sourceRefs) {
 
 function buildSemanticGraphSeedFromRuntimeItems(items = [], options = {}) {
   const projectPath = normalizeProjectPath(options.projectPath);
-  const projectId = projectIdentityForPath(projectPath);
+  const projectId = compactText(options.projectId, 180) || projectIdentityForPath(projectPath);
   const authorityProjectId = compactText(options.authorityProjectId, 180) || null;
   const acceptedProjectPaths = [...new Set([
     projectPath,

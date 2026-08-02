@@ -90,6 +90,8 @@ const {
 const {
   listMemoryFacts,
   listMemoryRuntimeTriggerReceipts,
+  listSemanticMemoryEntities,
+  listSemanticMemoryRelations,
   memoryFactToSearchItem,
   openMemoryRuntimeIndex,
   reconcileMemorySearchItems,
@@ -220,6 +222,10 @@ const STALE_UNKNOWN_THREAD_DAYS = 3;
 const MASKED_SETTING_VALUE = "••••••••";
 const CODEX_HISTORY_VAULT_SCHEMA_VERSION = "zhixia.codex_thread_vault.v1";
 const E2E_PROBE_ENABLED = process.env.ZHIXIA_E2E_PROBE === "1";
+const SEMANTIC_GRAPH_VIEW_DEFAULT_NODES = 72;
+const SEMANTIC_GRAPH_VIEW_MAX_NODES = 72;
+const SEMANTIC_GRAPH_VIEW_DEFAULT_EDGES = 180;
+const SEMANTIC_GRAPH_VIEW_MAX_EDGES = 180;
 
 app.setName("知匣 Local Doc Knowledge");
 if (process.platform === "win32") {
@@ -9160,15 +9166,10 @@ async function retrieveMemoryRuntimeContext(options = {}) {
   let semanticGraphIdentityEnvelope = null;
   let semanticGraphIdentityWarnings = [];
   if (requestedSemanticGraphProjectPath) {
-    const gitMarker = path.join(path.resolve(requestedSemanticGraphProjectPath), ".git");
-    if (fsNative.existsSync(gitMarker)) {
-      try {
-        semanticGraphIdentityEnvelope = deriveProjectIdentityEnvelope(requestedSemanticGraphProjectPath);
-      } catch (error) {
-        semanticGraphIdentityWarnings = [`semantic_graph_project_identity_envelope_failed:${sanitizeAgentRetrieveErrorMessage(error)}`];
-      }
-    } else {
-      semanticGraphIdentityWarnings = ["semantic_graph_non_git_exact_project_identity_fallback"];
+    try {
+      semanticGraphIdentityEnvelope = deriveProjectIdentityEnvelope(requestedSemanticGraphProjectPath);
+    } catch (error) {
+      semanticGraphIdentityWarnings = [`semantic_graph_project_identity_envelope_failed:${sanitizeAgentRetrieveErrorMessage(error)}`];
     }
   }
   const semanticGraphScope = canonicalSemanticGraphProjectScope(
@@ -9202,6 +9203,7 @@ async function retrieveMemoryRuntimeContext(options = {}) {
   try {
     const seedGraph = buildSemanticGraphSeedFromRuntimeItems(packet.items, {
       projectPath: semanticGraphProjectPath,
+      projectId: semanticGraphScope.projectId,
       projectName: semanticGraphProjectPath ? path.basename(semanticGraphProjectPath) : null,
       acceptedProjectPaths: semanticGraphScope.acceptedProjectPaths,
     });
@@ -10121,6 +10123,263 @@ function listMemoryRuntimeTriggerReceiptRecords(options = {}) {
   return { receipts: listMemoryRuntimeTriggerReceipts(memoryRuntimeRoot(), options) };
 }
 
+function semanticGraphViewLimit(value, fallback, maximum, minimum = 1) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(minimum, Math.min(Math.floor(numeric), maximum));
+}
+
+function semanticGraphViewSourceRefs(sourceRefs) {
+  return safeArray(sourceRefs).slice(0, 3).map((ref) => ({
+    kind: ref?.kind || "source",
+    id: ref?.id || null,
+    path: ref?.path || null,
+    uri: ref?.uri || null,
+    title: ref?.title || null,
+    hash: ref?.hash || null,
+    updatedAt: ref?.updatedAt || null,
+  }));
+}
+
+function semanticGraphViewNode(entity, selectedNodeId) {
+  return {
+    id: entity.id,
+    label: entity.canonicalName,
+    kind: entity.kind,
+    status: entity.status,
+    selected: entity.id === selectedNodeId,
+    provenance: entity.provenance,
+    confidence: entity.confidence,
+    aliases: safeArray(entity.aliases).slice(0, 24),
+    sourceRefs: semanticGraphViewSourceRefs(entity.sourceRefs),
+    metadata: {
+      aliases: safeArray(entity.aliases).slice(0, 24),
+      provenance: entity.provenance,
+      confidence: entity.confidence,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    },
+  };
+}
+
+function semanticGraphViewEdge(relation) {
+  return {
+    id: relation.id,
+    from: relation.fromEntityId,
+    to: relation.toEntityId,
+    kind: relation.predicate,
+    weight: relation.confidence,
+    source: relation.fromEntityId,
+    target: relation.toEntityId,
+    label: relation.predicate,
+    predicate: relation.predicate,
+    status: relation.status,
+    provenance: relation.provenance,
+    confidence: relation.confidence,
+    validFrom: relation.validFrom,
+    validTo: relation.validTo,
+    factId: relation.factId,
+    sourceRefs: semanticGraphViewSourceRefs(relation.sourceRefs),
+    metadata: {
+      provenance: relation.provenance,
+      confidence: relation.confidence,
+      validFrom: relation.validFrom,
+      validTo: relation.validTo,
+      factId: relation.factId,
+      createdAt: relation.createdAt,
+      updatedAt: relation.updatedAt,
+    },
+  };
+}
+
+function semanticGraphViewOrder(left, right) {
+  return String(right?.updatedAt || "").localeCompare(String(left?.updatedAt || ""))
+    || String(left?.id || "").localeCompare(String(right?.id || ""));
+}
+
+function getSemanticMemoryGraphView(options = {}) {
+  const startedAt = Date.now();
+  const nodeLimit = semanticGraphViewLimit(
+    options.maxNodes,
+    SEMANTIC_GRAPH_VIEW_DEFAULT_NODES,
+    SEMANTIC_GRAPH_VIEW_MAX_NODES,
+  );
+  const edgeLimit = semanticGraphViewLimit(
+    options.maxEdges,
+    SEMANTIC_GRAPH_VIEW_DEFAULT_EDGES,
+    SEMANTIC_GRAPH_VIEW_MAX_EDGES,
+    0,
+  );
+  const selectedNodeId = String(options.centerNodeId || options.selectedNodeId || "").trim().slice(0, 220) || null;
+  const taskGoal = String(options.taskGoal || options.query || "").trim().slice(0, 1200);
+  const requestedProjectPath = String(options.projectPath || "").trim();
+  const warnings = [];
+  let projectIdentity = null;
+  let projectScope = canonicalSemanticGraphProjectScope(requestedProjectPath, null);
+
+  if (requestedProjectPath) {
+    try {
+      projectIdentity = deriveProjectIdentityEnvelope(requestedProjectPath);
+      projectScope = canonicalSemanticGraphProjectScope(requestedProjectPath, projectIdentity);
+      warnings.push(...safeArray(projectScope.warnings));
+    } catch (error) {
+      warnings.push(`semantic_graph_view_project_identity_failed:${sanitizeAgentRetrieveErrorMessage(error)}`);
+    }
+  } else {
+    warnings.push("semantic_graph_view_exact_project_path_required");
+  }
+
+  let entityCandidates = [];
+  let relationCandidates = [];
+  let storageProjectId = projectScope.projectId || null;
+  const exactIdentity = Boolean(requestedProjectPath && projectIdentity && projectScope.projectPath && projectScope.projectId);
+  if (exactIdentity) {
+    try {
+      entityCandidates = listSemanticMemoryEntities(memoryRuntimeRoot(), {
+        scope: "project",
+        projectPath: projectScope.projectPath,
+        projectId: projectScope.projectId,
+        limit: selectedNodeId ? 500 : Math.min(500, nodeLimit + 1),
+      }).sort(semanticGraphViewOrder);
+      relationCandidates = listSemanticMemoryRelations(memoryRuntimeRoot(), {
+        scope: "project",
+        projectPath: projectScope.projectPath,
+        projectId: projectScope.projectId,
+        limit: 600,
+      }).sort(semanticGraphViewOrder);
+      if (entityCandidates.length === 0 && safeArray(projectScope.legacyProjectIds).length > 0) {
+        const legacyProjectId = projectScope.legacyProjectIds[0];
+        const legacyEntities = listSemanticMemoryEntities(memoryRuntimeRoot(), {
+          scope: "project",
+          projectPath: projectScope.projectPath,
+          projectId: legacyProjectId,
+          limit: selectedNodeId ? 500 : Math.min(500, nodeLimit + 1),
+        }).sort(semanticGraphViewOrder);
+        if (legacyEntities.length > 0) {
+          entityCandidates = legacyEntities;
+          relationCandidates = listSemanticMemoryRelations(memoryRuntimeRoot(), {
+            scope: "project",
+            projectPath: projectScope.projectPath,
+            projectId: legacyProjectId,
+            limit: 600,
+          }).sort(semanticGraphViewOrder);
+          storageProjectId = legacyProjectId;
+          warnings.push("semantic_graph_view_legacy_project_id_read_only");
+        }
+      }
+    } catch (error) {
+      warnings.push(`semantic_graph_view_sidecar_read_failed:${sanitizeAgentRetrieveErrorMessage(error)}`);
+    }
+  }
+
+  const entityById = new Map(entityCandidates.map((entity) => [entity.id, entity]));
+  const selectedEntity = selectedNodeId ? entityById.get(selectedNodeId) || null : null;
+  const includedEntities = [];
+  const includedEntityIds = new Set();
+  const includedRelations = [];
+  let eligibleRelationCount = 0;
+
+  if (selectedNodeId) {
+    if (!selectedEntity) {
+      warnings.push("semantic_graph_view_selected_node_not_found");
+    } else {
+      includedEntities.push(selectedEntity);
+      includedEntityIds.add(selectedEntity.id);
+      const incidentRelations = relationCandidates.filter((relation) =>
+        relation.fromEntityId === selectedNodeId || relation.toEntityId === selectedNodeId);
+      eligibleRelationCount = incidentRelations.filter((relation) =>
+        entityById.has(relation.fromEntityId) && entityById.has(relation.toEntityId)).length;
+      for (const relation of incidentRelations) {
+        if (includedRelations.length >= edgeLimit) break;
+        const neighborId = relation.fromEntityId === selectedNodeId ? relation.toEntityId : relation.fromEntityId;
+        const neighbor = entityById.get(neighborId);
+        if (!neighbor) continue;
+        if (!includedEntityIds.has(neighborId) && includedEntities.length >= nodeLimit) continue;
+        if (!includedEntityIds.has(neighborId)) {
+          includedEntities.push(neighbor);
+          includedEntityIds.add(neighborId);
+        }
+        includedRelations.push(relation);
+      }
+    }
+  } else {
+    for (const entity of entityCandidates.slice(0, nodeLimit)) {
+      includedEntities.push(entity);
+      includedEntityIds.add(entity.id);
+    }
+    const eligibleRelations = relationCandidates.filter((relation) =>
+      includedEntityIds.has(relation.fromEntityId) && includedEntityIds.has(relation.toEntityId));
+    eligibleRelationCount = eligibleRelations.length;
+    includedRelations.push(...eligibleRelations.slice(0, edgeLimit));
+  }
+
+  const nodes = includedEntities.sort(semanticGraphViewOrder)
+    .slice(0, nodeLimit)
+    .map((entity) => semanticGraphViewNode(entity, selectedNodeId));
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = includedRelations
+    .filter((relation) => nodeIds.has(relation.fromEntityId) && nodeIds.has(relation.toEntityId))
+    .slice(0, edgeLimit)
+    .map(semanticGraphViewEdge);
+  const durationMs = Date.now() - startedAt;
+
+  return {
+    schemaVersion: 1,
+    mode: selectedNodeId ? "one_hop" : "overview",
+    taskGoal,
+    generatedAt: new Date().toISOString(),
+    projectIdentity: projectIdentity ? {
+      schemaVersion: projectIdentity.schemaVersion,
+      projectId: projectIdentity.projectId,
+      canonicalRepoId: projectIdentity.canonicalRepoId,
+      canonicalRoot: projectIdentity.canonicalRoot,
+      worktreeRoot: projectIdentity.worktreeRoot,
+      projectIdentitySha256: projectIdentity.projectIdentitySha256,
+      graphProjectPath: projectScope.projectPath,
+      graphProjectId: projectScope.projectId,
+      storageProjectId,
+    } : null,
+    neighborhood: selectedNodeId
+      ? { mode: "one_hop", centerNodeId: selectedNodeId, selectedNodeId }
+      : { mode: "overview", centerNodeId: null, selectedNodeId: null },
+    nodes,
+    edges,
+    diagnostics: {
+      readOnly: true,
+      nativeMemoryRuntimeSidecar: true,
+      exactProjectIdentity: exactIdentity,
+      isolation: "ProjectIdentityEnvelope+storeRoot",
+      nodeLimit,
+      edgeLimit,
+      candidateNodeCount: entityCandidates.length,
+      candidateEdgeCount: relationCandidates.length,
+      selectedNodeFound: selectedNodeId ? Boolean(selectedEntity) : null,
+      nodesTruncated: entityCandidates.length > nodes.length,
+      edgesTruncated: eligibleRelationCount > edges.length,
+      warnings: [...new Set(warnings)].slice(0, 20),
+    },
+    performance: {
+      durationMs,
+      queryDurationMs: durationMs,
+      readOnly: true,
+      metadataOnly: true,
+      onDemand: true,
+      oneHop: Boolean(selectedNodeId),
+      bounded: true,
+      rawSessionBodyReads: 0,
+      vaultBodyReads: 0,
+      base64PayloadReads: 0,
+      legacyDatabaseReads: 0,
+      wholeDatabaseExports: 0,
+      writes: 0,
+      seeds: 0,
+      migrations: 0,
+      backgroundTimers: 0,
+    },
+    warnings: [...new Set(warnings)].slice(0, 20),
+  };
+}
+
 function getMemoryCoreDiagnostics(options = {}) {
   return getExistingMemoryCoreRuntime()?.getDiagnostics(options) || buildUnavailableMemoryCoreDiagnostics(options);
 }
@@ -10888,6 +11147,8 @@ async function runE2EGovernanceProbe(options = {}) {
       triggerHooks: triggerReceipts.map((receipt) => receipt.hook),
       benchmarkPassed: memoryEvaluation.gate?.passed === true,
       benchmarkRecallAtK: memoryEvaluation.metrics?.recallAtK || 0,
+      benchmarkMetrics: memoryEvaluation.metrics || null,
+      benchmarkFailedChecks: safeArray(memoryEvaluation.gate?.failedThresholds),
       rejectedWritebackStatus: rejectedWriteback.status,
       rejectedWritebackFactCountUnchanged: memoryFactsAfterRejected.length === memoryFacts.length,
       rejectedStoredPayloadSanitized: !rejectedStoredPayload.includes(unsafeE2eToken),
@@ -11305,6 +11566,8 @@ ipcMain.handle("memoryRuntime:listFlowSkillCandidates", async (_event, options =
 ipcMain.handle("memoryRuntime:listFacts", async (_event, options = {}) => listMemoryRuntimeFacts(options));
 
 ipcMain.handle("memoryRuntime:listTriggerReceipts", async (_event, options = {}) => listMemoryRuntimeTriggerReceiptRecords(options));
+
+ipcMain.handle("memoryRuntime:getSemanticGraphView", async (_event, options = {}) => getSemanticMemoryGraphView(options));
 
 ipcMain.handle("memoryRuntime:evaluateBenchmark", async (_event, options = {}) => evaluateMemoryRuntimeBenchmark(options));
 

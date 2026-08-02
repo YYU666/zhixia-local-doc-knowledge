@@ -1047,3 +1047,12 @@ OpenClaw 旧记忆在完成退役后进入知匣 cold archive：显式构建一�
 - Unready CLI retrieval still returns an attempted, zero-hit `semanticGraph` contract with no seed/write and explicit authority non-effects. Runtime source aliases may include only safe normalized source-ref titles and basename/stem metadata. Electron canonicalizes linked-worktree graph ownership through the existing `ProjectIdentityEnvelope`; envelope mismatch falls back to the exact requested project with diagnostics instead of inheriting foreign memory.
 - Graph paths are additive evidence only. They cannot set or upgrade `current`, `recoveryReady`, authority verification, continuity slots, acceptance, or Memory Core authority.
 - Inferred and global graph material is review-only. Global review paths require an explicit review query and `allowGlobalSemanticReview=true`; same aliases in different exact projects never share IDs or candidates.
+
+### 12.1 Project Memory Graph UI (2026-08-02)
+
+- 项目详情新增独立“记忆图谱”标签。它是解释和纠错界面，不是新的记忆权威，也不替代项目记忆、连续性槽位或来源审查。
+- 首次打开标签时只读取当前项目的 native sidecar 局部图，不额外触发 `retrieve_context` 或旧 sql.js activation；语义记录由正常任务期 Memory Runtime 检索按既有规则增量写入。应用启动、项目列表和其他标签不加载 Cytoscape、不查询图谱、不运行布局。
+- 首屏目标为 30-80 个节点，产品硬上限为 72 个节点和 160 条边。用户可以按任务目标更新关联、搜索节点、按类型筛选、缩放复位并查看节点来源；扩大范围必须显式操作，不能自动渲染全库。
+- 图谱页面必须显示实体类型、状态、来源和关系谓词，明确区分已接受、待复核、冲突、过期与推断材料；点击节点只能查看 compact metadata/sourceRefs，不能读取 raw session、Vault body、巨型 Markdown、图片/base64 或凭据。
+- 画布采用按需代码分包，组件卸载时销毁 Cytoscape 实例，布局 `animate=false` 且不得存在持续 tick/timer。待机 CPU 应接近零；未满足节点/边/耗时预算时返回 partial/empty state，而不是扩大扫描。
+- 图谱 UI 只能调用 native SQLite sidecar 的 exact-project read API，禁止调用旧 `memoryRuntime:activateMemory` 的 sql.js 同步/整库保存路径。任何关系展示都不能设置或升级 `current`、`recoveryReady`、continuity 或 acceptance。
