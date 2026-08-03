@@ -1370,6 +1370,7 @@ for (const docPath of [
   "docs/TECHNICAL_DESIGN.md",
   "docs/TEST_PLAN.md",
   "docs/NATIVE_SQLITE_MIGRATION_PLAN.md",
+  "docs/MINIMAX_CODE_MEMORY_BRIDGE.md",
   "docs/RELEASE_NOTES.md",
   ...(isPublicSourceStaging ? [] : ["docs/PROJECT_EVALUATION.md"]),
 ]) {
@@ -1383,6 +1384,8 @@ const helperPath = path.join(skillPath, "scripts", "read-project-knowledge.cjs")
 const helper = fs.readFileSync(helperPath, "utf8");
 const headlessPath = path.join(skillPath, "scripts", "memory-runtime-headless.cjs");
 const headless = fs.readFileSync(headlessPath, "utf8");
+const mcpBridgePath = path.join(skillPath, "scripts", "memory-runtime-mcp.cjs");
+const mcpBridge = fs.readFileSync(mcpBridgePath, "utf8");
 const appOwnedInvokerPath = path.join(skillPath, "scripts", "invoke-app-memory-runtime.cjs");
 const appOwnedInvoker = fs.readFileSync(appOwnedInvokerPath, "utf8");
 const appOwnedCliPath = path.join(root, "electron", "memoryRuntimeCli.cjs");
@@ -1444,8 +1447,10 @@ assert.match(helper, /requiresHumanConfirmation/, "retrieval helper must emit co
 assert.match(helper, /deriveKnowledgeFreshness[\s\S]*ageMs[\s\S]*freshnessBasis/, "knowledge freshness must derive from real age and evidence basis");
 assert.match(helper, /duplicate_memory_item_id_merged/, "provider must diagnose merged duplicate memory IDs");
 assert.match(helper, /fallback_stale[\s\S]*recoveryReady/, "missing Memory Core must fail to fallback_stale without recovery readiness");
-assert.match(headless, /retrieve_context[\s\S]*retrieve_precedent[\s\S]*observe_event[\s\S]*writeback_evidence[\s\S]*list_trigger_receipts/, "headless runtime must cover the lifecycle contract");
+assert.match(headless, /retrieve_context[\s\S]*retrieve_precedent[\s\S]*observe_event[\s\S]*writeback_evidence[\s\S]*list_trigger_receipts[\s\S]*report_worker_task_status[\s\S]*list_worker_tasks/, "headless runtime must cover the lifecycle and worker-task telemetry contract");
 assert.match(headless, /accepted_writeback_requires_source_refs/, "headless accepted writeback must require sourceRefs");
+assert.match(mcpBridge, /retrieve_context[\s\S]*retrieve_precedent[\s\S]*observe_event[\s\S]*writeback_evidence[\s\S]*continuity[\s\S]*list_trigger_receipts[\s\S]*report_worker_task_status[\s\S]*list_worker_tasks/, "MCP bridge must expose the full headless lifecycle and worker-task telemetry contract");
+assert.match(mcpBridge, /MAX_MESSAGE_BYTES/, "MCP bridge must bound inbound protocol messages");
 assert.match(projectIdentity, /projectId[\s\S]*canonicalRepoId[\s\S]*canonicalRoot[\s\S]*worktreeRoot[\s\S]*baselineHead[\s\S]*projectIdentitySha256/, "ProjectIdentityEnvelope must expose stable project/worktree identity");
 assert.match(helper, /buildRuntimeContextPacket/, "retrieval helper must build RuntimeContextPacket-shaped output");
 assert.match(helper, /buildRuntimePrecedentPacket/, "retrieval helper must build RuntimePrecedentPacket-shaped output");
@@ -1454,6 +1459,7 @@ assert.match(skill, /--recover-thread[\s\S]*ThreadRecoveryPacket-shaped/, "Skill
 assert.match(pkg.scripts.test, /zhixia-local-docs-helper\.test\.cjs/, "default npm test must include Zhixia local-docs helper lifecycle coverage");
 assert.match(pkg.scripts.test, /memory-benchmark-gate\.test\.cjs/, "default npm test must prove strategy failure is a nonzero gate");
 assert.match(pkg.scripts.test, /memory-runtime-headless\.test\.cjs/, "default npm test must cover UI-free writeback");
+assert.match(pkg.scripts.test, /memory-runtime-mcp\.test\.cjs/, "default npm test must cover cross-agent MCP memory access");
 assert.match(pkg.scripts.test, /native-document-sidecar-migration\.test\.cjs/, "default npm test must cover reversible native SQLite shadow migration");
 assert.match(pkg.scripts.test, /example-project-memory-runtime-recovery\.test\.cjs/, "default npm test must cover verified EXAMPLE_PROJECT long-thread recovery and compatibility refresh");
 assert.match(skill, /freshness=review/, "Skill docs must explain non-authoritative review freshness");
@@ -1465,6 +1471,7 @@ assert.ok(
   "Skill retrieval helper script must exist",
 );
 assert.ok(fs.existsSync(headlessPath), "Skill strict-JSON headless runtime must exist");
+assert.ok(fs.existsSync(mcpBridgePath), "Skill stdio MCP bridge must exist");
 assert.ok(fs.existsSync(appOwnedInvokerPath), "Skill app-owned Memory Core invoker must exist");
 assert.ok(fs.existsSync(appOwnedCliPath), "app-owned Memory Runtime CLI must exist");
 if (isPublicSourceStaging) {

@@ -50,6 +50,7 @@ const publicDocs = new Set([
   "TECHNICAL_DESIGN.md",
   "TEST_PLAN.md",
   "NATIVE_SQLITE_MIGRATION_PLAN.md",
+  "MINIMAX_CODE_MEMORY_BRIDGE.md",
 ]);
 
 const publicScripts = new Set([

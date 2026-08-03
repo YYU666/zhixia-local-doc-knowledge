@@ -71,6 +71,77 @@ function main() {
     }, env);
     assert.equal(event.action, "observe_event");
 
+    const taskStarted = run({
+      action: "report_worker_task_status", workspace, agent: "minimax-code",
+      taskId: "minimax-alpha-001", status: "running", title: "Alpha small task",
+      summary: "MiniMax started the bounded project task.", progressPct: 10,
+    }, env);
+    assert.equal(taskStarted.changed, true);
+    assert.equal(taskStarted.task.status, "running");
+    assert.equal(taskStarted.task.authority.selfReported, true);
+    assert.equal(taskStarted.task.authority.acceptedEvidence, false);
+    assert.equal(taskStarted.polling.heartbeatCreated, false);
+
+    const taskRepeated = run({
+      action: "report_worker_task_status", workspace, agent: "minimax-code",
+      taskId: "minimax-alpha-001", status: "running", title: "Alpha small task",
+      summary: "MiniMax started the bounded project task.", progressPct: 10,
+    }, env);
+    assert.equal(taskRepeated.changed, false, "identical worker status must be idempotent");
+
+    const taskProgress = run({
+      action: "report_worker_task_status", workspace, agent: "minimax-code",
+      taskId: "minimax-alpha-001", status: "running", title: "Alpha small task",
+      summary: "Implementation finished; verification is running.", progressPct: 70,
+      sourceRefs: [{ kind: "canonical_doc", path: "docs/PRD.md", title: "Alpha PRD" }],
+    }, env);
+    assert.equal(taskProgress.changed, true);
+    assert.equal(taskProgress.task.progressPct, 70);
+
+    const activeTasks = run({ action: "list_worker_tasks", workspace, agent: "minimax-code" }, env);
+    assert.equal(activeTasks.counts.active, 1);
+    assert.equal(activeTasks.tasks[0].taskId, "minimax-alpha-001");
+
+    const taskRegression = run({
+      action: "report_worker_task_status", workspace, agent: "minimax-code",
+      taskId: "minimax-alpha-001", status: "running", title: "Alpha small task",
+      summary: "Stale progress report.", progressPct: 20,
+    }, env, 1);
+    assert.equal(taskRegression.error, "worker_task_progress_regression_rejected");
+    const taskAfterRegression = run({ action: "list_worker_tasks", workspace, agent: "minimax-code" }, env);
+    assert.equal(taskAfterRegression.tasks[0].progressPct, 70, "rejected progress must roll back without mutating the task");
+
+    const taskCompleted = run({
+      action: "report_worker_task_status", workspace, agent: "minimax-code",
+      taskId: "minimax-alpha-001", status: "completed", title: "Alpha small task",
+      summary: "The bounded task completed and its local acceptance check passed.",
+      sourceRefs: [{ kind: "canonical_doc", path: "docs/PRD.md", title: "Alpha PRD" }],
+    }, env);
+    assert.equal(taskCompleted.task.progressPct, 100);
+    assert.ok(taskCompleted.task.completedAt);
+
+    const taskCompletedRepeated = run({
+      action: "report_worker_task_status", workspace, agent: "minimax-code",
+      taskId: "minimax-alpha-001", status: "completed", title: "Alpha small task",
+      summary: "The bounded task completed and its local acceptance check passed.",
+      sourceRefs: [{ kind: "canonical_doc", path: "docs/PRD.md", title: "Alpha PRD" }],
+    }, env);
+    assert.equal(taskCompletedRepeated.changed, false, "identical terminal reports must remain idempotent");
+    assert.equal(taskCompletedRepeated.task.completedAt, taskCompleted.task.completedAt);
+
+    const noActiveTasks = run({ action: "list_worker_tasks", workspace, agent: "minimax-code" }, env);
+    assert.equal(noActiveTasks.tasks.length, 0, "terminal tasks must be hidden from the default active view");
+    const allTasks = run({ action: "list_worker_tasks", workspace, agent: "minimax-code", includeTerminal: true }, env);
+    assert.equal(allTasks.counts.terminal, 1);
+    assert.equal(allTasks.tasks[0].status, "completed");
+
+    const taskReopen = run({
+      action: "report_worker_task_status", workspace, agent: "minimax-code",
+      taskId: "minimax-alpha-001", status: "running", title: "Alpha small task",
+      summary: "A stale caller must not reopen terminal work.", progressPct: 100,
+    }, env, 1);
+    assert.equal(taskReopen.error, "terminal_worker_task_reopen_rejected");
+
     const receipts = run({ action: "list_trigger_receipts", workspace, limit: 20 }, env);
     assert.ok(receipts.receipts.some((receipt) => receipt.action === "writeback_evidence"), "receipt lookup must include writeback");
     assert.ok(receipts.receipts.some((receipt) => receipt.action === "retrieve_context"), "receipt lookup must include retrieval");
@@ -88,6 +159,21 @@ function main() {
       sourceRefs: [{ kind: "file", path: foreign, title: "foreign" }],
     }, env, 1);
     assert.equal(crossProject.error, "cross_project_source_ref_rejected");
+
+    const workerCrossProject = run({
+      action: "report_worker_task_status", workspace, agent: "minimax-code",
+      taskId: "minimax-foreign-001", status: "running", title: "Foreign evidence",
+      summary: "This worker source reference must fail closed.", progressPct: 5,
+      sourceRefs: [{ kind: "file", path: foreign, title: "foreign" }],
+    }, env, 1);
+    assert.equal(workerCrossProject.error, "cross_project_source_ref_rejected");
+
+    const unsafeWorker = run({
+      action: "report_worker_task_status", workspace, agent: "minimax-code",
+      taskId: "minimax-unsafe-001", status: "running", title: "Unsafe worker",
+      summary: `data:image/png;base64,${"A".repeat(300)}`, progressPct: 5,
+    }, env, 1);
+    assert.equal(unsafeWorker.error, "unsafe_or_empty_worker_task_payload_rejected");
 
     const unsafe = run({
       action: "observe_event", workspace, title: "Unsafe", observation: `data:image/png;base64,${"A".repeat(300)}`,
@@ -109,7 +195,7 @@ function main() {
       assert.equal(secret.error, "unsafe_or_empty_compact_payload_rejected", `credential signature ${credentialSentinel.slice(0, 4)} must fail closed`);
     }
 
-    const outputText = JSON.stringify({ initial, writeback, recalled, event, receipts });
+    const outputText = JSON.stringify({ initial, writeback, recalled, event, receipts, taskStarted, taskProgress, taskCompleted, allTasks });
     assert.doesNotMatch(outputText, /data:image|\.codex[\\/]sessions|A{120}/, "headless packets must not leak raw/base64 bodies");
     console.log("Memory Runtime headless strict-JSON tests passed.");
   } finally {

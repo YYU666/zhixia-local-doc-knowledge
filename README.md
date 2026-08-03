@@ -38,6 +38,7 @@ CEO Flow 可以把知匣当作本地 Memory Runtime：
 - 项目识别：用 PRD、技术设计、测试计划、README、Codex 历史、知识/记忆等组合证据识别真实项目。
 - 个人库与待整理线索：单条链接、截图、剪贴板、视频、构建产物、备份、日志、依赖目录和生成知识文件不会作为普通项目卡片展示。
 - Memory Runtime：返回 compact context packet、precedent packet、evidence receipt、working memory、私有候选和不超过 3000 estimated tokens 的 source-backed ThreadRecoveryPacket。
+- 跨 Agent 记忆：Codex 与 MiniMax Code 可通过同一套 strict-JSON / lazy stdio MCP 合约读取和写回项目记忆，不共享私有聊天数据库。
 - Codex Skill：仓库内提供 `codex-skills/zhixia-local-docs`；启动/接管优先调用完整 app-owned Memory Core，文件 helper 只作为 `fallback_stale` advisory，并可生成 evidence dry-run。
 - 只读运行诊断：可展示本地进程和历史压力线索，但不 kill、不清理、不擅自修改 Codex 会话。
 - FlowSkill candidate bridge：接受且 source-backed 的 reusable pattern 可以生成私有 review 候选；不会自动安装、公开导出或执行。
@@ -95,6 +96,7 @@ npm run build
 ## 文档
 
 - [CEO Flow Memory Runtime](docs/CEO_FLOW_MEMORY_RUNTIME.md)
+- [MiniMax Code Memory Bridge](docs/MINIMAX_CODE_MEMORY_BRIDGE.md)
 - [External Audit Requirements](docs/EXTERNAL_AUDIT_REQUIREMENTS.md)
 - [Technical Design](docs/TECHNICAL_DESIGN.md)
 - [Test Plan](docs/TEST_PLAN.md)

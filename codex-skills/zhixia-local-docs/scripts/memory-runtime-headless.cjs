@@ -23,6 +23,11 @@ const MAX_SOURCE_REFS = 24;
 const RAW_SESSION_RE = /(?:\.codex[\\/]sessions|raw[_ -]?session|session\.jsonl|rollout-.*\.jsonl)/i;
 const SECRET_RE = /(?:api[_ -]?key|access[_ -]?token|private[_ -]?key|password|authorization|bearer\s+[a-z0-9._-]+|\bsk-[a-z0-9_-]{12,}|\bghp_[a-z0-9]{12,}|\bgithub_pat_[a-z0-9_]{12,}|\bAKIA[A-Z0-9]{16}\b)/i;
 const BASE64_RE = /(?:data:[^;]+;base64,|[A-Za-z0-9+/]{240,}={0,2})/;
+const WORKER_TASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const WORKER_AGENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
+const WORKER_TASK_STATUSES = new Set(["queued", "running", "waiting", "completed", "failed", "cancelled"]);
+const WORKER_TASK_ACTIVE_STATUSES = new Set(["queued", "running", "waiting"]);
+const WORKER_TASK_TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
 function sha256(value) {
   return crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
@@ -119,6 +124,22 @@ function openDatabase(env = process.env) {
       createdAt TEXT NOT NULL, receiptJson TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_headless_receipts_project ON headless_trigger_receipts(projectId, createdAt DESC);
+    CREATE TABLE IF NOT EXISTS headless_worker_tasks (
+      id TEXT PRIMARY KEY, projectId TEXT NOT NULL, canonicalRoot TEXT NOT NULL,
+      agent TEXT NOT NULL, taskId TEXT NOT NULL, status TEXT NOT NULL,
+      title TEXT NOT NULL, summary TEXT NOT NULL, progressPct INTEGER,
+      sourceRefsJson TEXT NOT NULL, startedAt TEXT NOT NULL, updatedAt TEXT NOT NULL,
+      completedAt TEXT, contentHash TEXT NOT NULL,
+      UNIQUE(projectId, agent, taskId)
+    );
+    CREATE INDEX IF NOT EXISTS idx_headless_worker_tasks_project ON headless_worker_tasks(projectId, status, updatedAt DESC);
+    CREATE TABLE IF NOT EXISTS headless_worker_task_events (
+      id TEXT PRIMARY KEY, workerTaskId TEXT NOT NULL, projectId TEXT NOT NULL,
+      agent TEXT NOT NULL, taskId TEXT NOT NULL, status TEXT NOT NULL,
+      summary TEXT NOT NULL, progressPct INTEGER, sourceRefsJson TEXT NOT NULL,
+      createdAt TEXT NOT NULL, contentHash TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_headless_worker_events_task ON headless_worker_task_events(projectId, workerTaskId, createdAt DESC);
   `);
   return { db, dbPath };
 }
@@ -252,6 +273,169 @@ function listReceipts(request) {
   } finally { db.close(); }
 }
 
+function normalizeWorkerTaskStatus(request) {
+  const agent = compact(request.agent || "external-worker", 80).toLowerCase();
+  const taskId = compact(request.taskId || "", 128);
+  const status = compact(request.status || "", 40).toLowerCase();
+  const title = compact(request.title || taskId, 240);
+  const summary = compact(request.summary || request.progress || status, MAX_TEXT_CHARS);
+  if (!WORKER_AGENT_RE.test(agent)) throw new Error("worker_agent_invalid");
+  if (!WORKER_TASK_ID_RE.test(taskId)) throw new Error("worker_task_id_invalid");
+  if (!WORKER_TASK_STATUSES.has(status)) throw new Error("worker_task_status_invalid");
+  if (!title || !summary || unsafeText(`${agent} ${taskId} ${title} ${summary}`)) {
+    throw new Error("unsafe_or_empty_worker_task_payload_rejected");
+  }
+  let progressPct = request.progressPct;
+  if (progressPct !== undefined && progressPct !== null) {
+    progressPct = Number(progressPct);
+    if (!Number.isInteger(progressPct) || progressPct < 0 || progressPct > 100) {
+      throw new Error("worker_task_progress_invalid");
+    }
+  } else {
+    progressPct = status === "completed" ? 100 : null;
+  }
+  if (status === "completed") progressPct = 100;
+  return { agent, taskId, status, title, summary, progressPct };
+}
+
+function parseWorkerTaskRow(row) {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    agent: row.agent,
+    taskId: row.taskId,
+    status: row.status,
+    title: row.title,
+    summary: row.summary,
+    progressPct: row.progressPct,
+    sourceRefs: JSON.parse(row.sourceRefsJson || "[]"),
+    startedAt: row.startedAt,
+    updatedAt: row.updatedAt,
+    completedAt: row.completedAt || null,
+    authority: { selfReported: true, acceptedEvidence: false, recoveryAuthority: false },
+  };
+}
+
+function reportWorkerTaskStatus(request) {
+  const context = baseContext(request);
+  const normalized = normalizeWorkerTaskStatus(request);
+  const sourceRefs = normalizeSourceRefs(request.sourceRefs || [], context.identity);
+  const workerTaskId = `worker-task-${sha256(`${context.identity.projectId}|${normalized.agent}|${normalized.taskId}`).slice(0, 32)}`;
+  const now = new Date().toISOString();
+  const { db, dbPath } = openDatabase();
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    persistIdentity(db, context.identity, now);
+    const existing = db.prepare(`SELECT * FROM headless_worker_tasks WHERE id = ? AND projectId = ?`).get(workerTaskId, context.identity.projectId);
+    if (existing && WORKER_TASK_TERMINAL_STATUSES.has(existing.status)) {
+      if (!WORKER_TASK_TERMINAL_STATUSES.has(normalized.status)) throw new Error("terminal_worker_task_reopen_rejected");
+      if (existing.status !== normalized.status) throw new Error("terminal_worker_task_status_conflict");
+    }
+    if (
+      existing
+      && existing.progressPct !== null
+      && normalized.progressPct !== null
+      && normalized.progressPct < existing.progressPct
+    ) {
+      throw new Error("worker_task_progress_regression_rejected");
+    }
+    const effectiveProgress = normalized.progressPct === null ? (existing?.progressPct ?? null) : normalized.progressPct;
+    const contentHash = sha256(JSON.stringify({
+      projectId: context.identity.projectId,
+      workerTaskId,
+      ...normalized,
+      progressPct: effectiveProgress,
+      sourceRefs,
+    }));
+    const unchanged = existing?.contentHash === contentHash;
+    const completedAt = WORKER_TASK_TERMINAL_STATUSES.has(normalized.status)
+      ? (existing?.completedAt || now)
+      : null;
+    if (!unchanged) {
+      db.prepare(`INSERT INTO headless_worker_tasks(
+        id, projectId, canonicalRoot, agent, taskId, status, title, summary, progressPct,
+        sourceRefsJson, startedAt, updatedAt, completedAt, contentHash
+      ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET status=excluded.status, title=excluded.title,
+        summary=excluded.summary, progressPct=excluded.progressPct,
+        sourceRefsJson=excluded.sourceRefsJson, updatedAt=excluded.updatedAt,
+        completedAt=excluded.completedAt, contentHash=excluded.contentHash`).run(
+        workerTaskId, context.identity.projectId, context.identity.canonicalRoot,
+        normalized.agent, normalized.taskId, normalized.status, normalized.title,
+        normalized.summary, effectiveProgress, JSON.stringify(sourceRefs),
+        existing?.startedAt || now, now, completedAt, contentHash,
+      );
+      const eventId = `worker-event-${contentHash.slice(0, 32)}`;
+      db.prepare(`INSERT OR IGNORE INTO headless_worker_task_events(
+        id, workerTaskId, projectId, agent, taskId, status, summary, progressPct,
+        sourceRefsJson, createdAt, contentHash
+      ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        eventId, workerTaskId, context.identity.projectId, normalized.agent,
+        normalized.taskId, normalized.status, normalized.summary, effectiveProgress,
+        JSON.stringify(sourceRefs), now, contentHash,
+      );
+    }
+    const stored = db.prepare(`SELECT * FROM headless_worker_tasks WHERE id = ? AND projectId = ?`).get(workerTaskId, context.identity.projectId);
+    const receipt = receiptFor(
+      db,
+      context.identity,
+      "report_worker_task_status",
+      request,
+      "completed",
+      `memory-runtime://headless/worker-task/${workerTaskId}`,
+      now,
+    );
+    db.exec("COMMIT");
+    return {
+      schemaVersion: HEADLESS_SCHEMA,
+      action: "report_worker_task_status",
+      status: "completed",
+      changed: !unchanged,
+      task: parseWorkerTaskRow(stored),
+      projectIdentity: context.identity,
+      triggerReceipt: receipt,
+      storage: { path: dbPath, mainDatabaseWrite: false, uiRequired: false },
+      polling: { required: false, heartbeatCreated: false },
+    };
+  } catch (error) {
+    try { db.exec("ROLLBACK"); } catch {}
+    throw error;
+  } finally { db.close(); }
+}
+
+function listWorkerTasks(request) {
+  const context = baseContext(request);
+  const agent = request.agent ? compact(request.agent, 80).toLowerCase() : null;
+  if (agent && !WORKER_AGENT_RE.test(agent)) throw new Error("worker_agent_invalid");
+  const includeTerminal = request.includeTerminal === true;
+  const limit = Math.max(1, Math.min(Number(request.limit || 20), 100));
+  const { db } = openDatabase();
+  try {
+    const rows = db.prepare(`SELECT * FROM headless_worker_tasks WHERE projectId = ? ORDER BY updatedAt DESC LIMIT ?`).all(
+      context.identity.projectId,
+      Math.min(limit * 5, 500),
+    );
+    const tasks = rows
+      .filter((row) => !agent || row.agent === agent)
+      .filter((row) => includeTerminal || WORKER_TASK_ACTIVE_STATUSES.has(row.status))
+      .slice(0, limit)
+      .map(parseWorkerTaskRow);
+    return {
+      schemaVersion: HEADLESS_SCHEMA,
+      action: "list_worker_tasks",
+      projectIdentity: context.identity,
+      tasks,
+      counts: {
+        returned: tasks.length,
+        active: tasks.filter((task) => WORKER_TASK_ACTIVE_STATUSES.has(task.status)).length,
+        terminal: tasks.filter((task) => WORKER_TASK_TERMINAL_STATUSES.has(task.status)).length,
+      },
+      query: { agent, includeTerminal, limit },
+      authority: { selfReported: true, acceptedEvidence: false, recoveryAuthority: false },
+    };
+  } finally { db.close(); }
+}
+
 function execute(request) {
   switch (request.action) {
     case "retrieve_context": return retrieve(request, false);
@@ -260,6 +444,8 @@ function execute(request) {
     case "writeback_evidence": return writeRecord(request, "writeback_evidence");
     case "continuity": return continuity(request);
     case "list_trigger_receipts": return listReceipts(request);
+    case "report_worker_task_status": return reportWorkerTaskStatus(request);
+    case "list_worker_tasks": return listWorkerTasks(request);
     default: throw new Error("unsupported_action");
   }
 }

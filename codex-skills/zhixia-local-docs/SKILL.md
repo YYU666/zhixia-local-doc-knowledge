@@ -61,7 +61,9 @@ When Electron IPC is unavailable, use the strict-JSON headless runtime for real 
 '{"action":"writeback_evidence","workspace":"<workspace>","decision":"accept","title":"<title>","summary":"<compact result>","sourceRefs":[{"kind":"canonical_doc","path":"docs/PRD.md","title":"PRD"}]}' | node scripts/memory-runtime-headless.cjs
 ```
 
-Supported actions are `retrieve_context`, `retrieve_precedent`, `observe_event`, `writeback_evidence`, `continuity`, and `list_trigger_receipts`. See [references/headless-runtime-contract.md](references/headless-runtime-contract.md).
+Supported actions are `retrieve_context`, `retrieve_precedent`, `observe_event`, `writeback_evidence`, `continuity`, `list_trigger_receipts`, `report_worker_task_status`, and `list_worker_tasks`. See [references/headless-runtime-contract.md](references/headless-runtime-contract.md).
+
+Trusted local agents may use the lazy stdio MCP adapter described in the same reference. In MiniMax Code, prefer `mcp_zhixia_memory_retrieve_context` / `retrieve_precedent` before project work, report boundary status with `mcp_zhixia_memory_report_worker_task_status`, and use `mcp_zhixia_memory_writeback_evidence` after acceptance. Do not emit heartbeat traffic. MCP output follows the identical project-identity, source-backed writeback, privacy, continuity, and authority boundaries.
 
 OpenClaw legacy memory is a separate cold audit source. It is never searched by ordinary project retrieval:
 
