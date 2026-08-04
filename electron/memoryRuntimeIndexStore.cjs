@@ -908,7 +908,7 @@ function writeMemoryRuntimeTriggerReceipt(storeRoot, entry = {}) {
   const core = {
     hook: unsafeInput ? "unsafe_trigger_receipt" : compactText(entry.hook || "retrieve_context", 80),
     queryType: unsafeInput ? null : compactText(entry.queryType || "", 80) || null,
-    projectPath: unsafeInput ? null : entry.projectPath || null,
+    projectPath: unsafeInput ? null : normalizeSemanticProjectPath(entry.projectPath) || null,
     threadId: unsafeInput ? null : entry.threadId || null,
     returnedCount: Math.max(0, Number(entry.returnedCount || 0)),
     tokenEstimate: Math.max(0, Number(entry.tokenEstimate || 0)),
@@ -961,7 +961,7 @@ function listMemoryRuntimeTriggerReceipts(storeRoot, options = {}) {
     }
     if (options.projectPath) {
       filters.push("projectPath = :projectPath");
-      params.projectPath = options.projectPath;
+      params.projectPath = normalizeSemanticProjectPath(options.projectPath);
     }
     const rows = db.prepare(`
     SELECT * FROM memory_runtime_trigger_receipts

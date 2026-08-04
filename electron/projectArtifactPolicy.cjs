@@ -81,7 +81,9 @@ function looksLikeRawSessionPath(filePath) {
 }
 
 function looksLikeGeneratedKnowledgeFile(filePath) {
-  return GENERATED_KNOWLEDGE_FILES.has(path.basename(filePath || "").toLowerCase());
+  const normalized = String(filePath || "").replace(/[\\/]+/g, "/").toLowerCase();
+  const baseName = normalized.split("/").pop() || "";
+  return normalized.includes("/.codex-knowledge/") && GENERATED_KNOWLEDGE_FILES.has(baseName);
 }
 
 function extractProducerThreadId(doc) {

@@ -80,6 +80,7 @@ const BASE64_RE = /data:[^;,\s]+;base64,[A-Za-z0-9+/=]{80,}|\b[A-Za-z0-9+/]{220,
 const SECRET_RE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+/=-]{12,}|\bsk-[A-Za-z0-9_-]{12,}|\b(?:ghp|gho|github_pat)_[A-Za-z0-9_]{12,}|\bAKIA[0-9A-Z]{16}\b/i;
 const RAW_SESSION_RE = /(?:^|[\\/])\.codex[\\/](?:archived_)?sessions[\\/]|\braw[_ -]?session\b|session[_ -]?jsonl/i;
 const APP_OWNED_PROVENANCE_CAPABILITY = Symbol("memory-core-app-owned-provenance");
+const EXACT_PROJECT_IDENTITY_CAPABILITY = Symbol("memory-core-exact-project-identity");
 const NORMAL_CORE_STATUSES = new Set(["active", "accepted", "curated", "current", "persisted", "ready"]);
 const REVIEW_CORE_STATUSES = new Set(["candidate", "review"]);
 
@@ -138,7 +139,8 @@ function containedSourcePath(value, projectPath) {
   const rootNative = rootIsWindows ? root.replace(/\//g, "\\") : root;
   const inputNative = rootIsWindows ? fileValue.replace(/\//g, "\\") : fileValue.replace(/\\/g, "/");
   const candidateNative = pathApi.isAbsolute(inputNative) ? pathApi.normalize(inputNative) : pathApi.resolve(rootNative, inputNative);
-  const relative = pathApi.relative(rootNative, candidateNative);
+  const candidateCompareNative = candidateNative.toLowerCase();
+  const relative = pathApi.relative(rootNative, candidateCompareNative);
   if (relative !== "" && (relative === ".." || relative.startsWith(`..${pathApi.sep}`) || pathApi.isAbsolute(relative))) return null;
   return candidateNative.replace(/\\/g, "/");
 }
@@ -493,15 +495,33 @@ function readOnlyMemoryFacts(db, tables, options = {}) {
 }
 
 function deriveProjectIdentity(input = {}) {
-  const projectPath = normalizePath(input.projectPath || input.canonicalPath || input.project?.path || "") || null;
+  const exactIdentity = input[EXACT_PROJECT_IDENTITY_CAPABILITY] || null;
+  const projectPath = normalizePath(exactIdentity?.projectPath || input.projectPath || input.canonicalPath || input.project?.path || "") || null;
   const requestedProjectId = compactText(input.projectId || input.project?.id || "", 180) || null;
   const derivedProjectId = projectPath ? `project-${stableHash(projectPath).slice(0, 20)}` : null;
-  const projectId = derivedProjectId || requestedProjectId;
+  const projectId = compactText(exactIdentity?.projectId, 180) || derivedProjectId || requestedProjectId;
   return {
     projectId,
     projectPath,
     requestedProjectId,
-    identityMismatch: Boolean(projectPath && requestedProjectId && requestedProjectId !== derivedProjectId),
+    legacyProjectId: derivedProjectId,
+    exactProjectIdentity: Boolean(exactIdentity),
+    identityMismatch: exactIdentity ? false : Boolean(projectPath && requestedProjectId && requestedProjectId !== derivedProjectId),
+  };
+}
+
+function bindExactProjectIdentity(input = {}, envelope = {}) {
+  const projectPath = normalizePath(input.projectPath || input.canonicalPath || envelope.canonicalRoot || "") || null;
+  const canonicalRoot = normalizePath(envelope.canonicalRoot || "") || null;
+  const projectId = compactText(envelope.projectId, 180) || null;
+  if (!projectPath || !canonicalRoot || projectPath !== canonicalRoot || !/^project-[a-f0-9]{24}$/i.test(projectId || "")) {
+    throw new Error("Memory Core exact ProjectIdentityEnvelope is invalid.");
+  }
+  return {
+    ...input,
+    projectId,
+    projectPath: canonicalRoot,
+    [EXACT_PROJECT_IDENTITY_CAPABILITY]: { projectId, projectPath: canonicalRoot },
   };
 }
 
@@ -568,6 +588,7 @@ function lifecycleSourceRefs(hook, input, scope) {
 
 function normalizeLifecycleInput(hook, input = {}, options = {}) {
   const project = deriveProjectIdentity({
+    ...input,
     projectId: input.projectId || input.task?.projectId || options.projectId,
     projectPath: input.projectPath || input.task?.projectPath || options.projectPath,
   });
@@ -1099,8 +1120,9 @@ class MemoryCoreRuntime {
   }
 
   formLifecycleEvent(hook, input = {}, options = {}) {
+    const exactProjectIdentity = input[EXACT_PROJECT_IDENTITY_CAPABILITY] || null;
     const appOwnedProvenance = options[APP_OWNED_PROVENANCE_CAPABILITY] === APP_OWNED_PROVENANCE_CAPABILITY;
-    const rawInspection = inspectMemoryCorePayload(input);
+    const rawInspection = inspectMemoryCorePayload(Object.fromEntries(Object.entries(input)));
     if (!rawInspection.safe) {
       return {
         schemaVersion: MEMORY_CORE_RUNTIME_SCHEMA,
@@ -1129,7 +1151,11 @@ class MemoryCoreRuntime {
       };
     }
     const scope = appOwnedProvenance
-      ? this.ensureAuthorityScope({ ...event, now: event.observedAt })
+      ? this.ensureAuthorityScope({
+        ...event,
+        now: event.observedAt,
+        ...(exactProjectIdentity ? { [EXACT_PROJECT_IDENTITY_CAPABILITY]: exactProjectIdentity } : {}),
+      })
       : { ...deriveProjectIdentity(event), now: event.observedAt };
     const preview = buildMemoryFormationPlan({ ...event, authorityOutcome: null }, {
       projectId: event.projectId,
@@ -1402,6 +1428,11 @@ class MemoryCoreRuntime {
     const project = deriveProjectIdentity(input);
     if (!project.projectId || !project.projectPath) throw new Error("Memory Core projectPath is required for seed.");
     const now = input.now || this.now || new Date().toISOString();
+    const sourceScope = {
+      ...project,
+      projectPath: compactText(input.projectPath || input.canonicalPath || project.projectPath, 520) || project.projectPath,
+    };
+    const sourceRefs = compactSourceRefs(input.sourceRefs, sourceScope, 16);
     const brain = buildProjectBrain({
       projectId: project.projectId,
       canonicalPath: project.projectPath,
@@ -1409,19 +1440,19 @@ class MemoryCoreRuntime {
       productSummary: compactText(input.projectSummary || input.productSummary || `Project at ${project.projectPath}`, 360),
       phase: compactText(input.phase, 80) || null,
       authorityStatus: "accepted",
-      sourceRefs: compactSourceRefs(input.sourceRefs, project, 16).length > 0
-        ? compactSourceRefs(input.sourceRefs, project, 16)
+      sourceRefs: sourceRefs.length > 0
+        ? sourceRefs
         : [{ kind: "project_binding", path: project.projectPath, hash: stableHash([project.projectId, project.projectPath]), projectId: project.projectId }],
       updatedAt: now,
     }, { now });
     const writes = [{ kind: "projectBrain", ...upsertProjectBrain(this.storeRoot, { ...brain, scopeKey: `project:${project.projectId}` }) }];
     this.ensureAuthorityScope({ ...input, ...project, now });
     for (const anchorInput of safeArray(input.anchors)) {
-      const anchor = buildProjectAnchor({ ...anchorInput, projectId: project.projectId }, { projectId: project.projectId, projectPath: project.projectPath, now });
+      const anchor = buildProjectAnchor({ ...anchorInput, projectId: project.projectId }, { projectId: project.projectId, projectPath: sourceScope.projectPath, now });
       writes.push({ kind: "projectAnchor", ...upsertProjectAnchor(this.storeRoot, { ...anchor, scopeKey: `project:${project.projectId}` }) });
     }
     for (const moduleInput of safeArray(input.modules)) {
-      const module = buildModuleMemory({ ...moduleInput, projectId: project.projectId }, { projectId: project.projectId, projectPath: project.projectPath, now });
+      const module = buildModuleMemory({ ...moduleInput, projectId: project.projectId }, { projectId: project.projectId, projectPath: sourceScope.projectPath, now });
       writes.push({ kind: "moduleMemory", ...upsertModuleMemory(this.storeRoot, { ...module, scopeKey: `project:${project.projectId}` }) });
     }
     return { ...project, projectBrain: brain, writes: writes.map((write) => ({ kind: write.kind, action: write.action, id: write.record?.id || null, reasonCodes: safeArray(write.reasonCodes) })) };
@@ -1950,6 +1981,7 @@ module.exports = {
   buildUnavailableMemoryCoreDiagnostics,
   buildUnavailableMemoryCoreReviewQueue,
   buildUnavailableProjectContinuity,
+  bindExactProjectIdentity,
   createMemoryCoreRuntime,
   deriveProjectIdentity,
   loadExistingSigningKey,

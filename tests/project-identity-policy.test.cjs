@@ -14,6 +14,10 @@ function git(cwd, args) {
   return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: "pipe", windowsHide: true }).trim();
 }
 
+function realPath(value) {
+  return fs.realpathSync.native ? fs.realpathSync.native(value) : fs.realpathSync(value);
+}
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-project-identity-"));
 try {
   const canonical = path.join(root, "canonical");
@@ -35,8 +39,8 @@ try {
   assert.equal(worktreeIdentity.projectId, canonicalIdentity.projectId, "linked worktrees must inherit canonical projectId");
   assert.equal(worktreeIdentity.canonicalRepoId, canonicalIdentity.canonicalRepoId, "linked worktrees must inherit canonical repository identity");
   assert.equal(worktreeIdentity.projectIdentitySha256, canonicalIdentity.projectIdentitySha256, "identity SHA must stay stable across linked worktrees");
-  assert.equal(path.resolve(worktreeIdentity.canonicalRoot), path.resolve(canonical), "linked worktree envelope must point at the main canonical root");
-  assert.equal(path.resolve(worktreeIdentity.worktreeRoot), path.resolve(worktree), "worktreeRoot must preserve the active run workspace");
+  assert.equal(realPath(worktreeIdentity.canonicalRoot), realPath(canonical), "linked worktree envelope must point at the main canonical root");
+  assert.equal(realPath(worktreeIdentity.worktreeRoot), realPath(worktree), "worktreeRoot must preserve the active run workspace");
   assert.equal(worktreeIdentity.baselineHead, canonicalIdentity.baselineHead, "new linked worktree should capture its baseline HEAD");
   fs.writeFileSync(path.join(canonical, "identity-change.txt"), "new commit\n", "utf8");
   git(canonical, ["add", "identity-change.txt"]);
@@ -64,8 +68,8 @@ try {
   });
   assert.equal(helperRun.status, 0, helperRun.stderr);
   const packet = JSON.parse(helperRun.stdout);
-  assert.equal(path.resolve(packet.request.projectPath), path.resolve(worktree), "request path must remain the active worktree");
-  assert.equal(path.resolve(packet.projectIdentity.canonicalRoot), path.resolve(canonical), "packet must expose canonical memory ownership");
+  assert.equal(realPath(packet.request.projectPath), realPath(worktree), "request path must remain the active worktree");
+  assert.equal(realPath(packet.projectIdentity.canonicalRoot), realPath(canonical), "packet must expose canonical memory ownership");
   assert.ok(packet.items.some((item) => /Canonical inherited memory/.test(item.title)), "worktree must inherit canonical project memory");
   assert.doesNotMatch(JSON.stringify(packet), new RegExp(foreign.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "foreign project paths must not leak into worktree packets");
   console.log("Project identity policy tests passed.");

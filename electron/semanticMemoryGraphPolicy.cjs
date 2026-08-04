@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const fs = require("node:fs");
 const path = require("node:path");
 const { scanPersistenceStructure } = require("./memoryFactPolicy.cjs");
 
@@ -58,7 +59,23 @@ function clampConfidence(value, fallback = 0.5) {
 function normalizeProjectPath(value) {
   const input = compactText(value, 520);
   if (!input || RAW_SESSION_RE.test(input) || SECRET_PATH_RE.test(input)) return null;
-  const resolved = path.resolve(input);
+  let resolved = path.resolve(input);
+  const suffix = [];
+  let existingAncestor = resolved;
+  while (!fs.existsSync(existingAncestor)) {
+    const parent = path.dirname(existingAncestor);
+    if (parent === existingAncestor) break;
+    suffix.unshift(path.basename(existingAncestor));
+    existingAncestor = parent;
+  }
+  try {
+    const realAncestor = fs.realpathSync.native
+      ? fs.realpathSync.native(existingAncestor)
+      : fs.realpathSync(existingAncestor);
+    resolved = path.join(realAncestor, ...suffix);
+  } catch {
+    // Preserve the resolved path when the filesystem cannot canonicalize it.
+  }
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 

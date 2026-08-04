@@ -2,10 +2,16 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 
 const {
+  buildRendererCsp,
   normalizeTrustedAiProviderBaseUrl,
   resolveRegisteredWorkspacePath,
   sanitizeRendererSettingsPatch,
 } = require("../electron/securityPolicy.cjs");
+
+const productionCsp = buildRendererCsp();
+const developmentCsp = buildRendererCsp("http://127.0.0.1:5290");
+assert.match(productionCsp, /script-src 'self';/, "production CSP must reject unsafe script execution");
+assert.match(developmentCsp, /script-src 'self' 'unsafe-eval' 'unsafe-inline'/, "Vite development mode needs its inline React preamble");
 
 assert.equal(
   normalizeTrustedAiProviderBaseUrl("https://api.deepseek.com/v1/"),

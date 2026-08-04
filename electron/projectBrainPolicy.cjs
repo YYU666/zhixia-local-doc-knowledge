@@ -142,7 +142,9 @@ function containedProjectFilePath(value, projectPath) {
   const rootNative = rootIsWindows ? root.replace(/\//g, "\\") : root;
   const inputNative = rootIsWindows ? fileValue.replace(/\//g, "\\") : fileValue.replace(/\\/g, "/");
   const candidateNative = pathApi.isAbsolute(inputNative) ? pathApi.normalize(inputNative) : pathApi.resolve(rootNative, inputNative);
-  const relative = pathApi.relative(rootNative, candidateNative);
+  const rootCompareNative = rootNative.toLowerCase();
+  const candidateCompareNative = candidateNative.toLowerCase();
+  const relative = pathApi.relative(rootCompareNative, candidateCompareNative);
   if (relative === "") return canonicalPath(candidateNative);
   if (relative === ".." || relative.startsWith(`..${pathApi.sep}`) || pathApi.isAbsolute(relative)) return null;
   return canonicalPath(candidateNative);
@@ -952,6 +954,17 @@ function buildProjectContinuityLedger(projectBrainInput, anchorInputs = [], modu
     }
     if (FAILURE_EVENT_RE.test(compactText(record.eventType || record.type, 80))) {
       addSlotCandidate(slotCandidates, "latest_failures", record, compactRecordValue(record), "episode", projectContext);
+    }
+    for (const failure of safeArray(record.failures)) {
+      const failureRecord = typeof failure === "string" ? { summary: failure } : failure;
+      if (!failureRecord || typeof failureRecord !== "object") continue;
+      addSlotCandidate(slotCandidates, "latest_failures", {
+        ...failureRecord,
+        projectId: record.projectId,
+        authorityStatus: record.authorityStatus || record.status,
+        sourceRefs: record.sourceRefs,
+        observedAt: failureRecord.observedAt || record.observedAt,
+      }, compactRecordValue(failureRecord), "episode_failure", projectContext);
     }
   }
 

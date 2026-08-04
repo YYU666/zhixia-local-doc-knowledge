@@ -13,10 +13,10 @@ At project bootstrap, takeover, direction correction, long-thread recovery, or b
 
 ```powershell
 '{"operation":"verify","workspace":"<workspace>","taskGoal":"<goal>"}' | node scripts/invoke-app-memory-runtime.cjs
-'{"operation":"retrieve","workspace":"<workspace>","taskGoal":"<goal>","queryType":"thread_recovery","limit":12,"tokenBudget":3000}' | node scripts/invoke-app-memory-runtime.cjs
+'{"operation":"prepare_takeover","workspace":"<workspace>","taskGoal":"<goal>","queryType":"thread_recovery","limit":12,"tokenBudget":3000}' | node scripts/invoke-app-memory-runtime.cjs
 ```
 
-Use the result as current memory only when `memoryMode=app_owned_memory_core`, `authorityVerification=app_owned_verified`, `current=true`, `recoveryReady=true`, and retrieval is non-empty. Otherwise continue only with explicit stale/partial status.
+Use the result as replacement context only when `memoryMode=app_owned_memory_core`, `authorityVerification=app_owned_verified`, `current=true`, `recoveryReady=true`, `takeover.shouldInject=true`, and retrieval is non-empty. Inject one `contextGenerationId` at most once per task. Otherwise freeze the old task with explicit stale/partial status.
 
 For compatibility fallback, read the smallest relevant local packet before broad repository or history scans:
 
@@ -63,6 +63,10 @@ When Electron IPC is unavailable, use the strict-JSON headless runtime for real 
 
 Supported actions are `retrieve_context`, `retrieve_precedent`, `observe_event`, `writeback_evidence`, `continuity`, `list_trigger_receipts`, `report_worker_task_status`, and `list_worker_tasks`. See [references/headless-runtime-contract.md](references/headless-runtime-contract.md).
 
+The packaged app-owned CLI also exposes exact-scan `observe_event` and `writeback_evidence`. These writes require `execute=true` plus the exact `projectIdentitySha256`, current `scanSha256`, and source refs present in that scan. Do not use lifecycle writes as an implicit reseed or database repair operation.
+
+For a formally accepted HEAD or postimage change, prefer app-owned `refresh_binding`: pass the previous authorized checkpoint, the new exact scan, a formal acceptance receipt identifier, accepted changed paths, lane, and exact current source refs. It carries forward the prior continuity and returns a fresh one-use generation without a complete reseed. Missing acceptance evidence, checkpoint drift, or an unbacked path must freeze the caller. Ordinary agents may self-run read-only `verify`, `scan`, and `prepare_takeover`; they should escalate only failed refreshes, conflicts, or unaccepted changes instead of relaying every successful packet through another task.
+
 Trusted local agents may use the lazy stdio MCP adapter described in the same reference. In MiniMax Code, prefer `mcp_zhixia_memory_retrieve_context` / `retrieve_precedent` before project work, report boundary status with `mcp_zhixia_memory_report_worker_task_status`, and use `mcp_zhixia_memory_writeback_evidence` after acceptance. Do not emit heartbeat traffic. MCP output follows the identical project-identity, source-backed writeback, privacy, continuity, and authority boundaries.
 
 OpenClaw legacy memory is a separate cold audit source. It is never searched by ordinary project retrieval:
@@ -84,7 +88,7 @@ Read [references/memory-core-lifecycle.md](references/memory-core-lifecycle.md) 
 - Unverified accepted or curated rows cannot fill continuity slots and cannot make `recoveryReady=true`.
 - Continuity cursors carry an accumulated manifest-prefix digest. A forged offset-only or altered cursor is invalid.
 - Because each CLI call is a fresh process and no app-authenticated full-manifest proof is available, `pagination.pageComplete=true` only means the current advisory manifest page reached its end. It does not imply recovery readiness.
-- ProjectBrain resolution requires the persisted canonical project path to match the requested workspace exactly. A foreign project ID fails closed.
+- ProjectBrain resolution canonicalizes real filesystem aliases before comparison, including legacy macOS case spellings and `/var` aliases. A foreign project ID still fails closed.
 - File source references must stay inside the requested workspace. External file references may survive only as pathless redacted metadata or be omitted.
 - Non-file source URIs may be retained when they pass bounded secret, raw-session, and base64 screening.
 

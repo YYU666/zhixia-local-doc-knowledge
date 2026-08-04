@@ -5344,7 +5344,7 @@ function buildMemoryCoreProjectSeedInput(input = {}) {
   const projectPath = path.resolve(String(input.projectPath || "").trim());
   if (!projectPath) return null;
   const normalizedProjectPath = projectPath.replace(/\\/g, "/").replace(/\/$/, "");
-  const excludedPathPattern = /(?:^|[\\/])\.codex-knowledge(?:[\\/]|$)|(?:^|[\\/])(?:codex-history-vault|thread-history-vault|vault)(?:[\\/]|$)|(?:^|[\\/])\.codex[\\/](?:archived_)?sessions[\\/]|\.jsonl$/i;
+  const excludedPathPattern = /(?:^|[\\/])(?:\.codex-knowledge|\.git|node_modules|artifacts?|test-runs?|coverage|dist|release(?:-mac)?|codex-history-vault|thread-history-vault|vault)(?:[\\/]|$)|(?:^|[\\/])\.codex[\\/](?:archived_)?sessions[\\/]|\.jsonl$/i;
   const imagePathPattern = /\.(?:avif|bmp|gif|heic|ico|jpe?g|png|svg|tiff?|webp)$/i;
   const rawSourceTypePattern = /raw[_ -]?session|session[_ -]?jsonl|vault/i;
   const isoTimestamp = (value) => {
@@ -5370,7 +5370,18 @@ function buildMemoryCoreProjectSeedInput(input = {}) {
       artifactType: compact(doc.artifactType || "other", 80) || "other",
       updatedAt: isoTimestamp(doc.fileModifiedAt || doc.updatedAt),
     }))
-    .sort((left, right) => left.path.localeCompare(right.path) || left.hash.localeCompare(right.hash));
+    .sort((left, right) => {
+      const priority = (filePath) => {
+        const relative = path.relative(projectPath, filePath).replace(/\\/g, "/").toLowerCase();
+        if (/^(?:program_goal|task-graph|readme|agents|package)\b/.test(relative)) return 0;
+        if (/^(?:docs\/)?(?:program_goal|prd|technical|architecture|design|test_plan|qa|release_notes|current_checkpoint)/.test(relative)) return 1;
+        if (relative.startsWith("docs/")) return 2;
+        return 3;
+      };
+      return priority(left.path) - priority(right.path)
+        || left.path.localeCompare(right.path)
+        || left.hash.localeCompare(right.hash);
+    });
   if (eligibleDocs.length === 0) return null;
 
   const updatedAt = eligibleDocs.reduce((latest, doc) => doc.updatedAt > latest ? doc.updatedAt : latest, eligibleDocs[0].updatedAt);
@@ -11193,6 +11204,15 @@ function createWindow() {
     });
   });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+    if (isMainFrame) console.error(`[renderer] failed to load ${validatedUrl}: ${errorCode} ${errorDescription}`);
+  });
+  mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
+    console.error(`[preload] ${preloadPath}:`, error);
+  });
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("[renderer] process exited:", details);
+  });
   mainWindow.webContents.on("will-navigate", (event, url) => {
     try {
       const parsed = new URL(url);

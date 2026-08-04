@@ -1,12 +1,13 @@
 const crypto = require("node:crypto");
+const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
 const {
+  bindExactProjectIdentity,
   compactRecallItem,
   createMemoryCoreRuntime,
-  deriveProjectIdentity: deriveMemoryCoreProjectIdentity,
   loadExistingSigningKey,
   loadOrCreateSigningKey,
   memoryCorePrivateStateExists,
@@ -29,12 +30,21 @@ const CLI_SCHEMA = "zhixia.memory_runtime_cli.v1";
 const MAX_REQUEST_BYTES = 128 * 1024;
 const MAX_SCAN_FILES = 48;
 const MAX_SCAN_DIRECTORIES = 48;
+const MAX_SCAN_CANDIDATES = 4096;
+const MAX_WORKTREE_POSTIMAGES = 128;
 const MAX_SCANNED_FILE_BYTES = 1024 * 1024;
 const MAX_RESUME_PACKET_BYTES = 16 * 1024;
 const MAX_RETRIEVAL_PACKET_BYTES = 32 * 1024;
 const MAX_TEXT_CHARS = 1200;
 const MAX_LIST_ITEMS = 24;
+const MAX_CHECKPOINT_SOURCE_REFS = 8;
+const MAX_CHECKPOINT_ARTIFACTS = 4;
 const ALLOWED_SOURCE_EXTENSIONS = new Set([".md", ".json", ".txt", ".yaml", ".yml"]);
+const WORKTREE_TEXT_EXTENSIONS = new Set([
+  ...ALLOWED_SOURCE_EXTENSIONS,
+  ".c", ".cc", ".cpp", ".css", ".go", ".h", ".hpp", ".html", ".java", ".js", ".jsx",
+  ".mjs", ".cjs", ".py", ".rb", ".rs", ".sh", ".sql", ".ts", ".tsx", ".vue", ".xml",
+]);
 const ROOT_SOURCE_FILES = ["README.md", "AGENTS.md", "package.json"];
 const PRIORITY_SOURCE_FILES = [
   "docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md",
@@ -59,6 +69,8 @@ const SKIP_DIRECTORY_NAMES = new Set([
 const RAW_SESSION_RE = /(?:\.codex[\\/](?:archived_)?sessions[\\/]|session[_ -]?jsonl|rollout-[^\s]+\.jsonl|raw[_ -]?session[_ -]?(?:body|payload)\s*[:=])/i;
 const SECRET_RE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+/=-]{12,}|\bsk-[A-Za-z0-9_-]{12,}|\b(?:ghp|gho|github_pat)_[A-Za-z0-9_]{12,}|\bAKIA[0-9A-Z]{16}\b/i;
 const BASE64_RE = /(?:data:[^;]+;base64,|[A-Za-z0-9+/]{240,}={0,2})/;
+const TASK_CARD_PATH_RE = /(?:^|[\/_-])TASK[_-]?CARDS?(?:[\/_.-]|$)/i;
+const SENSITIVE_WORKTREE_PATH_RE = /(?:^|\/)(?:\.env(?:$|[._-])|[^/]*(?:credential|keychain|private[_-]?key|secret|access[_-]?token|auth[_-]?token)[^/]*)/i;
 
 function sha256(value) {
   return crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
@@ -129,6 +141,14 @@ function resolveWorkspace(request = {}) {
   return { workspace, projectIdentity };
 }
 
+function exactMemoryCoreInput(projectIdentity, input = {}) {
+  return bindExactProjectIdentity({
+    ...input,
+    projectId: projectIdentity.projectId,
+    projectPath: projectIdentity.canonicalRoot,
+  }, projectIdentity);
+}
+
 function resolveContainedFile(workspace, relativePath) {
   const relative = String(relativePath || "").replace(/\\/g, "/").replace(/^\.\//, "");
   if (!relative || path.isAbsolute(relative)) throw new Error("workspace_relative_source_path_required");
@@ -147,6 +167,68 @@ function hashFileBytes(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
+function collectChangedSourcePaths(workspace) {
+  const changed = new Set();
+  const collect = (args) => {
+    try {
+      const output = execFileSync("git", args, { cwd: workspace, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      for (const item of output.split("\0")) {
+        const normalized = item.replace(/\\/g, "/").trim();
+        if (normalized) changed.add(normalized);
+      }
+    } catch {
+      // Non-Git workspaces retain stable path-based ordering.
+    }
+  };
+  collect(["diff", "--name-only", "-z"]);
+  collect(["diff", "--cached", "--name-only", "-z"]);
+  collect(["ls-files", "--others", "--exclude-standard", "-z"]);
+  return changed;
+}
+
+function workingTreeSnapshot(workspace) {
+  const changedPaths = [...collectChangedSourcePaths(workspace)].sort();
+  const eligiblePaths = changedPaths.filter((relativePath) => {
+    const normalized = relativePath.replace(/\\/g, "/");
+    const pathSegments = normalized.toLowerCase().split("/");
+    return !pathSegments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))
+      && !SENSITIVE_WORKTREE_PATH_RE.test(normalized)
+      && WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase());
+  });
+  const entries = [];
+  let textPostimagesHashed = 0;
+  let excludedBodyCount = changedPaths.length - eligiblePaths.length;
+  for (const relativePath of eligiblePaths.slice(0, MAX_WORKTREE_POSTIMAGES)) {
+    const normalized = relativePath.replace(/\\/g, "/");
+    const filePath = resolveContainedFile(workspace, normalized);
+    if (!fs.existsSync(filePath)) {
+      entries.push({ relativePath: normalized, state: "deleted", sizeBytes: 0, sha256: null });
+      continue;
+    }
+    const stats = fs.lstatSync(filePath);
+    if (!stats.isFile() || stats.isSymbolicLink() || stats.size > MAX_SCANNED_FILE_BYTES) {
+      entries.push({ relativePath: normalized, state: "body_excluded", sizeBytes: stats.size, sha256: null });
+      excludedBodyCount += 1;
+      continue;
+    }
+    entries.push({ relativePath: normalized, state: "text_postimage", sizeBytes: stats.size, sha256: hashFileBytes(filePath) });
+    textPostimagesHashed += 1;
+  }
+  const core = {
+    trackedPathCount: eligiblePaths.length,
+    truncated: eligiblePaths.length > MAX_WORKTREE_POSTIMAGES,
+    entries,
+  };
+  return {
+    ...core,
+    changedPathCount: changedPaths.length,
+    excludedPathCount: changedPaths.length - eligiblePaths.length,
+    fingerprint: sha256(stableStringify(core)),
+    textPostimagesHashed,
+    excludedBodyCount,
+  };
+}
+
 function collectDocCandidates(workspace, request = {}) {
   const candidates = new Set([...ROOT_SOURCE_FILES, ...PRIORITY_SOURCE_FILES]);
   const requestedCandidates = [];
@@ -159,12 +241,12 @@ function collectDocCandidates(workspace, request = {}) {
   const docsRoot = path.join(workspace, "docs");
   const queue = fs.existsSync(docsRoot) ? [docsRoot] : [];
   let directoriesRead = 0;
-  while (queue.length > 0 && directoriesRead < MAX_SCAN_DIRECTORIES && candidates.size < MAX_SCAN_FILES) {
+  while (queue.length > 0 && directoriesRead < MAX_SCAN_DIRECTORIES && candidates.size < MAX_SCAN_CANDIDATES) {
     const current = queue.shift();
     directoriesRead += 1;
     const entries = fs.readdirSync(current, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
-      if (candidates.size >= MAX_SCAN_FILES) break;
+      if (candidates.size >= MAX_SCAN_CANDIDATES) break;
       const fullPath = path.join(current, entry.name);
       if (entry.isDirectory()) {
         if (!SKIP_DIRECTORY_NAMES.has(entry.name.toLowerCase())) queue.push(fullPath);
@@ -176,8 +258,55 @@ function collectDocCandidates(workspace, request = {}) {
   }
   const preferred = [...new Set([...PRIORITY_SOURCE_FILES, ...requestedCandidates, ...ROOT_SOURCE_FILES])];
   const preferredSet = new Set(preferred);
+  const changedSourcePaths = collectChangedSourcePaths(workspace);
+  const dynamicPriority = (relativePath) => {
+    const name = relativePath.toUpperCase();
+    if (/(?:^|\/)PRD(?:[_./-]|$)/.test(name)) return 700;
+    if (/(?:^|[_/-])PROGRAM_GOAL(?:[_./-]|$)/.test(name)) return 680;
+    if (/(?:^|[_/-])TASK[_-]?GRAPH(?:[_./-]|$)/.test(name)) return 660;
+    if (/CURRENT_CHECKPOINT/.test(name)) return 640;
+    if (/PAUSE[_-]?HANDOFF|SAFE[_-]?PAUSE/.test(name)) return 500;
+    if (/MIGRATION[_-]?HANDOFF/.test(name)) return 500;
+    if (/HANDOFF/.test(name)) return 500;
+    if (TASK_CARD_PATH_RE.test(name)) return 520;
+    if (/ACCEPTANCE|QA[_-]?REPORT|FORMAL[_-]?QA|(?:^|[_/-])REVISE(?:[_./-]|$)/.test(name)) return 520;
+    if (/REVIEWS?\//.test(name)) return 300;
+    if (/STATUS|PROGRESS/.test(name)) return 200;
+    return 0;
+  };
+  const sourceDate = (relativePath) => {
+    const match = relativePath.match(/(?:19|20)\d{2}[-_](?:0[1-9]|1[0-2])[-_](?:0[1-9]|[12]\d|3[01])/g);
+    return Number((match?.at(-1) || "").replace(/[-_]/g, "")) || 0;
+  };
+  const changedMtime = new Map();
+  const changedFileMtime = (relativePath) => {
+    if (!changedSourcePaths.has(relativePath)) return 0;
+    if (!changedMtime.has(relativePath)) changedMtime.set(relativePath, fs.statSync(resolveContainedFile(workspace, relativePath)).mtimeMs);
+    return changedMtime.get(relativePath);
+  };
+  const recentFirst = (left, right) => Number(changedSourcePaths.has(right)) - Number(changedSourcePaths.has(left))
+      || changedFileMtime(right) - changedFileMtime(left)
+      || sourceDate(right) - sourceDate(left)
+      || right.localeCompare(left);
+  const candidateList = [...candidates].filter((item) => !preferredSet.has(item));
+  const ranked = candidateList.sort((left, right) => dynamicPriority(right) - dynamicPriority(left) || recentFirst(left, right));
+  const selected = [];
+  const selectedSet = new Set();
+  const select = (values, limit = values.length) => {
+    for (const value of values) {
+      if (selectedSet.has(value)) continue;
+      selected.push(value);
+      selectedSet.add(value);
+      if (selected.length >= limit) break;
+    }
+  };
+  select(ranked.filter((item) => dynamicPriority(item) >= 600));
+  select(ranked.filter((item) => TASK_CARD_PATH_RE.test(item)).sort(recentFirst), selected.length + 4);
+  select(ranked.filter((item) => /ACCEPTANCE|QA[_-]?REPORT|FORMAL[_-]?QA|(?:^|[_/-])REVISE(?:[_./-]|$)/i.test(item)).sort(recentFirst), selected.length + 4);
+  select(ranked.filter((item) => /HANDOFF/i.test(item)).sort(recentFirst), selected.length + 2);
+  select(ranked);
   return {
-    candidates: [...preferred, ...[...candidates].filter((item) => !preferredSet.has(item)).sort()],
+    candidates: [...preferred, ...selected],
     directoriesRead,
   };
 }
@@ -194,6 +323,7 @@ function sourceArtifactType(relativePath) {
 function scanExactWorkspace(request = {}) {
   const { workspace, projectIdentity } = resolveWorkspace(request);
   const { candidates, directoriesRead } = collectDocCandidates(workspace, request);
+  const workingTree = workingTreeSnapshot(workspace);
   const files = [];
   const skipped = [];
   for (const relativePath of candidates) {
@@ -229,6 +359,7 @@ function scanExactWorkspace(request = {}) {
     canonicalRoot: projectIdentity.canonicalRoot,
     baselineHead: projectIdentity.baselineHead,
     files: files.map(({ relativePath, sha256: fileSha256 }) => ({ relativePath, sha256: fileSha256 })),
+    workingTreeFingerprint: workingTree.fingerprint,
   };
   return {
     schemaVersion: CLI_SCHEMA,
@@ -243,13 +374,25 @@ function scanExactWorkspace(request = {}) {
     scanSha256: sha256(stableStringify(scanCore)),
     files,
     sourceRefs: files.map((file) => ({ kind: file.kind, path: file.path, title: file.title, hash: file.sha256, updatedAt: file.updatedAt, projectId: projectIdentity.projectId })),
+    workingTree,
     generatedKnowledge,
     skipped,
-    performance: { bounded: true, maxFiles: MAX_SCAN_FILES, maxDirectories: MAX_SCAN_DIRECTORIES, directoriesRead, rawSessionBodyRead: false },
+    performance: {
+      bounded: true,
+      maxFiles: MAX_SCAN_FILES,
+      maxDirectories: MAX_SCAN_DIRECTORIES,
+      maxWorktreePostimages: MAX_WORKTREE_POSTIMAGES,
+      directoriesRead,
+      textPostimagesHashed: workingTree.textPostimagesHashed,
+      excludedWorktreeBodies: workingTree.excludedBodyCount,
+      rawSessionBodyRead: false,
+    },
     warnings: [
       "scan_is_not_authority_and_cannot_claim_recovery_readiness",
       ...(generatedKnowledge.length > 0 ? ["generated_codex_knowledge_excluded_from_authority_seed"] : []),
       ...(skipped.length > 0 ? ["oversized_canonical_sources_skipped"] : []),
+      ...(workingTree.truncated ? ["working_tree_postimages_truncated"] : []),
+      ...(workingTree.excludedBodyCount > 0 ? ["non_text_or_sensitive_worktree_bodies_excluded"] : []),
     ],
   };
 }
@@ -265,7 +408,31 @@ function coreSourceRefs(scan, coreProjectId, moduleId) {
     projectId: coreProjectId,
     moduleId,
   };
-  return [scanBinding, ...scan.files.slice(0, 15).map((file) => ({
+  const files = scan.files.slice(0, 15);
+  const selected = [];
+  const selectedPaths = new Set();
+  const select = (pattern, limit) => {
+    let added = 0;
+    for (const file of files) {
+      if (selectedPaths.has(file.relativePath) || !pattern.test(file.relativePath)) continue;
+      selected.push(file);
+      selectedPaths.add(file.relativePath);
+      added += 1;
+      if (added >= limit) break;
+    }
+  };
+  select(/(?:^|\/)PRD(?:[_./-]|$)/i, 1);
+  select(/PROGRAM[_-]?GOAL/i, 1);
+  select(/TASK[_-]?GRAPH/i, 1);
+  select(TASK_CARD_PATH_RE, 1);
+  select(/ACCEPTANCE|QA[_-]?REPORT|FORMAL[_-]?QA|(?:^|[_/-])REVISE(?:[_./-]|$)/i, 2);
+  select(/HANDOFF/i, 1);
+  for (const file of files) {
+    if (selectedPaths.has(file.relativePath)) continue;
+    selected.push(file);
+    selectedPaths.add(file.relativePath);
+  }
+  return [scanBinding, ...selected.slice(0, 15).map((file) => ({
     kind: "canonical_project_file",
     path: `git://${scan.projectIdentity.canonicalRepoId}/${scan.projectIdentity.baselineHead || "working-tree"}/${encodeURI(file.relativePath)}`,
     title: file.relativePath,
@@ -277,10 +444,35 @@ function coreSourceRefs(scan, coreProjectId, moduleId) {
   }))];
 }
 
+function compactCheckpointSourceRefs(refs = [], preferredRefs = []) {
+  const values = [...preferredRefs, ...refs];
+  const scanBinding = values.find((ref) => ref?.kind === "workspace_scan_receipt") || null;
+  const selected = [];
+  const seen = new Set();
+  const add = (ref) => {
+    if (!ref || typeof ref !== "object") return;
+    const key = `${ref.path || ""}:${ref.hash || ""}`;
+    if (!ref.path || seen.has(key)) return;
+    seen.add(key);
+    selected.push(ref);
+  };
+  add(scanBinding);
+  for (const ref of values) {
+    if (selected.length >= MAX_CHECKPOINT_SOURCE_REFS) break;
+    add(ref);
+  }
+  return selected;
+}
+
+function scopedModuleId(projectId, requestedModuleId) {
+  const requested = compactSafeText(requestedModuleId || "project-runtime", 180);
+  return `module-${sha256(stableStringify({ projectId, requested })).slice(0, 24)}`;
+}
+
 function normalizeContinuitySeed(request, scan, coreProjectId) {
   const input = request.continuity && typeof request.continuity === "object" ? request.continuity : {};
   const projectName = compactSafeText(request.projectName || input.projectName || path.basename(scan.workspace), 160);
-  const moduleId = compactSafeText(request.moduleId || input.moduleId || `module-${sha256(scan.projectIdentity.canonicalRepoId).slice(0, 20)}`, 180);
+  const moduleId = scopedModuleId(coreProjectId, request.moduleId || input.moduleId || "project-runtime");
   const architectureAnchors = compactSafeList(input.architectureAnchors, 12, 500);
   const standingRules = compactSafeList(input.standingRules, 12, 500);
   const acceptanceCriteria = compactSafeList(input.acceptanceCriteria, 12, 500);
@@ -369,42 +561,112 @@ function compactContinuity(continuity = {}) {
   };
 }
 
+function compactRetrievalContinuity(continuity = {}) {
+  return {
+    availability: continuity.availability || "not_ready",
+    resolutionStatus: continuity.resolutionStatus || "not_ready",
+    recoveryReady: continuity.recoveryReady === true,
+    coverage: Number(continuity.coverage || 0),
+    missingSlots: Array.isArray(continuity.missingSlots) ? continuity.missingSlots.slice(0, 24) : [],
+    staleSlots: Array.isArray(continuity.staleSlots) ? continuity.staleSlots.slice(0, 24) : [],
+    conflictSlots: Array.isArray(continuity.conflictSlots) ? continuity.conflictSlots.slice(0, 24) : [],
+    unsatisfiedSlots: Array.isArray(continuity.unsatisfiedSlots) ? continuity.unsatisfiedSlots.slice(0, 24) : [],
+    pagination: {
+      complete: continuity.pagination?.complete === true,
+      pagesRead: Number(continuity.pagination?.pagesRead || 0),
+      mandatoryTotal: Number(continuity.pagination?.mandatoryTotal || 0),
+      mandatoryReturned: Number(continuity.pagination?.mandatoryReturned || 0),
+      manifestFingerprint: continuity.pagination?.manifestFingerprint || null,
+      cursorInvalid: continuity.pagination?.cursorInvalid === true,
+    },
+    warnings: Array.isArray(continuity.warnings) ? continuity.warnings.slice(0, 24) : [],
+  };
+}
+
 function assertPacketBytes(packet, maxBytes, label) {
   const bytes = Buffer.byteLength(JSON.stringify(packet), "utf8");
   if (bytes > maxBytes) throw new Error(`${label}_packet_exceeds_${maxBytes}_bytes`);
   return { ...packet, packetBytes: bytes, packetLimitBytes: maxBytes };
 }
 
+function verifiedMemoryStateHash(verified = {}) {
+  return `memory-state-${sha256(stableStringify({
+    memoryCoreProjectId: verified.memoryCoreProjectId || null,
+    authorityVerification: verified.authorityVerification || "unavailable",
+    authorityCheckpointId: verified.scanBinding?.authorizedCheckpointId || null,
+    continuityManifest: verified.continuity?.pagination?.manifestFingerprint || null,
+    continuityCoverage: Number(verified.continuity?.coverage || 0),
+    continuityUnsatisfied: verified.continuity?.unsatisfiedSlots || [],
+    current: verified.current === true,
+    recoveryReady: verified.recoveryReady === true,
+  })).slice(0, 24)}`;
+}
+
+function contextGenerationId(verified = {}) {
+  return `context-${sha256(stableStringify({
+    projectIdentitySha256: verified.projectIdentity?.projectIdentitySha256 || null,
+    head: verified.projectIdentity?.baselineHead || null,
+    scanHash: verified.scanBinding?.currentScanSha256 || null,
+    verifiedMemoryStateHash: verifiedMemoryStateHash(verified),
+  })).slice(0, 24)}`;
+}
+
+function takeoverControl(verified, returnedCount) {
+  const ready = verified.current === true && verified.recoveryReady === true && Number(returnedCount || 0) > 0;
+  const reasonCodes = ready ? [] : [...new Set([
+    ...(verified.warnings || []),
+    ...(verified.continuity?.missingSlots || []).map((slot) => `continuity_missing:${slot}`),
+    ...(verified.continuity?.staleSlots || []).map((slot) => `continuity_stale:${slot}`),
+    ...(verified.continuity?.conflictSlots || []).map((slot) => `continuity_conflict:${slot}`),
+  ])].slice(0, 16);
+  return {
+    shouldInject: ready,
+    injectionMode: ready ? "replace_long_thread_context" : "blocked_fail_closed",
+    maxInjectionsPerTask: 1,
+    reasonCodes,
+    nextAction: ready
+      ? "Start a clean takeover task and inject this context generation once."
+      : "Keep the old task frozen and repair or verify app-owned Memory Core before takeover.",
+  };
+}
+
 function authorizedCheckpointWorkingState(runtime, storeRoot, projectIdentity, optionalSlots) {
-  const firstPage = runtime.getProjectContinuity({
-    projectPath: projectIdentity.canonicalRoot,
+  const firstPage = runtime.getProjectContinuity(exactMemoryCoreInput(projectIdentity, {
     readOnly: true,
     optionalSlots,
     tokenBudget: 2200,
     maxPacketChars: 16000,
     maxPacketItems: 24,
-  });
+  }));
   const authorizedIds = new Set(firstPage.authorizedCoreIds || []);
   const checkpoint = listProjectCheckpoints(storeRoot, {
     projectId: firstPage.projectId,
     view: "normal",
     limit: 12,
   }).find((record) => authorizedIds.has(record.id));
-  if (!checkpoint) return { workingState: {}, checkpointId: null, authorityReceiptId: null };
+  if (!checkpoint) return { workingState: {}, checkpointId: null, checkpointPayload: null, authorityReceiptId: null };
   const payload = checkpoint.payload || checkpoint;
   const sourceRefs = Array.isArray(payload.sourceRefs) ? payload.sourceRefs : [];
+  const authorityReceipt = listAuthorityReceipts(storeRoot, {
+    projectId: firstPage.projectId,
+    view: "all",
+    limit: 100,
+  }).find((record) => record.id === payload.authorityReceiptId);
+  const authorityPayload = authorityReceipt?.payload || authorityReceipt || {};
   const record = (value, prefix) => ({
     id: value?.id || `${prefix}-${sha256(value?.title || value).slice(0, 16)}`,
     title: compactText(value?.title || value, 360),
     projectId: firstPage.projectId,
     authorityStatus: "accepted",
     authoritative: true,
-    sourceRefs,
-    updatedAt: payload.updatedAt || payload.observedAt,
+    sourceRefs: Array.isArray(value?.sourceRefs) && value.sourceRefs.length > 0 ? value.sourceRefs : sourceRefs,
+    updatedAt: value?.updatedAt || value?.observedAt || payload.updatedAt || payload.observedAt,
   });
   return {
     checkpointId: checkpoint.id,
+    checkpointPayload: payload,
     authorityReceiptId: payload.authorityReceiptId || null,
+    authoritySourceRefs: Array.isArray(authorityPayload.sourceRefs) ? authorityPayload.sourceRefs : [],
     workingState: {
       acceptedProgress: (payload.acceptedProgress || []).map((value) => record(value, "progress")),
       openTasks: (payload.openTasks || payload.taskStates || []).map((value) => record(value, "task")),
@@ -424,6 +686,7 @@ function verifyMemoryCore(request = {}) {
   const storeRoot = resolveStoreRoot(request);
   const runtime = runtimeForRead(storeRoot);
   if (!runtime) {
+    const currentScan = scanExactWorkspace(request);
     return assertPacketBytes({
       schemaVersion: CLI_SCHEMA,
       operation: "verify",
@@ -435,6 +698,14 @@ function verifyMemoryCore(request = {}) {
       workspace,
       projectIdentity,
       continuity: null,
+      scanBinding: {
+        currentScanSha256: currentScan.scanSha256,
+        baselineHead: projectIdentity.baselineHead,
+        authorizedBindingCount: 0,
+        matched: false,
+        matchedPath: null,
+        authorizedCheckpointId: null,
+      },
       warnings: ["app_owned_memory_core_private_state_missing"],
     }, MAX_RESUME_PACKET_BYTES, "resume");
   }
@@ -442,28 +713,26 @@ function verifyMemoryCore(request = {}) {
     ? request.optionalSlots.filter((slot) => ["open_blockers", "latest_failures"].includes(slot))
     : ["open_blockers", "latest_failures"];
   const authorizedCheckpoint = authorizedCheckpointWorkingState(runtime, storeRoot, projectIdentity, optionalSlots);
-  const continuityRaw = runtime.getContinuityStatus({
-    projectPath: projectIdentity.canonicalRoot,
+  const continuityRaw = runtime.getContinuityStatus(exactMemoryCoreInput(projectIdentity, {
     taskGoal: compactText(request.taskGoal || request.query || "project recovery verification", 500),
     optionalSlots,
     tokenBudget: 2200,
     maxPacketChars: 16000,
     maxPacketItems: 24,
     workingState: authorizedCheckpoint.workingState,
-  });
-  const diagnostics = runtime.getDiagnostics({ projectPath: projectIdentity.canonicalRoot });
+  }));
+  const diagnostics = runtime.getDiagnostics(exactMemoryCoreInput(projectIdentity));
   const continuity = compactContinuity(continuityRaw);
   const authorityReceiptCount = Number(diagnostics.counts?.authorityReceipts || 0);
   const currentScan = scanExactWorkspace(request);
-  const projectPage = runtime.getProjectContinuity({
-    projectPath: projectIdentity.canonicalRoot,
+  const projectPage = runtime.getProjectContinuity(exactMemoryCoreInput(projectIdentity, {
     readOnly: true,
     optionalSlots,
     tokenBudget: 2200,
     maxPacketChars: 16000,
     maxPacketItems: 24,
     workingState: authorizedCheckpoint.workingState,
-  });
+  }));
   const verifiedReceipt = listAuthorityReceipts(storeRoot, {
     projectId: continuityRaw.projectId,
     view: "all",
@@ -502,6 +771,7 @@ function verifyMemoryCore(request = {}) {
     scanBinding: {
       currentScanSha256: currentScan.scanSha256,
       baselineHead: projectIdentity.baselineHead,
+      currentSourceRefs: coreSourceRefs(currentScan, continuityRaw.projectId || projectIdentity.projectId, null).slice(0, 16),
       authorizedBindingCount: authorizedScanBindings.length,
       matched: baselineAndSourcesCurrent,
       matchedPath: matchingScanBinding?.path || null,
@@ -510,7 +780,7 @@ function verifyMemoryCore(request = {}) {
     warnings: [
       ...(recoveryReady ? [] : ["full_app_owned_memory_core_not_recovery_ready"]),
       ...(baselineAndSourcesCurrent ? [] : ["workspace_head_or_canonical_sources_changed_reseed_required"]),
-      "helper_only_or_unverified_authority_cannot_claim_current",
+      ...(authorityVerified ? [] : ["helper_only_or_unverified_authority_cannot_claim_current"]),
     ],
   }, MAX_RESUME_PACKET_BYTES, "resume");
 }
@@ -521,7 +791,7 @@ function seedMemoryCore(request = {}) {
   if (!request.expectedScanSha256 || request.expectedScanSha256 !== scan.scanSha256) throw new Error("exact_workspace_scan_sha256_mismatch");
   const storeRoot = resolveStoreRoot(request);
   const runtime = runtimeForWrite(storeRoot);
-  const coreIdentity = deriveMemoryCoreProjectIdentity({ projectPath: scan.projectIdentity.canonicalRoot });
+  const coreIdentity = { projectId: scan.projectIdentity.projectId, projectPath: scan.projectIdentity.canonicalRoot };
   const seed = normalizeContinuitySeed(request, scan, coreIdentity.projectId);
   const now = request.now || new Date().toISOString();
   const anchors = [
@@ -531,8 +801,7 @@ function seedMemoryCore(request = {}) {
     ...seed.acceptanceCriteria.map((statement, index) => ({ category: "acceptance", title: `Acceptance ${index + 1}`, statement })),
     ...seed.safetyRules.map((statement, index) => ({ category: "safety", title: `Safety ${index + 1}`, statement })),
   ].map((anchor) => ({ ...anchor, authorityStatus: "accepted", sourceRefs: seed.refs, updatedAt: now }));
-  const seeded = runtime.seedProject({
-    projectPath: scan.projectIdentity.canonicalRoot,
+  const seeded = runtime.seedProject(exactMemoryCoreInput(scan.projectIdentity, {
     projectName: seed.projectName,
     projectSummary: seed.projectSummary,
     productSummary: seed.projectSummary,
@@ -549,7 +818,7 @@ function seedMemoryCore(request = {}) {
       updatedAt: now,
     }],
     now,
-  });
+  }));
   const originalGoalAnchors = listProjectAnchors(storeRoot, { projectId: coreIdentity.projectId, view: "normal", limit: 40 })
     .map((row) => row.payload || row)
     .filter((anchor) => anchor.category === "original_goal");
@@ -570,7 +839,15 @@ function seedMemoryCore(request = {}) {
       supersededOriginalGoals.push({ anchorId: anchor.anchorId, supersededBy: desiredOriginalGoal.anchorId, action: result.action });
     }
   }
-  const checkpoint = runtime.formAppOwnedLifecycleEvent("writeback_evidence", {
+  const firstRefMatching = (pattern) => seed.refs.find((ref) => pattern.test(ref.title || ref.path || ""));
+  const checkpointRefs = compactCheckpointSourceRefs(seed.refs, [
+    ...seed.refs.filter((ref) => /PROGRAM[_-]?GOAL/i.test(ref.title || ref.path || "")).slice(0, 2),
+    firstRefMatching(/CURRENT[_-]?CHECKPOINT/i),
+    firstRefMatching(TASK_CARD_PATH_RE),
+    firstRefMatching(/ACCEPTANCE|QA[_-]?REPORT|FORMAL[_-]?QA/i),
+    firstRefMatching(/HANDOFF/i),
+  ].filter(Boolean));
+  const checkpoint = runtime.formAppOwnedLifecycleEvent("writeback_evidence", exactMemoryCoreInput(scan.projectIdentity, {
     eventType: "checkpoint",
     deterministic: true,
     riskLevel: "low",
@@ -583,17 +860,19 @@ function seedMemoryCore(request = {}) {
     phase: seed.phase,
     acceptedProgress: boundedCheckpointItems(seed.acceptedProgress),
     openTasks: boundedCheckpointItems(seed.openTasks),
+    blockers: boundedCheckpointItems(seed.openBlockers),
+    failures: boundedCheckpointItems(seed.latestFailures),
     nextActions: boundedCheckpointItems(seed.nextActions),
     threads: seed.threadLineage.slice(0, 4).map((threadId) => ({ threadId, title: threadId })),
-    artifacts: seed.refs.slice(0, 8).map((ref, index) => ({
+    artifacts: checkpointRefs.slice(0, MAX_CHECKPOINT_ARTIFACTS).map((ref, index) => ({
       artifactId: `canonical-${index}`,
       title: ref.title,
       path: ref.path,
       hash: ref.hash,
     })),
-    sourceRefs: seed.refs,
+    sourceRefs: checkpointRefs,
     observedAt: now,
-  }, { now });
+  }), { now });
   const verified = verifyMemoryCore({ ...request, workspace: scan.workspace, optionalSlots: optionalContinuitySlots(seed) });
   return assertPacketBytes({
     schemaVersion: CLI_SCHEMA,
@@ -641,9 +920,6 @@ function compactVerifiedSourceRefs(values, maxItems = 1) {
       path: compactText(raw.path || raw.uri || "", 700) || null,
       title: compactText(raw.title || "", 260) || null,
       hash: compactText(raw.hash || raw.sha256 || "", 128) || null,
-      artifactType: compactText(raw.artifactType || "", 80) || null,
-      updatedAt: compactText(raw.updatedAt || "", 80) || null,
-      projectId: compactText(raw.projectId || "", 180) || null,
     }).filter(([, value]) => value !== null));
     if (!safeText(stableStringify(ref))) continue;
     const key = stableStringify(ref);
@@ -655,11 +931,39 @@ function compactVerifiedSourceRefs(values, maxItems = 1) {
   return result;
 }
 
+const EVIDENCE_TOKEN_STOP_WORDS = new Set([
+  "about", "after", "against", "before", "current", "from", "into", "only", "project", "source", "task", "that", "the", "then", "this", "with",
+]);
+
+function evidenceTokens(value) {
+  return [...new Set(String(value || "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [])]
+    .filter((token) => (token.length >= 3 || /\d/.test(token)) && !EVIDENCE_TOKEN_STOP_WORDS.has(token))
+    .slice(0, 24);
+}
+
+function bestEvidenceRefsForValue(value, candidateRefs = [], fallbackRefs = []) {
+  const title = compactText(value?.title || value?.summary || value, 700);
+  const tokens = evidenceTokens(title);
+  const candidates = compactVerifiedSourceRefs([...candidateRefs, ...fallbackRefs], 16);
+  const ranked = candidates.map((ref, index) => {
+    const haystack = `${ref.title || ""} ${ref.path || ""}`.toLowerCase();
+    const tokenScoreValue = tokens.reduce((score, token) => score + (haystack.includes(token) ? 5 : 0), 0);
+    const semanticBonus = (/(?:k3|deepseek|provider|inference|audit|finding|schema|triage)/i.test(title) && /external[_/-]?audit/i.test(haystack) ? 10 : 0)
+      + (/block|fail|error|revise|阻塞|失败/i.test(title) && /block|fail|error|revise|diagnostic/i.test(haystack) ? 2 : 0)
+      + (/open|next|continue|run|implement|triage|下一步|继续/i.test(title) && TASK_CARD_PATH_RE.test(haystack) ? 2 : 0);
+    const scanPenalty = ref.kind === "workspace_scan_receipt" ? -20 : 0;
+    return { ref, score: tokenScoreValue + semanticBonus + scanPenalty, index };
+  }).sort((left, right) => right.score - left.score || left.index - right.index);
+  const positive = ranked.filter((item) => item.score > 0).map((item) => item.ref);
+  const nonScanFallback = [...candidateRefs, ...fallbackRefs].filter((ref) => ref?.kind !== "workspace_scan_receipt");
+  return compactVerifiedSourceRefs(positive.length > 0 ? positive : [...nonScanFallback, ...candidateRefs, ...fallbackRefs], 2);
+}
+
 function compactVerifiedRecallItem(raw, options = {}) {
   const title = compactText(raw?.title || raw?.summary || options.title || "", 420);
   const summary = compactText(raw?.summary || raw?.statement || raw?.title || options.summary || "", 700);
   if (!title || !summary || !safeText(title) || !safeText(summary)) return null;
-  const sourceRefs = compactVerifiedSourceRefs(raw?.sourceRefs || options.sourceRefs, 1);
+  const sourceRefs = compactVerifiedSourceRefs(options.sourceRefs || raw?.sourceRefs, 1);
   if (sourceRefs.length === 0) return null;
   const category = compactText(raw?.category || options.category || "", 80) || null;
   const item = {
@@ -680,22 +984,40 @@ function compactVerifiedRecallItem(raw, options = {}) {
   return { ...item, tokenEstimate: Math.max(1, Math.ceil(Buffer.byteLength(JSON.stringify(item), "utf8") / 4)) };
 }
 
-function verifiedContinuityRecallItems(projectPage, authorizedCheckpoint) {
+function verifiedContinuityRecallItems(projectPage, authorizedCheckpoint, currentScanRefs = []) {
   const packet = projectPage.continuityPacket || {};
   const project = packet.project || {};
   const workingState = authorizedCheckpoint.workingState || {};
   const priorityCheckpointRefs = (workingState.canonicalDocs || [])
-    .filter((record) => /EXAMPLE_PROJECT_CURRENT_CHECKPOINT\.md$/i.test(record?.title || ""))
+    .filter((record) => /CURRENT[_-]?CHECKPOINT/i.test(record?.title || ""))
     .flatMap((record) => record?.sourceRefs || []);
   const checkpointRefs = compactVerifiedSourceRefs([
     ...priorityCheckpointRefs,
+    ...currentScanRefs,
+    ...(authorizedCheckpoint.authoritySourceRefs || []),
     ...Object.values(workingState).flatMap((values) => (Array.isArray(values) ? values : []).flatMap((value) => value?.sourceRefs || [])),
     ...(packet.sourceRefs || []),
-  ], 2);
+  ], 16);
+  const refsMatching = (patterns, maxItems = 2) => compactVerifiedSourceRefs([
+    ...patterns.flatMap((pattern) => checkpointRefs.filter((ref) => pattern.test(`${ref.title || ""} ${ref.path || ""}`))),
+    ...checkpointRefs,
+  ], maxItems);
+  const projectSummaryRefs = refsMatching([/(?:^|\/)PRD(?:[_./-]|$)/i, /PROGRAM[_-]?GOAL/i]);
+  const currentPhaseRefs = refsMatching([/PROGRAM[_-]?GOAL/i, /TASK[_-]?GRAPH/i, /ACCEPTANCE|REVISE|QA[_-]?REPORT|FORMAL[_-]?QA/i]);
+  const acceptedProgressRefs = refsMatching([
+    /MUTATION[_-]?PHASE.*ACCEPTANCE/i,
+    /QUALIFICATION[_-]?CUSTODY[_-]?RUNNER.*ACCEPTANCE/i,
+    /ACCEPTANCE|QA[_-]?REPORT|FORMAL[_-]?QA/i,
+    /(?:^|[_/-])REVISE(?:[_./-]|$)/i,
+    TASK_CARD_PATH_RE,
+  ], 12);
+  const openWorkRefs = refsMatching([/QUALIFICATION[_-]?CUSTODY[_-]?RUNNER/i, TASK_CARD_PATH_RE, /TASK[_-]?GRAPH/i, /PROGRAM[_-]?GOAL/i], 12);
+  const blockerRefs = refsMatching([/(?:^|[_/-])REVISE(?:[_./-]|$)/i, /ACCEPTANCE|QA[_-]?REPORT|FORMAL[_-]?QA/i, /PROGRAM[_-]?GOAL/i], 8);
+  const lineageRefs = refsMatching([/HANDOFF/i, /PROGRAM[_-]?GOAL/i], 6);
   const common = {
     projectId: projectPage.projectId,
     authorityReceiptId: authorizedCheckpoint.authorityReceiptId,
-    sourceRefs: checkpointRefs,
+    sourceRefs: projectSummaryRefs,
   };
   const items = [];
   const add = (raw, options) => {
@@ -706,12 +1028,12 @@ function verifiedContinuityRecallItems(projectPage, authorizedCheckpoint) {
     id: `project-summary-${projectPage.projectId}`,
     title: "Current project summary",
     summary: project.productSummary,
-  }, { kind: "project_summary", whyMatched: ["thread_recovery_project_summary"] });
+  }, { kind: "project_summary", sourceRefs: projectSummaryRefs, whyMatched: ["thread_recovery_project_summary"] });
   add({
     id: `project-phase-${projectPage.projectId}`,
     title: "Current project phase",
     summary: project.phase,
-  }, { kind: "current_phase", whyMatched: ["thread_recovery_current_phase"] });
+  }, { kind: "current_phase", sourceRefs: currentPhaseRefs, whyMatched: ["thread_recovery_current_phase"] });
   const groups = [
     ["acceptedProgress", "accepted_progress", 6],
     ["openTasks", "open_task", 6],
@@ -722,9 +1044,22 @@ function verifiedContinuityRecallItems(projectPage, authorizedCheckpoint) {
   ];
   for (const [field, kind, maxItems] of groups) {
     for (const value of (workingState[field] || []).slice(0, maxItems)) {
+      const fallbackRefs = kind === "canonical_doc"
+        ? checkpointRefs
+        : kind === "accepted_progress"
+          ? acceptedProgressRefs
+          : ["open_task", "next_action"].includes(kind)
+            ? openWorkRefs
+            : kind === "open_blocker"
+              ? blockerRefs
+              : kind === "thread_lineage"
+                ? lineageRefs
+                : checkpointRefs;
       add(value, {
         kind,
-        sourceRefs: kind === "canonical_doc" ? (value?.sourceRefs || checkpointRefs) : checkpointRefs,
+        sourceRefs: kind === "canonical_doc"
+          ? (value?.sourceRefs || checkpointRefs)
+          : bestEvidenceRefsForValue(value, value?.sourceRefs || [], fallbackRefs),
         whyMatched: [`thread_recovery_${kind}`],
       });
     }
@@ -778,6 +1113,23 @@ function semanticGraphFallback(projectPath, warning) {
       noBackgroundTimer: true,
       noBackgroundRebuild: true,
     },
+  };
+}
+
+function compactSemanticGraphPath(graphPath = {}) {
+  const compactNode = (node = {}) => ({
+    id: compactText(node.id || "", 180) || null,
+    kind: compactText(node.kind || "", 80) || null,
+    canonicalName: compactText(node.canonicalName || node.name || "", 260) || null,
+  });
+  return {
+    id: compactText(graphPath.id || "", 180) || null,
+    from: compactNode(graphPath.from),
+    predicate: compactText(graphPath.predicate || "related_to", 100),
+    to: compactNode(graphPath.to),
+    whyMatched: Array.isArray(graphPath.whyMatched) ? graphPath.whyMatched.map((value) => compactText(value, 120)).filter(Boolean).slice(0, 8) : [],
+    sourceRefs: compactVerifiedSourceRefs(graphPath.sourceRefs || [], 1),
+    confidence: Number.isFinite(Number(graphPath.confidence)) ? Number(graphPath.confidence) : null,
   };
 }
 
@@ -947,17 +1299,25 @@ function unreadySemanticGraphSupplement(verified, request = {}) {
   };
 }
 
-function retrieveMemoryCore(request = {}) {
+function retrieveMemoryCore(request = {}, options = {}) {
   const retrievalStartedAt = Date.now();
   const verified = verifyMemoryCore(request);
+  const responseOperation = options.operation === "prepare_takeover" ? "prepare_takeover" : "retrieve";
+  const generationId = contextGenerationId(verified);
+  const memoryStateHash = verifiedMemoryStateHash(verified);
   if (!verified.recoveryReady) {
     const requestedTokenBudget = Math.max(800, Math.min(Number(request.tokenBudget || 3000), 3000));
     const semanticGraph = unreadySemanticGraphSupplement(verified, request);
     const bounded = withStrictRetrievalMetrics({
       ...verified,
-      operation: "retrieve",
+      operation: responseOperation,
+      contextGenerationId: generationId,
+      head: verified.projectIdentity?.baselineHead || null,
+      scanHash: verified.scanBinding?.currentScanSha256 || null,
+      verifiedMemoryStateHash: memoryStateHash,
       items: [],
       returnedCount: 0,
+      ...(responseOperation === "prepare_takeover" ? { takeover: takeoverControl(verified, 0) } : {}),
       semanticGraph,
       safety: {
         rawSessionBodyRead: false,
@@ -987,21 +1347,20 @@ function retrieveMemoryCore(request = {}) {
     verified.projectIdentity,
     ["open_blockers", "latest_failures"],
   );
-  const projectPage = runtime.getProjectContinuity({
-    projectPath: verified.projectIdentity.canonicalRoot,
+  const projectPage = runtime.getProjectContinuity(exactMemoryCoreInput(verified.projectIdentity, {
     readOnly: true,
     optionalSlots: ["open_blockers", "latest_failures"],
     tokenBudget: 2200,
     maxPacketChars: 16000,
     maxPacketItems: 24,
     workingState: authorizedCheckpoint.workingState,
-  });
+  }));
   const authorizedIds = new Set(projectPage.authorizedCoreIds || []);
   const query = compactText(request.taskGoal || request.query || "", 600);
   const tokens = query.toLowerCase().split(/[^\p{L}\p{N}_-]+/u).filter(Boolean).slice(0, 12);
   const limit = Math.max(1, Math.min(Number(request.limit || 12), 20));
-  const continuityItems = verifiedContinuityRecallItems(projectPage, authorizedCheckpoint);
-  const coreItems = runtime.listRecallCandidates({ projectPath: verified.projectIdentity.canonicalRoot, queryType: "project_resume" })
+  const continuityItems = verifiedContinuityRecallItems(projectPage, authorizedCheckpoint, verified.scanBinding?.currentSourceRefs || []);
+  const coreItems = runtime.listRecallCandidates(exactMemoryCoreInput(verified.projectIdentity, { queryType: "project_resume" }))
     .filter((item) => authorizedIds.has(item.id))
     .map((item) => compactVerifiedRecallItem(compactRecallItem(item), {
       projectId: projectPage.projectId,
@@ -1045,11 +1404,11 @@ function retrieveMemoryCore(request = {}) {
       authorityVerification: "app_owned_verified",
     }));
   const requestedTokenBudget = Math.max(800, Math.min(Number(request.tokenBudget || 3000), 3000));
-  const semanticGraphReserve = Math.max(400, Math.min(900, Math.floor(requestedTokenBudget * 0.27)));
+  const semanticGraphReserve = Math.max(400, Math.min(600, Math.floor(requestedTokenBudget * 0.18)));
   const itemPacketTokenTarget = Math.max(400, requestedTokenBudget - semanticGraphReserve);
   const packetForItems = (packetItems, graph = null) => ({
     schemaVersion: CLI_SCHEMA,
-    operation: "retrieve",
+    operation: responseOperation,
     status: "verified",
     current: true,
     recoveryReady: true,
@@ -1058,12 +1417,17 @@ function retrieveMemoryCore(request = {}) {
     workspace: verified.workspace,
     projectIdentity: verified.projectIdentity,
     memoryCoreProjectId: verified.memoryCoreProjectId,
+    contextGenerationId: generationId,
+    head: verified.projectIdentity?.baselineHead || null,
+    scanHash: verified.scanBinding?.currentScanSha256 || null,
+    verifiedMemoryStateHash: memoryStateHash,
     request: { taskGoal: query, queryType: compactText(request.queryType || "project_resume", 80), limit },
     items: packetItems,
     returnedCount: packetItems.length,
+    ...(responseOperation === "prepare_takeover" ? { takeover: takeoverControl(verified, packetItems.length) } : {}),
     tokenEstimate: 0,
     sourceRefs: compactVerifiedSourceRefs(packetItems.flatMap((item) => item.sourceRefs || []), 8),
-    continuity: verified.continuity,
+    continuity: compactRetrievalContinuity(verified.continuity),
     ...(graph ? { semanticGraph: graph } : {}),
     safety: {
       rawSessionBodyRead: false,
@@ -1098,6 +1462,7 @@ function retrieveMemoryCore(request = {}) {
   }
   const graphPathBudget = Math.max(120, Math.min(600, semanticGraphReserve - 320));
   let semanticGraph = retrieveVerifiedSemanticGraph(storeRoot, selectedItems, request, verified, graphPathBudget);
+  semanticGraph = { ...semanticGraph, graphPaths: semanticGraph.graphPaths.map(compactSemanticGraphPath) };
   const originalGraphPathCount = semanticGraph.graphPaths.length;
   const receiptCreatedAt = request.now || new Date().toISOString();
   const receiptId = `trigger-semantic-cli-${sha256(stableStringify({
@@ -1163,7 +1528,7 @@ function retrieveMemoryCore(request = {}) {
   };
   refreshGraphReceipt();
   let bounded = withStrictRetrievalMetrics(packetForItems(selectedItems, semanticGraph));
-  while ((bounded.tokenEstimate > requestedTokenBudget || bounded.packetBytes > MAX_RETRIEVAL_PACKET_BYTES) && semanticGraph.graphPaths.length > 0) {
+  while ((bounded.tokenEstimate > requestedTokenBudget || bounded.packetBytes > MAX_RETRIEVAL_PACKET_BYTES) && semanticGraph.graphPaths.length > 1) {
     semanticGraph.graphPaths = semanticGraph.graphPaths.slice(0, -1);
     refreshGraphReceipt();
     bounded = withStrictRetrievalMetrics(packetForItems(selectedItems, semanticGraph));
@@ -1172,10 +1537,242 @@ function retrieveMemoryCore(request = {}) {
     selectedItems = selectedItems.slice(0, -1);
     bounded = withStrictRetrievalMetrics(packetForItems(selectedItems, semanticGraph));
   }
+  while ((bounded.tokenEstimate > requestedTokenBudget || bounded.packetBytes > MAX_RETRIEVAL_PACKET_BYTES) && semanticGraph.graphPaths.length > 0) {
+    semanticGraph.graphPaths = semanticGraph.graphPaths.slice(0, -1);
+    refreshGraphReceipt();
+    bounded = withStrictRetrievalMetrics(packetForItems(selectedItems, semanticGraph));
+  }
   if (bounded.tokenEstimate > requestedTokenBudget || bounded.packetBytes > MAX_RETRIEVAL_PACKET_BYTES) {
     throw new Error("retrieval_packet_cannot_fit_requested_budget");
   }
   return bounded;
+}
+
+function prepareTakeover(request = {}) {
+  return retrieveMemoryCore({ ...request, queryType: request.queryType || "thread_recovery" }, { operation: "prepare_takeover" });
+}
+
+function exactWorkspaceWriteBinding(request = {}, operation) {
+  if (request.execute !== true) throw new Error(`${operation}_execute_true_required`);
+  const scan = scanExactWorkspace(request);
+  if (!request.expectedProjectIdentitySha256 || request.expectedProjectIdentitySha256 !== scan.projectIdentity.projectIdentitySha256) {
+    throw new Error("exact_project_identity_sha256_mismatch");
+  }
+  if (!request.expectedScanSha256 || request.expectedScanSha256 !== scan.scanSha256) {
+    throw new Error("exact_workspace_scan_sha256_mismatch");
+  }
+  const payload = request.evidence && typeof request.evidence === "object"
+    ? request.evidence
+    : request.event && typeof request.event === "object"
+      ? request.event
+      : request;
+  const requestedRefs = Array.isArray(payload.sourceRefs) ? payload.sourceRefs : [];
+  if (requestedRefs.length === 0) throw new Error("source_backed_lifecycle_write_required");
+  const canonicalFiles = new Map(scan.sourceRefs.map((ref) => [path.resolve(ref.path), ref]));
+  for (const entry of scan.workingTree?.entries || []) {
+    if (entry.state !== "text_postimage" || !entry.sha256) continue;
+    const absolutePath = resolveContainedFile(scan.workspace, entry.relativePath);
+    canonicalFiles.set(absolutePath, {
+      kind: "workspace_text_postimage",
+      path: absolutePath,
+      title: entry.relativePath,
+      hash: entry.sha256,
+      artifactType: "working_tree_postimage",
+      updatedAt: null,
+    });
+  }
+  const sourceRefs = [];
+  for (const ref of requestedRefs.slice(0, 16)) {
+    const candidatePath = path.isAbsolute(String(ref?.path || ""))
+      ? path.resolve(String(ref.path))
+      : resolveContainedFile(scan.workspace, String(ref?.path || ""));
+    const canonical = canonicalFiles.get(candidatePath);
+    if (!canonical || (ref.hash && ref.hash !== canonical.hash)) throw new Error("lifecycle_source_ref_not_in_current_scan");
+    sourceRefs.push(canonical);
+  }
+  return { scan, payload, sourceRefs };
+}
+
+function executeLifecycleWrite(operation, request = {}) {
+  const { scan, payload, sourceRefs: matchedScanRefs } = exactWorkspaceWriteBinding(request, operation);
+  const storeRoot = resolveStoreRoot(request);
+  const runtime = runtimeForWrite(storeRoot);
+  const project = { projectId: scan.projectIdentity.projectId, projectPath: scan.projectIdentity.canonicalRoot };
+  const now = request.now || new Date().toISOString();
+  const decision = compactText(payload.decision || (operation === "writeback_evidence" ? "accept" : "observe"), 40).toLowerCase();
+  const moduleId = scopedModuleId(project.projectId, payload.moduleId || "project-runtime");
+  const matchedTitles = new Set(matchedScanRefs.map((ref) => ref.title));
+  const matchedPostimages = matchedScanRefs
+    .filter((ref) => ref.kind === "workspace_text_postimage")
+    .map((ref) => ({ ...ref, projectId: project.projectId, moduleId }));
+  const sourceRefs = [...coreSourceRefs(scan, project.projectId, moduleId)
+    .filter((ref) => ref.kind === "workspace_scan_receipt" || matchedTitles.has(ref.title)), ...matchedPostimages]
+    .filter((ref, index, values) => values.findIndex((candidate) => candidate.path === ref.path && candidate.hash === ref.hash) === index);
+  const previous = authorizedCheckpointWorkingState(runtime, storeRoot, scan.projectIdentity, optionalContinuitySlots());
+  const previousStateRefs = Object.values(previous.workingState)
+    .flatMap((values) => (Array.isArray(values) ? values : []))
+    .flatMap((item) => item?.sourceRefs || []);
+  const checkpointRefs = compactCheckpointSourceRefs(sourceRefs, [...matchedPostimages, ...matchedScanRefs, ...previousStateRefs]);
+  const previousTitles = (slot) => (previous.workingState[slot] || []).map((item) => item.title).filter(Boolean);
+  const preferredList = (value, fallbackSlot, maxItems = 8, maxChars = 320) => {
+    const explicit = compactSafeList(value || [], maxItems, maxChars);
+    return explicit.length > 0 ? explicit : previousTitles(fallbackSlot).slice(0, maxItems);
+  };
+  const requestedEventType = compactText(payload.eventType || payload.type || (operation === "writeback_evidence" ? "accepted" : "checkpoint"), 80);
+  const explicitBlockers = compactSafeList(payload.openBlockers || payload.blockers || [], 8, 320);
+  const carriedBlockers = explicitBlockers.length > 0 ? explicitBlockers : previousTitles("openBlockers").slice(0, 8);
+  const eventType = carriedBlockers.length > 0 && explicitBlockers.length === 0 && ["accepted", "test_pass"].includes(requestedEventType)
+    ? "checkpoint"
+    : requestedEventType;
+  const lifecycleInput = {
+    eventType,
+    deterministic: true,
+    riskLevel: "low",
+    projectPath: scan.projectIdentity.canonicalRoot,
+    projectId: project.projectId,
+    moduleId,
+    taskId: compactText(payload.taskId || "", 180) || null,
+    title: compactSafeText(payload.title || `${operation} evidence`, 240),
+    summary: compactSafeText(payload.summary || payload.result || payload.title || `${operation} evidence`, 800),
+    result: compactSafeText(payload.result || payload.summary || payload.title || `${operation} evidence`, 500),
+    phase: compactText(payload.phase || "", 80) || null,
+    acceptedProgress: [...new Set([
+      ...previousTitles("acceptedProgress"),
+      ...compactSafeList(payload.acceptedProgress || [], 8, 320),
+    ])].slice(0, 12),
+    openTasks: preferredList(payload.openTasks, "openTasks"),
+    blockers: carriedBlockers,
+    failures: compactSafeList(payload.latestFailures || payload.failures || [], 8, 360),
+    nextActions: preferredList(payload.nextActions, "nextActions"),
+    threads: preferredList(payload.threadLineage || payload.threads, "threadLineage", 8, 180).map((threadId) => ({ threadId, title: threadId })),
+    artifacts: checkpointRefs.slice(0, MAX_CHECKPOINT_ARTIFACTS).map((ref, index) => ({
+      artifactId: `source-${index}`,
+      title: ref.title,
+      path: ref.path,
+      hash: ref.hash,
+    })),
+    sourceRefs: checkpointRefs,
+    observedAt: now,
+  };
+  const trusted = operation === "observe_event" || ["accept", "accepted"].includes(decision);
+  const result = trusted
+    ? runtime.formAppOwnedLifecycleEvent(operation, exactMemoryCoreInput(scan.projectIdentity, lifecycleInput), { now })
+    : runtime.formLifecycleEvent(operation, exactMemoryCoreInput(scan.projectIdentity, { ...lifecycleInput, decision }), { now });
+  const projectRefresh = trusted && result.accepted === true && lifecycleInput.phase
+    ? runtime.seedProject(exactMemoryCoreInput(scan.projectIdentity, {
+      projectName: compactSafeText(payload.projectName || path.basename(scan.workspace), 160),
+      projectSummary: compactSafeText(payload.projectSummary || lifecycleInput.summary, 500),
+      phase: lifecycleInput.phase,
+      sourceRefs: checkpointRefs,
+      now,
+    }))
+    : null;
+  const lifecycleWrites = [
+    ...(Array.isArray(result.writes) ? result.writes : []),
+    ...(Array.isArray(projectRefresh?.writes) ? projectRefresh.writes : []),
+  ];
+  return assertPacketBytes({
+    schemaVersion: CLI_SCHEMA,
+    operation,
+    status: result.status,
+    current: false,
+    recoveryReady: false,
+    memoryMode: "app_owned_memory_core",
+    authorityVerification: trusted && result.accepted === true ? "app_owned_verified_write" : "review_required",
+    workspace: scan.workspace,
+    projectIdentity: scan.projectIdentity,
+    memoryCoreProjectId: project.projectId,
+    scanSha256: scan.scanSha256,
+    accepted: result.accepted === true,
+    receiptId: result.receipt?.receiptId || null,
+    reasonCodes: Array.isArray(result.reasonCodes) ? result.reasonCodes.slice(0, 24) : [],
+    warnings: Array.isArray(result.warnings) ? result.warnings.slice(0, 16) : [],
+    writes: lifecycleWrites.slice(0, 32).map((write) => ({
+      kind: write.kind,
+      action: write.action,
+      id: write.id || write.record?.id || null,
+      status: write.status || write.record?.status || null,
+    })),
+    safety: { rawSessionBodyRead: false, generatedKnowledgeAuthority: false, exactScanBound: true, uiRequired: false },
+  }, MAX_RESUME_PACKET_BYTES, operation);
+}
+
+function executeRefreshBinding(request = {}) {
+  const { scan, payload, sourceRefs } = exactWorkspaceWriteBinding(request, "refresh_binding");
+  const storeRoot = resolveStoreRoot(request);
+  const runtime = runtimeForRead(storeRoot);
+  if (!runtime) throw new Error("refresh_binding_app_owned_memory_core_required");
+  const previous = authorizedCheckpointWorkingState(runtime, storeRoot, scan.projectIdentity, optionalContinuitySlots());
+  const expectedCheckpointId = compactText(request.previousCheckpointId || payload.previousCheckpointId, 220);
+  if (!expectedCheckpointId || expectedCheckpointId !== previous.checkpointId) {
+    throw new Error("refresh_binding_previous_checkpoint_mismatch");
+  }
+  const acceptedEvidenceReceipt = compactText(request.acceptedEvidenceReceipt || payload.acceptedEvidenceReceipt, 220);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,219}$/.test(acceptedEvidenceReceipt) || !safeText(acceptedEvidenceReceipt)) {
+    throw new Error("refresh_binding_accepted_evidence_receipt_required");
+  }
+  const acceptedChangedPaths = compactSafeList(request.acceptedChangedPaths || payload.acceptedChangedPaths || [], 24, 500)
+    .map((value) => value.replace(/\\/g, "/").replace(/^\.\//, ""));
+  if (acceptedChangedPaths.length === 0) throw new Error("refresh_binding_accepted_changed_paths_required");
+  const matchedRelativePaths = new Set(sourceRefs.map((ref) => path.relative(scan.workspace, ref.path).replace(/\\/g, "/")));
+  if (acceptedChangedPaths.some((relativePath) => relativePath.startsWith("../") || path.isAbsolute(relativePath) || !matchedRelativePaths.has(relativePath))) {
+    throw new Error("refresh_binding_changed_path_not_source_backed");
+  }
+  const lane = compactSafeText(request.lane || payload.lane || payload.moduleId, 180);
+  if (!lane) throw new Error("refresh_binding_lane_required");
+  const evidence = {
+    ...payload,
+    decision: "accept",
+    eventType: payload.eventType || "checkpoint",
+    moduleId: payload.moduleId || lane,
+    taskId: payload.taskId || `refresh-${sha256(`${acceptedEvidenceReceipt}:${scan.scanSha256}`).slice(0, 20)}`,
+    title: payload.title || `${lane} accepted binding refresh`,
+    summary: payload.summary || `${lane} accepted evidence refreshed the exact workspace binding.`,
+    sourceRefs: payload.sourceRefs,
+  };
+  const writeResult = executeLifecycleWrite("writeback_evidence", { ...request, evidence });
+  if (writeResult.accepted !== true || !writeResult.receiptId) throw new Error("refresh_binding_writeback_not_accepted");
+  const verified = verifyMemoryCore({ ...request, workspace: scan.workspace });
+  if (verified.current !== true || verified.recoveryReady !== true || verified.scanBinding?.currentScanSha256 !== scan.scanSha256) {
+    throw new Error("refresh_binding_post_write_verify_failed");
+  }
+  if (!verified.scanBinding?.authorizedCheckpointId || verified.scanBinding.authorizedCheckpointId === previous.checkpointId) {
+    throw new Error("refresh_binding_checkpoint_not_advanced");
+  }
+  return assertPacketBytes({
+    schemaVersion: CLI_SCHEMA,
+    operation: "refresh_binding",
+    status: "verified",
+    current: true,
+    recoveryReady: true,
+    memoryMode: "app_owned_memory_core",
+    authorityVerification: "app_owned_verified",
+    workspace: scan.workspace,
+    projectIdentity: scan.projectIdentity,
+    memoryCoreProjectId: verified.memoryCoreProjectId,
+    scanSha256: scan.scanSha256,
+    previousCheckpointId: previous.checkpointId,
+    authorizedCheckpointId: verified.scanBinding.authorizedCheckpointId,
+    acceptedEvidenceReceipt,
+    acceptedChangedPaths,
+    lane,
+    receiptId: writeResult.receiptId,
+    contextGenerationId: contextGenerationId(verified),
+    continuity: verified.continuity,
+    takeover: {
+      shouldInject: true,
+      injectionMode: "replace_long_thread_context",
+      maxInjectionsPerTask: 1,
+    },
+    safety: {
+      rawSessionBodyRead: false,
+      generatedKnowledgeAuthority: false,
+      exactScanBound: true,
+      unacceptedChangeAutoSeeded: false,
+      uiRequired: false,
+    },
+    warnings: [],
+  }, MAX_RESUME_PACKET_BYTES, "refresh_binding");
 }
 
 function compatibilityMarkdown(packet, title) {
@@ -1316,7 +1913,11 @@ function execute(request = {}) {
     case "scan": return scanExactWorkspace(request);
     case "seed": return seedMemoryCore(request);
     case "retrieve": return retrieveMemoryCore(request);
+    case "prepare_takeover": return prepareTakeover(request);
     case "verify": return verifyMemoryCore(request);
+    case "observe_event": return executeLifecycleWrite("observe_event", request);
+    case "writeback_evidence": return executeLifecycleWrite("writeback_evidence", request);
+    case "refresh_binding": return executeRefreshBinding(request);
     case "write_compatibility": return writeCompatibilityPackets(request);
     default: throw new Error("unsupported_memory_runtime_cli_operation");
   }
@@ -1338,6 +1939,9 @@ module.exports = {
   MAX_RESUME_PACKET_BYTES,
   MAX_RETRIEVAL_PACKET_BYTES,
   execute,
+  executeLifecycleWrite,
+  executeRefreshBinding,
+  prepareTakeover,
   retrieveMemoryCore,
   scanExactWorkspace,
   seedMemoryCore,

@@ -14,7 +14,22 @@ function realPath(value) {
   try {
     return fs.realpathSync.native ? fs.realpathSync.native(resolved) : fs.realpathSync(resolved);
   } catch {
-    return resolved;
+    const suffix = [];
+    let existingAncestor = resolved;
+    while (!fs.existsSync(existingAncestor)) {
+      const parent = path.dirname(existingAncestor);
+      if (parent === existingAncestor) return resolved;
+      suffix.unshift(path.basename(existingAncestor));
+      existingAncestor = parent;
+    }
+    try {
+      const realAncestor = fs.realpathSync.native
+        ? fs.realpathSync.native(existingAncestor)
+        : fs.realpathSync(existingAncestor);
+      return path.join(realAncestor, ...suffix);
+    } catch {
+      return resolved;
+    }
   }
 }
 

@@ -41,11 +41,14 @@ function packagedCandidates(env = process.env) {
     }
   } else if (process.platform === "darwin") {
     for (const applications of [path.join(os.homedir(), "Applications"), "/Applications"]) {
-      const root = path.join(applications, "知匣 Local Doc Knowledge.app", "Contents");
-      candidates.push({
-        executable: path.join(root, "MacOS", "知匣 Local Doc Knowledge"),
-        asar: path.join(root, "Resources", "app.asar"),
-      });
+      for (const appName of ["知匣.app", "知匣 Local Doc Knowledge.app"]) {
+        const root = path.join(applications, appName, "Contents");
+        const executableName = appName === "知匣.app" ? "知匣" : "知匣 Local Doc Knowledge";
+        candidates.push({
+          executable: path.join(root, "MacOS", executableName),
+          asar: path.join(root, "Resources", "app.asar"),
+        });
+      }
     }
   }
   return candidates;

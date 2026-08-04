@@ -4,6 +4,7 @@ node_modules/
 # Build and packaging output
 dist/
 release/
+release-mac/
 out/
 public-staging/
 *.blockmap

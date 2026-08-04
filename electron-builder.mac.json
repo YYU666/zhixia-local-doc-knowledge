@@ -1,0 +1,28 @@
+{
+  "appId": "io.github.yyu666.zhixia-local-doc-knowledge",
+  "productName": "知匣",
+  "asar": true,
+  "directories": {
+    "output": "release-mac"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "assets/**/*",
+    "codex-skills/zhixia-local-docs/**/*",
+    "package.json"
+  ],
+  "mac": {
+    "target": [
+      {
+        "target": "dir",
+        "arch": [
+          "arm64"
+        ]
+      }
+    ],
+    "category": "public.app-category.productivity",
+    "icon": "assets/icon.png",
+    "identity": null
+  }
+}

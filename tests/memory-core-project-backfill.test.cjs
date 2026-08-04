@@ -69,6 +69,7 @@ function main() {
       sourceDoc(projectPath, 22, { filePath: path.join(projectPath, "codex-history-vault", "thread.md"), sourceType: "vault" }),
       sourceDoc(projectPath, 23, { filePath: path.join(projectPath, "docs", "failed.md"), parseStatus: "failed" }),
       sourceDoc(projectPath, 24, { filePath: path.join(projectPath, "docs", "image.png"), contentText: payloadSentinel }),
+      sourceDoc(projectPath, 25, { filePath: path.join(projectPath, "artifacts", "test-runs", "missing-asset", "project.json") }),
     ];
     originalDocs[0].summary = payloadSentinel;
     originalDocs[0].contentText = `private-contentText-${payloadSentinel}`;
@@ -96,7 +97,7 @@ function main() {
     assert.equal(seedInput.sourceRefs.length, 12, "metadata source refs must remain bounded");
     assert.equal(seedInput.now, "2026-07-14T03:00:00.000Z", "updatedAt must use the latest original file mtime, not scan time");
     assert.ok(seedInput.sourceRefs.every((ref) => ref.hash && ref.artifactType && ref.updatedAt));
-    assert.ok(seedInput.sourceRefs.every((ref) => !/\.codex-knowledge|sessions|vault|\.jsonl|\.png/i.test(ref.path)));
+    assert.ok(seedInput.sourceRefs.every((ref) => !/\.codex-knowledge|sessions|vault|artifacts|test-runs|\.jsonl|\.png/i.test(ref.path)));
     assert.doesNotMatch(JSON.stringify(seedInput), /private-contentText|private-body-payload|data:image\/png;base64|summary-body-/i);
 
     const first = runtime.seedProject(seedInput);

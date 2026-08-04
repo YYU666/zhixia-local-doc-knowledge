@@ -30,6 +30,7 @@ const rootFiles = new Set([
   "LICENSE",
   "README.md",
   "SECURITY.md",
+  "electron-builder.mac.json",
   "index.html",
   "package-lock.json",
   "package.json",
@@ -462,6 +463,9 @@ function writePublicPackageJson() {
       "dev:renderer": sourcePackage.scripts["dev:renderer"],
       "dev:electron": sourcePackage.scripts["dev:electron"],
       build: sourcePackage.scripts.build,
+      ...(sourcePackage.scripts["dist:mac"]
+        ? { "dist:mac": sourcePackage.scripts["dist:mac"] }
+        : {}),
       test: publicTestScript,
       ...(sourcePackage.scripts["test:electron-security"]
         ? { "test:electron-security": sourcePackage.scripts["test:electron-security"] }

@@ -1860,6 +1860,10 @@ function App() {
   }
 
   useEffect(() => {
+    if (!window.docKnowledge) {
+      setNotice("知匣桌面桥接尚未就绪。请从 Electron 应用窗口打开，而不是直接用浏览器访问开发端口。");
+      return;
+    }
     loadDocuments().catch((error) => setNotice(String(error)));
     loadRetrieveLogs().catch(() => {
       setAgentRetrieveLogs([]);
@@ -1888,6 +1892,7 @@ function App() {
   }, [documents, selectedId]);
 
   useEffect(() => {
+    if (typeof window.docKnowledge?.onWatchUpdate !== "function") return;
     return window.docKnowledge.onWatchUpdate((payload) => {
       if (Array.isArray(payload.documents)) setDocuments(payload.documents);
       setSettings(payload.settings);

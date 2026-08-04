@@ -144,7 +144,7 @@ function buildRendererCsp(devServerUrl = "") {
     "img-src 'self' data: file:",
     "font-src 'self' data:",
     `connect-src 'self'${devConnect}`,
-    `script-src 'self'${isDev ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self'${isDev ? " 'unsafe-eval' 'unsafe-inline'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
   ].join("; ");
 }

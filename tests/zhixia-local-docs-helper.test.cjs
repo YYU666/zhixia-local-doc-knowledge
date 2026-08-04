@@ -173,6 +173,7 @@ function createMemoryCoreSidecar(userData, rows) {
 function memoryCoreFixtureRows(workspace, otherWorkspace) {
   const projectId = "project-alpha";
   const otherProjectId = "project-beta";
+  const persistedWorkspace = process.platform === "darwin" ? workspace.toLowerCase() : workspace;
   const sourceRef = (title = "Alpha PRD") => ({
     kind: "project_artifact",
     path: path.join(workspace, "docs", "PRD.md"),
@@ -205,7 +206,7 @@ function memoryCoreFixtureRows(workspace, otherWorkspace) {
   });
   return [
     accepted("memory_project_brains", "project-alpha", {
-      canonicalPath: workspace,
+      canonicalPath: persistedWorkspace,
       aliases: ["Alpha Memory Core"],
       productSummary: "Alpha Memory Core continuity and authority upgrade.",
       phase: "helper lifecycle integration",

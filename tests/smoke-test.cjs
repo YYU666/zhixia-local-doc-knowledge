@@ -1408,9 +1408,15 @@ assert.match(skill, /memory-runtime-headless\.cjs/, "Skill must document the str
 assert.match(skill, /invoke-app-memory-runtime\.cjs[\s\S]*app_owned_memory_core[\s\S]*recoveryReady=true/, "Skill must route continuity triggers through the verified app-owned Memory Core before file fallback");
 assert.match(skill, /thread-recovery-packet\.json/, "Skill must document the bounded strict-JSON compatibility packet");
 assert.match(appOwnedInvoker, /app\.asar[\s\S]*memoryRuntimeCli\.cjs/, "repository Skill invoker must contain the packaged-source route for a future app.asar commander gate");
+assert.match(appOwnedInvoker, /\["知匣\.app", "知匣 Local Doc Knowledge\.app"\][\s\S]*executableName = appName === "知匣\.app" \? "知匣"/, "macOS Skill invoker must discover the installed formal Zhixia app name");
 assert.match(appOwnedInvoker, /ELECTRON_RUN_AS_NODE:\s*"1"/, "Skill invoker must run the packaged CLI in Node mode without opening Electron UI");
 assert.match(appOwnedCli, /function writeCompatibilityPackets[\s\S]*expectedProjectIdentitySha256[\s\S]*expectedScanSha256/, "app-owned CLI compatibility writes must require exact project and scan identity");
 assert.match(appOwnedCli, /case "write_compatibility": return writeCompatibilityPackets/, "strict-JSON CLI must expose the explicit compatibility refresh operation");
+assert.match(appOwnedCli, /case "prepare_takeover": return prepareTakeover/, "strict-JSON CLI must expose a bounded clean-takeover operation");
+assert.match(appOwnedCli, /contextGenerationId[\s\S]*maxInjectionsPerTask:\s*1/, "clean takeover packets must expose a stable one-injection generation contract");
+assert.match(appOwnedCli, /case "observe_event": return executeLifecycleWrite[\s\S]*case "writeback_evidence": return executeLifecycleWrite/, "strict-JSON CLI must expose exact-scan lifecycle write operations");
+assert.match(appOwnedCli, /function executeRefreshBinding[\s\S]*refresh_binding_previous_checkpoint_mismatch[\s\S]*refresh_binding_changed_path_not_source_backed/, "accepted binding refresh must fail closed on checkpoint or exact-source drift");
+assert.match(appOwnedCli, /case "refresh_binding": return executeRefreshBinding/, "strict-JSON CLI must expose accepted-state binding refresh without a complete reseed");
 assert.match(appOwnedCli, /compatibility-backups[\s\S]*COPYFILE_EXCL[\s\S]*MANIFEST\.json/, "compatibility refresh must back up generated packets before replacement");
 assert.match(appOwnedCli, /project_summary[\s\S]*accepted_progress[\s\S]*original_goal[\s\S]*architecture/, "thread recovery must combine Hot state with long-term corrective anchors");
 assert.match(appOwnedCli, /retrieveVerifiedSemanticGraph\(storeRoot, selectedItems[\s\S]*hook:\s*"semantic_graph_recall"/, "verified CLI retrieve must automatically expose graph recall and its receipt");

@@ -175,10 +175,12 @@ try {
       "dev:renderer": "fixture-renderer",
       "dev:electron": "fixture-electron",
       build: "fixture-build",
+      "dist:mac": "fixture-dist-mac",
       test: "node tests/prepare-public-repo-policy.test.cjs",
       "prepare:public": "node scripts/prepare-public-repo.cjs",
     },
   }, null, 2), "utf8");
+  fs.writeFileSync(path.join(fixtureCheckout, "electron-builder.mac.json"), "{}\n", "utf8");
   fs.writeFileSync(path.join(fixtureScripts, "prepare-public-repo.cjs"), publicScript, "utf8");
 
   childProcess.execFileSync(process.execPath, [path.join(fixtureScripts, "prepare-public-repo.cjs")], {
@@ -190,6 +192,8 @@ try {
   const nestedOutput = path.join(fixtureCheckout, "public-staging", "zhixia-local-doc-knowledge");
   assert.equal(fs.readFileSync(path.join(fixtureGit, "HEAD"), "utf8"), "ref: refs/heads/test\n", "public bootstrap must preserve source .git metadata");
   assert.equal(fs.existsSync(path.join(nestedOutput, "package.json")), true, "public bootstrap must create its nested owned output");
+  assert.equal(fs.existsSync(path.join(nestedOutput, "electron-builder.mac.json")), true, "public bootstrap must preserve Mac packaging config");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(nestedOutput, "package.json"), "utf8")).scripts["dist:mac"], "fixture-dist-mac", "public bootstrap must preserve the Mac packaging command");
   assert.equal(fs.existsSync(path.join(nestedOutput, "scripts", "prepare-public-repo.cjs")), true, "nested output must remain self-bootstrap capable");
 } finally {
   fs.rmSync(fixtureRoot, { recursive: true, force: true });

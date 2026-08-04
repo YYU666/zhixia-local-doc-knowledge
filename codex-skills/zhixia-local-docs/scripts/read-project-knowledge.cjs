@@ -1175,6 +1175,22 @@ function comparablePath(value) {
   } catch {
     return "";
   }
+  const suffix = [];
+  let existingAncestor = resolved;
+  while (!fs.existsSync(existingAncestor)) {
+    const parent = path.dirname(existingAncestor);
+    if (parent === existingAncestor) break;
+    suffix.unshift(path.basename(existingAncestor));
+    existingAncestor = parent;
+  }
+  try {
+    const realAncestor = fs.realpathSync.native
+      ? fs.realpathSync.native(existingAncestor)
+      : fs.realpathSync(existingAncestor);
+    resolved = path.join(realAncestor, ...suffix);
+  } catch {
+    // Preserve the resolved spelling when the filesystem cannot canonicalize it.
+  }
   const normalized = resolved.replace(/[\\/]+$/, "");
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
