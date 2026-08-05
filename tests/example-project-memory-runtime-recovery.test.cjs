@@ -272,9 +272,12 @@ function main() {
     assert.ok(secondRetrieved.semanticGraph.seed.recordsUnchanged > 0, "second retrieve must report unchanged semantic records");
     assert.ok(secondRetrieved.semanticGraph.hitCount > 0);
     assert.ok(secondRetrieved.tokenEstimate <= retrieveRequest.tokenBudget);
-    const sourceAliasRetrieved = runStrictCli({ ...retrieveRequest, taskGoal: "EXAMPLE_PROJECT 当前引擎架构" });
+    const sourceAliasRetrieved = runStrictCli({ ...retrieveRequest, taskGoal: "EXAMPLE_PROJECT_CURRENT_CHECKPOINT 当前引擎架构" });
     assert.ok(sourceAliasRetrieved.semanticGraph.hitCount > 0, "safe source-ref basename aliases must make the EXAMPLE_PROJECT checkpoint useful to a Chinese architecture query");
-    assert.ok(sourceAliasRetrieved.semanticGraph.graphPaths.some((graphPath) => JSON.stringify(graphPath).toLowerCase().includes("example_project_current_checkpoint")));
+    assert.ok(
+      sourceAliasRetrieved.semanticGraph.graphPaths.some((graphPath) => JSON.stringify(graphPath).toLowerCase().includes("example_project_current_checkpoint")),
+      JSON.stringify(sourceAliasRetrieved.semanticGraph, null, 2),
+    );
     const noHitRetrieved = runStrictCli({ ...retrieveRequest, taskGoal: "totally unrelated quasar xyzzynotfound" });
     assert.equal(noHitRetrieved.semanticGraph.hitCount, 0, "no semantic match is a valid additive no-hit");
     assert.equal(noHitRetrieved.current, retrieved.current, "a graph no-hit must not change current authority");
@@ -430,6 +433,12 @@ function main() {
     assert.ok(hashStale.warnings.includes("workspace_head_or_canonical_sources_changed_reseed_required"));
 
     const hashScan = execute({ operation: "scan", workspace, storeRoot });
+    const hashScanReceipt = {
+      kind: "workspace_scan_receipt",
+      path: `memory-runtime://workspace-scan/${hashScan.scanSha256}`,
+      hash: hashScan.scanSha256,
+      projectId: hashScan.projectIdentity.projectId,
+    };
     const previousCheckpointId = postimageWrite.writes.find((write) => write.kind === "projectCheckpoint")?.id
       || execute({ operation: "verify", workspace, storeRoot }).scanBinding.authorizedCheckpointId;
     const refreshRequest = {
@@ -454,12 +463,27 @@ function main() {
         acceptedProgress: ["Current checkpoint clarification accepted by formal QA."],
         openTasks: ["Continue the current engine recovery task."],
         nextActions: ["Prepare one clean takeover generation."],
-        sourceRefs: [hashScan.sourceRefs.find((ref) => ref.title === "docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md")],
+        sourceRefs: [
+          hashScanReceipt,
+          hashScan.sourceRefs.find((ref) => ref.title === "docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md"),
+        ],
       },
     };
     assert.throws(() => execute({ ...refreshRequest, acceptedEvidenceReceipt: "" }), /accepted_evidence_receipt_required/);
     assert.throws(() => execute({ ...refreshRequest, previousCheckpointId: "checkpoint-wrong" }), /previous_checkpoint_mismatch/);
     assert.throws(() => execute({ ...refreshRequest, acceptedChangedPaths: ["src/current-feature.js"] }), /changed_path_not_source_backed/);
+    assert.throws(() => execute({
+      ...refreshRequest,
+      evidence: { ...refreshRequest.evidence, sourceRefs: [{ kind: "workspace_scan_receipt", path: "https://example.invalid/scan", hash: hashScan.scanSha256 }, ...refreshRequest.evidence.sourceRefs.slice(1)] },
+    }), /non_file_source_ref_not_trusted/);
+    assert.throws(() => execute({
+      ...refreshRequest,
+      evidence: { ...refreshRequest.evidence, sourceRefs: [{ ...hashScanReceipt, path: `memory-runtime:\/\/workspace-scan\/${"0".repeat(64)}` }, ...refreshRequest.evidence.sourceRefs.slice(1)] },
+    }), /workspace_scan_receipt_mismatch/);
+    assert.throws(() => execute({
+      ...refreshRequest,
+      evidence: { ...refreshRequest.evidence, sourceRefs: [{ ...hashScanReceipt, path: `memory-runtime:\/\/other\/${hashScan.scanSha256}` }, ...refreshRequest.evidence.sourceRefs.slice(1)] },
+    }), /non_file_source_ref_not_trusted/);
     const hashRefresh = execute(refreshRequest);
     assert.equal(hashRefresh.status, "verified", JSON.stringify(hashRefresh));
     assert.equal(hashRefresh.current, true);
@@ -472,6 +496,9 @@ function main() {
     assert.equal(hashRefresh.takeover.shouldInject, true);
     assert.equal(hashRefresh.safety.unacceptedChangeAutoSeeded, false);
     assertSafeBounded(hashRefresh, 16 * 1024);
+    const hashRefreshVerify = execute({ operation: "verify", workspace, storeRoot });
+    assert.equal(hashRefreshVerify.scanBinding.authorizedBindingCount, 1, "the exact internal scan receipt must survive checkpoint and authority-receipt persistence");
+    assert.equal(hashRefreshVerify.scanBinding.matchedPath, hashScanReceipt.path);
     const refreshedRecall = execute({ operation: "retrieve", workspace, storeRoot, taskGoal: "current checkpoint clarification", queryType: "thread_recovery", limit: 12, tokenBudget: 3000 });
     const clarifiedItem = refreshedRecall.items.find((item) => /checkpoint clarification accepted/i.test(`${item.title} ${item.summary}`));
     assert.equal(clarifiedItem?.sourceRefs?.[0]?.title, "docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md", "refresh binding must preserve the accepted changed file as the item evidence ref");

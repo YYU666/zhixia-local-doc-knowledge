@@ -56,12 +56,22 @@ After a formally accepted file change invalidates the former scan, use `refresh_
     "decision": "accept",
     "phase": "<accepted phase>",
     "summary": "<bounded accepted result>",
-    "sourceRefs": [{ "path": "docs/current-task.md", "hash": "<exact SHA-256>" }]
+    "sourceRefs": [
+      {
+        "kind": "workspace_scan_receipt",
+        "path": "memory-runtime://workspace-scan/<new exact scan>",
+        "hash": "<new exact scan>",
+        "projectId": "<exact project id>"
+      },
+      { "path": "docs/current-task.md", "hash": "<exact SHA-256>" }
+    ]
   }
 }
 ```
 
 The operation checks the previous checkpoint, formal receipt identifier, accepted paths, exact source hashes, and new scan before carrying forward continuity. It returns a new one-use `contextGenerationId`. Missing acceptance, a stale checkpoint, or an unbacked path fails closed. `seed` remains for bootstrap and explicit repair, not ordinary accepted-state advancement.
+
+The lifecycle write gate recognizes `memory-runtime://workspace-scan/<64 lowercase hex SHA-256>` only when `kind`, URI SHA, `hash`, current exact scan, and project identity all match. It preserves that app-owned receipt as internal provenance. Other URI schemes, other `memory-runtime://` routes, malformed hashes, foreign projects, and stale scans are rejected rather than resolved as local file paths.
 
 ## Safety
 

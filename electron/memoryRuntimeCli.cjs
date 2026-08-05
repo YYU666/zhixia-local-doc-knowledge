@@ -35,6 +35,7 @@ const MAX_WORKTREE_POSTIMAGES = 128;
 const MAX_SCANNED_FILE_BYTES = 1024 * 1024;
 const MAX_RESUME_PACKET_BYTES = 16 * 1024;
 const MAX_RETRIEVAL_PACKET_BYTES = 32 * 1024;
+const TRUSTED_WORKSPACE_SCAN_URI_RE = /^memory-runtime:\/\/workspace-scan\/([a-f0-9]{64})$/;
 const MAX_TEXT_CHARS = 1200;
 const MAX_LIST_ITEMS = 24;
 const MAX_CHECKPOINT_SOURCE_REFS = 8;
@@ -1583,9 +1584,26 @@ function exactWorkspaceWriteBinding(request = {}, operation) {
   }
   const sourceRefs = [];
   for (const ref of requestedRefs.slice(0, 16)) {
-    const candidatePath = path.isAbsolute(String(ref?.path || ""))
-      ? path.resolve(String(ref.path))
-      : resolveContainedFile(scan.workspace, String(ref?.path || ""));
+    const rawPath = compactText(ref?.path || ref?.uri || "", 700);
+    const workspaceScanMatch = rawPath.match(TRUSTED_WORKSPACE_SCAN_URI_RE);
+    if (workspaceScanMatch) {
+      const kind = compactText(ref?.kind || "", 80);
+      const hash = compactText(ref?.hash || ref?.sha256 || "", 128).toLowerCase();
+      const projectId = compactText(ref?.projectId || "", 180) || scan.projectIdentity.projectId;
+      if (kind !== "workspace_scan_receipt"
+          || workspaceScanMatch[1] !== scan.scanSha256
+          || hash !== scan.scanSha256
+          || projectId !== scan.projectIdentity.projectId) {
+        throw new Error("lifecycle_workspace_scan_receipt_mismatch");
+      }
+      sourceRefs.push(coreSourceRefs(scan, scan.projectIdentity.projectId, null)[0]);
+      continue;
+    }
+    const uriLike = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(rawPath) && !/^[A-Za-z]:[\\/]/.test(rawPath);
+    if (!rawPath || uriLike) throw new Error("lifecycle_non_file_source_ref_not_trusted");
+    const candidatePath = path.isAbsolute(rawPath)
+      ? path.resolve(rawPath)
+      : resolveContainedFile(scan.workspace, rawPath);
     const canonical = canonicalFiles.get(candidatePath);
     if (!canonical || (ref.hash && ref.hash !== canonical.hash)) throw new Error("lifecycle_source_ref_not_in_current_scan");
     sourceRefs.push(canonical);
@@ -1714,7 +1732,9 @@ function executeRefreshBinding(request = {}) {
   const acceptedChangedPaths = compactSafeList(request.acceptedChangedPaths || payload.acceptedChangedPaths || [], 24, 500)
     .map((value) => value.replace(/\\/g, "/").replace(/^\.\//, ""));
   if (acceptedChangedPaths.length === 0) throw new Error("refresh_binding_accepted_changed_paths_required");
-  const matchedRelativePaths = new Set(sourceRefs.map((ref) => path.relative(scan.workspace, ref.path).replace(/\\/g, "/")));
+  const matchedRelativePaths = new Set(sourceRefs
+    .filter((ref) => ref.kind !== "workspace_scan_receipt")
+    .map((ref) => path.relative(scan.workspace, ref.path).replace(/\\/g, "/")));
   if (acceptedChangedPaths.some((relativePath) => relativePath.startsWith("../") || path.isAbsolute(relativePath) || !matchedRelativePaths.has(relativePath))) {
     throw new Error("refresh_binding_changed_path_not_source_backed");
   }

@@ -2,6 +2,12 @@
 
 This public staging copy intentionally contains a short release summary instead of private operational runlogs.
 
+## 0.9.2 - Exact Scan Receipt Protocol Fix
+
+- Lifecycle writes now recognize the exact app-owned `memory-runtime://workspace-scan/<SHA-256>` receipt instead of resolving it as a local file path.
+- The receipt is accepted only when its kind, URI SHA, hash, current scan, and project identity all match; arbitrary URI schemes and other internal routes remain fail-closed.
+- Refresh-binding regression coverage verifies that the receipt survives checkpoint and authority-receipt persistence and restores `current=true` / `recoveryReady=true`.
+
 ## 0.9.1 - Verified Long-Thread Recovery
 
 - Memory Core 0.9.1 adds an app-owned strict-JSON recovery CLI with exact project identity, baseline HEAD, canonical source hashes, signed receipts, and non-empty continuity-first retrieval.
