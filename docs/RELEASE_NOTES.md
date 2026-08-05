@@ -2,6 +2,12 @@
 
 This public staging copy intentionally contains a short release summary instead of private operational runlogs.
 
+## 0.9.3 - Codex Control Plugin
+
+- Added an app-owned MCP control surface for Codex to open or focus the installed Mac app, exact-scan a workspace, verify authority, retrieve bounded context, and prepare clean takeover packets.
+- Source-backed evidence writeback and binding refresh remain behind `execute=true`, exact project identity, exact current scan, formal acceptance receipts, and existing Runtime fail-closed validation.
+- Read-only control never reads raw sessions, credentials, images/base64, SQLite bodies, or complete logs; visible control operations can open the app while compact retrieval remains headless by default.
+
 ## 0.9.2 - Exact Scan Receipt Protocol Fix
 
 - Lifecycle writes now recognize the exact app-owned `memory-runtime://workspace-scan/<SHA-256>` receipt instead of resolving it as a local file path.

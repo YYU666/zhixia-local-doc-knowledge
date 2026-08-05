@@ -64,14 +64,24 @@ function run(command, args, raw, env) {
   });
 }
 
-function validStrictJson(stdout) {
+function parseStrictJson(stdout) {
   if (!stdout?.trim()) return false;
   try {
     const value = JSON.parse(stdout);
-    return Boolean(value && typeof value === "object" && !Array.isArray(value));
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function validStrictJson(stdout) {
+  return Boolean(parseStrictJson(stdout));
+}
+
+function runtimeFailureCode(result) {
+  const parsed = parseStrictJson(result.stdout);
+  if (result.status !== 0 && typeof parsed?.error === "string") return parsed.error.slice(0, 300);
+  return String(result.stderr || result.error?.message || "invalid_json").slice(0, 500);
 }
 
 function invoke(raw, env = process.env) {
@@ -80,14 +90,14 @@ function invoke(raw, env = process.env) {
     if (!fs.existsSync(cliPath) || !fs.statSync(cliPath).isFile()) continue;
     const result = run(process.execPath, [cliPath], raw, env);
     if (result.status === 0 && validStrictJson(result.stdout)) return result.stdout.trim();
-    diagnostics.push({ route: "source", path: cliPath, status: result.status, error: String(result.stderr || result.error?.message || "invalid_json").slice(0, 500) });
+    diagnostics.push({ route: "source", path: cliPath, status: result.status, error: runtimeFailureCode(result) });
   }
   for (const candidate of packagedCandidates(env)) {
     if (!fs.existsSync(candidate.executable) || !fs.existsSync(candidate.asar)) continue;
     const cliPath = path.join(candidate.asar, "electron", "memoryRuntimeCli.cjs");
     const result = run(candidate.executable, [cliPath], raw, { ...env, ELECTRON_RUN_AS_NODE: "1" });
     if (result.status === 0 && validStrictJson(result.stdout)) return result.stdout.trim();
-    diagnostics.push({ route: "packaged", path: candidate.asar, status: result.status, error: String(result.stderr || result.error?.message || "invalid_json").slice(0, 500) });
+    diagnostics.push({ route: "packaged", path: candidate.asar, status: result.status, error: runtimeFailureCode(result) });
   }
   const error = new Error("verified_app_owned_memory_runtime_cli_unavailable");
   error.diagnostics = diagnostics;
