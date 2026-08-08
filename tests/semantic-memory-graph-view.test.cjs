@@ -222,14 +222,14 @@ async function main() {
     };
     assert.deepEqual(afterCounts, beforeCounts, "graph view reads must not seed or mutate semantic sidecar rows");
 
-    const helperSource = mainSource.match(/function getSemanticMemoryGraphView[\s\S]*?\n}\n\nfunction getMemoryCoreDiagnostics/)?.[0] || "";
+    const helperSource = mainSource.match(/function getSemanticMemoryGraphView[\s\S]*?\r?\n}\r?\n\r?\nfunction getMemoryCoreDiagnostics/)?.[0] || "";
     const handlerSource = mainSource.match(/ipcMain\.handle\("memoryRuntime:getSemanticGraphView"[^\n]+/)?.[0] || "";
     assert.match(helperSource, /listSemanticMemoryEntities\(memoryRuntimeRoot\(\)/);
     assert.match(helperSource, /listSemanticMemoryRelations\(memoryRuntimeRoot\(\)/);
     assert.doesNotMatch(`${helperSource}\n${handlerSource}`, /\b(?:ensureDatabase|saveDatabase|upsertSemanticGraphRecords|retrieveSemanticGraphPaths|writeMemoryRuntimeTriggerReceipt)\s*\(|db\.export\s*\(|set(?:Interval|Timeout)\s*\(/, "read-only IPC route must not enter legacy saves, graph writes, migrations, receipts, or timers");
     assert.doesNotMatch(`${helperSource}\n${handlerSource}`, /memory_graph_nodes|knowledge-store\.sqlite/, "graph view must not use the legacy sql.js graph path");
 
-    const appGraphLoader = appSource.match(/async function loadProjectMemoryGraph[\s\S]*?\n  async function runMemoryRuntimeProbe/)?.[0] || "";
+    const appGraphLoader = appSource.match(/async function loadProjectMemoryGraph[\s\S]*?\r?\n  async function runMemoryRuntimeProbe/)?.[0] || "";
     assert.match(appGraphLoader, /getSemanticMemoryGraphView\(/, "graph tab must call the native read-only graph IPC");
     assert.doesNotMatch(appGraphLoader, /retrieveMemoryRuntimeContext|activateMemoryRuntimeGraph/, "opening or refreshing the graph tab must not prewarm legacy sql.js retrieval");
 
