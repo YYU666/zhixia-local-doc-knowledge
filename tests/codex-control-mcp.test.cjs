@@ -109,6 +109,10 @@ async function main() {
       scanned.result.structuredContent.sourceRefs.some((ref) => ref.title === "src/accepted-source.ts"),
       "Codex control must forward bounded explicit scan pins to the app-owned Runtime",
     );
+    assert.ok(Buffer.byteLength(JSON.stringify(scanned.result.structuredContent), "utf8") < 16 * 1024,
+      "scan_workspace must return one compact model-facing structure");
+    assert.ok(scanned.result.content[0].text.length < 800,
+      "the MCP text channel must contain only a short receipt instead of duplicating structured output");
 
     const verified = await client.request("tools/call", {
       name: "verify_project",

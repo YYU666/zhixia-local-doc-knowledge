@@ -40,6 +40,7 @@ const MAX_TEXT_CHARS = 1200;
 const MAX_LIST_ITEMS = 24;
 const MAX_CHECKPOINT_SOURCE_REFS = 8;
 const MAX_CHECKPOINT_ARTIFACTS = 4;
+const SCAN_PROFILE_SCHEMA = "zhixia.authorized_scan_profile.v1";
 const ALLOWED_SOURCE_EXTENSIONS = new Set([".md", ".json", ".txt", ".yaml", ".yml"]);
 const WORKTREE_TEXT_EXTENSIONS = new Set([
   ...ALLOWED_SOURCE_EXTENSIONS,
@@ -215,6 +216,128 @@ function collectHeadSourcePaths(workspace) {
   }
 }
 
+function eligibleTrackedSourcePath(workspace, value) {
+  const normalized = String(value || "").replace(/\\\\/g, "/").replace(/^\.\//, "").trim();
+  if (!normalized || path.isAbsolute(normalized) || normalized.startsWith("docs/") || ROOT_SOURCE_FILES.includes(normalized)) return null;
+  const segments = normalized.toLowerCase().split("/");
+  if (segments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))) return null;
+  if (SENSITIVE_WORKTREE_PATH_RE.test(normalized)) return null;
+  if (!WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase())) return null;
+  const filePath = resolveContainedFile(workspace, normalized);
+  if (!fs.existsSync(filePath)) return null;
+  const stats = fs.lstatSync(filePath);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.size > MAX_SCANNED_FILE_BYTES) return null;
+  return normalized;
+}
+
+function collectRangeSourcePaths(workspace, fromHead, toHead) {
+  if (!/^[a-f0-9]{40,64}$/.test(String(fromHead || ""))
+      || !/^[a-f0-9]{40,64}$/.test(String(toHead || ""))
+      || fromHead === toHead) return [];
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", fromHead, toHead], {
+      cwd: workspace,
+      encoding: "utf8",
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+    const output = execFileSync("git", ["diff", "--name-only", "-z", `${fromHead}..${toHead}`, "--"], {
+      cwd: workspace,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return [...new Set(output.split("\0")
+      .map((item) => eligibleTrackedSourcePath(workspace, item))
+      .filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right));
+  } catch {
+    return [];
+  }
+}
+
+function authorizedScanProfilePath(storeRoot, projectId, scanSha256) {
+  if (!/^project-[a-f0-9]{24}$/.test(String(projectId || "")) || !/^[a-f0-9]{64}$/.test(String(scanSha256 || ""))) {
+    throw new Error("authorized_scan_profile_identity_invalid");
+  }
+  return path.join(storeRoot, "scan-profiles", projectId, `${scanSha256}.json`);
+}
+
+function readAuthorizedScanProfile(storeRoot, projectId, scanSha256) {
+  try {
+    const profilePath = authorizedScanProfilePath(storeRoot, projectId, scanSha256);
+    if (!fs.existsSync(profilePath)) return null;
+    const stats = fs.lstatSync(profilePath);
+    if (!stats.isFile() || stats.isSymbolicLink() || stats.size > MAX_REQUEST_BYTES) return null;
+    const profile = JSON.parse(fs.readFileSync(profilePath, "utf8"));
+    if (profile?.schemaVersion !== SCAN_PROFILE_SCHEMA
+        || profile.projectId !== projectId
+        || profile.scanSha256 !== scanSha256
+        || !/^[a-f0-9]{40,64}$/.test(String(profile.baselineHead || ""))
+        || !Array.isArray(profile.files)
+        || profile.files.length === 0
+        || profile.files.length > MAX_SCAN_FILES) return null;
+    const files = profile.files.map((file) => ({
+      relativePath: String(file?.relativePath || "").replace(/\\\\/g, "/").replace(/^\.\//, ""),
+      sha256: String(file?.sha256 || "").toLowerCase(),
+    }));
+    if (files.some((file) => !file.relativePath || path.isAbsolute(file.relativePath)
+        || file.relativePath.startsWith("../") || !/^[a-f0-9]{64}$/.test(file.sha256))) return null;
+    return { baselineHead: profile.baselineHead, relativePaths: files.map((file) => file.relativePath) };
+  } catch {
+    return null;
+  }
+}
+
+function persistAuthorizedScanProfile(storeRoot, scan) {
+  const profilePath = authorizedScanProfilePath(storeRoot, scan.projectIdentity.projectId, scan.scanSha256);
+  const profile = {
+    schemaVersion: SCAN_PROFILE_SCHEMA,
+    projectId: scan.projectIdentity.projectId,
+    projectIdentitySha256: scan.projectIdentity.projectIdentitySha256,
+    baselineHead: scan.projectIdentity.baselineHead,
+    scanSha256: scan.scanSha256,
+    files: scan.files
+      .map((file) => ({ relativePath: file.relativePath, sha256: file.sha256 }))
+      .sort((left, right) => left.relativePath.localeCompare(right.relativePath)),
+  };
+  const serialized = `${JSON.stringify(profile)}\n`;
+  fs.mkdirSync(path.dirname(profilePath), { recursive: true, mode: 0o700 });
+  if (fs.existsSync(profilePath)) {
+    if (fs.readFileSync(profilePath, "utf8") !== serialized) throw new Error("authorized_scan_profile_conflict");
+    return { action: "noop", path: profilePath };
+  }
+  const temporaryPath = `${profilePath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, serialized, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    fs.renameSync(temporaryPath, profilePath);
+  } finally {
+    if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
+  }
+  return { action: "insert", path: profilePath };
+}
+
+function authorizedScanProfile(request, projectIdentity) {
+  try {
+    const storeRoot = resolveStoreRoot(request);
+    const runtime = runtimeForRead(storeRoot);
+    if (!runtime) return { baselineHead: null, relativePaths: [] };
+    const checkpoint = authorizedCheckpointWorkingState(runtime, storeRoot, projectIdentity, []);
+    const refs = checkpoint.authoritySourceRefs || [];
+    const scanBinding = refs.find((ref) => ref?.kind === "workspace_scan_receipt") || null;
+    const baselineHead = String(scanBinding?.title || "").match(/\bat ([a-f0-9]{40,64})$/i)?.[1]?.toLowerCase() || null;
+    const persisted = scanBinding?.hash
+      ? readAuthorizedScanProfile(storeRoot, projectIdentity.projectId, String(scanBinding.hash).toLowerCase())
+      : null;
+    if (persisted) return persisted;
+    const relativePaths = refs
+      .filter((ref) => ref?.kind === "canonical_project_file" && typeof ref.title === "string")
+      .map((ref) => String(ref.title).replace(/\\\\/g, "/").replace(/^\.\//, ""))
+      .filter((value) => value && !path.isAbsolute(value) && !value.startsWith("../"));
+    return { baselineHead, relativePaths: [...new Set(relativePaths)] };
+  } catch {
+    return { baselineHead: null, relativePaths: [] };
+  }
+}
+
 function workingTreeSnapshot(workspace) {
   const changedPaths = [...collectChangedSourcePaths(workspace)].sort();
   const eligiblePaths = changedPaths.filter((relativePath) => {
@@ -267,6 +390,20 @@ function collectDocCandidates(workspace, request = {}) {
     candidates.add(normalized);
     requestedCandidates.push(normalized);
   }
+  const automaticCandidates = [];
+  for (const value of Array.isArray(request.automaticRelativePaths) ? request.automaticRelativePaths.slice(0, MAX_SCAN_FILES) : []) {
+    const normalized = String(value || "").replace(/\\\\/g, "/").replace(/^\.\//, "");
+    if (!normalized || normalized.startsWith(".codex-knowledge/") || path.isAbsolute(normalized)) continue;
+    candidates.add(normalized);
+    automaticCandidates.push(normalized);
+  }
+  const authorizedProfileCandidates = [];
+  for (const value of Array.isArray(request.authorizedProfilePaths) ? request.authorizedProfilePaths.slice(0, MAX_SCAN_FILES) : []) {
+    const normalized = String(value || "").replace(/\\\\/g, "/").replace(/^\.\//, "");
+    if (!normalized || normalized.startsWith(".codex-knowledge/") || path.isAbsolute(normalized)) continue;
+    candidates.add(normalized);
+    authorizedProfileCandidates.push(normalized);
+  }
   const headSourcePaths = collectHeadSourcePaths(workspace);
   for (const relativePath of headSourcePaths) candidates.add(relativePath);
   const docsRoot = path.join(workspace, "docs");
@@ -287,7 +424,14 @@ function collectDocCandidates(workspace, request = {}) {
       candidates.add(path.relative(workspace, fullPath).replace(/\\/g, "/"));
     }
   }
-  const preferred = [...new Set([...PRIORITY_SOURCE_FILES, ...ROOT_SOURCE_FILES, ...requestedCandidates, ...headSourcePaths])];
+  const preferred = [...new Set([
+    ...PRIORITY_SOURCE_FILES,
+    ...ROOT_SOURCE_FILES,
+    ...requestedCandidates,
+    ...automaticCandidates,
+    ...headSourcePaths,
+    ...authorizedProfileCandidates,
+  ])];
   const preferredSet = new Set(preferred);
   const changedSourcePaths = collectChangedSourcePaths(workspace);
   const dynamicPriority = (relativePath) => {
@@ -353,7 +497,15 @@ function sourceArtifactType(relativePath) {
 
 function scanExactWorkspace(request = {}) {
   const { workspace, projectIdentity } = resolveWorkspace(request);
-  const { candidates, directoriesRead } = collectDocCandidates(workspace, request);
+  const authorizedProfile = authorizedScanProfile(request, projectIdentity);
+  const rangeSourcePaths = collectRangeSourcePaths(workspace, authorizedProfile.baselineHead, projectIdentity.baselineHead);
+  const profileCurrent = authorizedProfile.baselineHead === projectIdentity.baselineHead;
+  const scanRequest = {
+    ...request,
+    automaticRelativePaths: rangeSourcePaths,
+    authorizedProfilePaths: profileCurrent ? authorizedProfile.relativePaths : [],
+  };
+  const { candidates, directoriesRead } = collectDocCandidates(workspace, scanRequest);
   const workingTree = workingTreeSnapshot(workspace);
   const files = [];
   const skipped = [];
@@ -389,7 +541,9 @@ function scanExactWorkspace(request = {}) {
     projectIdentitySha256: projectIdentity.projectIdentitySha256,
     canonicalRoot: projectIdentity.canonicalRoot,
     baselineHead: projectIdentity.baselineHead,
-    files: files.map(({ relativePath, sha256: fileSha256 }) => ({ relativePath, sha256: fileSha256 })),
+    files: files
+      .map(({ relativePath, sha256: fileSha256 }) => ({ relativePath, sha256: fileSha256 }))
+      .sort((left, right) => left.relativePath.localeCompare(right.relativePath)),
     workingTreeFingerprint: workingTree.fingerprint,
   };
   return {
@@ -417,6 +571,8 @@ function scanExactWorkspace(request = {}) {
       textPostimagesHashed: workingTree.textPostimagesHashed,
       excludedWorktreeBodies: workingTree.excludedBodyCount,
       rawSessionBodyRead: false,
+      authorizedProfilePathCount: profileCurrent ? authorizedProfile.relativePaths.length : 0,
+      acceptedRangePathCount: rangeSourcePaths.length,
     },
     warnings: [
       "scan_is_not_authority_and_cannot_claim_recovery_readiness",
@@ -439,31 +595,7 @@ function coreSourceRefs(scan, coreProjectId, moduleId) {
     projectId: coreProjectId,
     moduleId,
   };
-  const files = scan.files.slice(0, 15);
-  const selected = [];
-  const selectedPaths = new Set();
-  const select = (pattern, limit) => {
-    let added = 0;
-    for (const file of files) {
-      if (selectedPaths.has(file.relativePath) || !pattern.test(file.relativePath)) continue;
-      selected.push(file);
-      selectedPaths.add(file.relativePath);
-      added += 1;
-      if (added >= limit) break;
-    }
-  };
-  select(/(?:^|\/)PRD(?:[_./-]|$)/i, 1);
-  select(/PROGRAM[_-]?GOAL/i, 1);
-  select(/TASK[_-]?GRAPH/i, 1);
-  select(TASK_CARD_PATH_RE, 1);
-  select(/ACCEPTANCE|QA[_-]?REPORT|FORMAL[_-]?QA|(?:^|[_/-])REVISE(?:[_./-]|$)/i, 2);
-  select(/HANDOFF/i, 1);
-  for (const file of files) {
-    if (selectedPaths.has(file.relativePath)) continue;
-    selected.push(file);
-    selectedPaths.add(file.relativePath);
-  }
-  return [scanBinding, ...selected.slice(0, 15).map((file) => ({
+  return [scanBinding, ...scan.files.slice(0, MAX_SCAN_FILES).map((file) => ({
     kind: "canonical_project_file",
     path: `git://${scan.projectIdentity.canonicalRepoId}/${scan.projectIdentity.baselineHead || "working-tree"}/${encodeURI(file.relativePath)}`,
     title: file.relativePath,
@@ -526,7 +658,7 @@ function normalizeContinuitySeed(request, scan, coreProjectId) {
       || acceptedProgress.length === 0 || openTasks.length === 0 || nextActions.length === 0 || threadLineage.length === 0) {
     throw new Error("complete_continuity_seed_fields_required");
   }
-  const refs = coreSourceRefs(scan, coreProjectId, moduleId);
+  const refs = coreSourceRefs(scan, coreProjectId, moduleId).slice(0, 16);
   if (refs.length === 0) throw new Error("source_backed_seed_required");
   return {
     projectName,
@@ -908,6 +1040,7 @@ function seedMemoryCore(request = {}) {
     sourceRefs: checkpointRefs,
     observedAt: now,
   }), { now });
+  const scanProfile = checkpoint.accepted === true ? persistAuthorizedScanProfile(storeRoot, scan) : null;
   const verified = verifyMemoryCore({ ...request, workspace: scan.workspace, optionalSlots: optionalContinuitySlots(seed) });
   return assertPacketBytes({
     schemaVersion: CLI_SCHEMA,
@@ -931,6 +1064,7 @@ function seedMemoryCore(request = {}) {
       warnings: Array.isArray(checkpoint.warnings) ? checkpoint.warnings.slice(0, 16) : [],
       writes: Array.isArray(checkpoint.writes) ? checkpoint.writes.slice(0, 24) : [],
     },
+    scanProfile: scanProfile ? { action: scanProfile.action, persisted: true } : { action: "skip", persisted: false },
     continuity: verified.continuity,
     warnings: [
       ...(checkpoint.accepted ? [] : ["app_owned_checkpoint_not_accepted"]),
@@ -1617,7 +1751,7 @@ function exactWorkspaceWriteBinding(request = {}, operation) {
     });
   }
   const sourceRefs = [];
-  for (const ref of requestedRefs.slice(0, 16)) {
+  for (const ref of requestedRefs.slice(0, MAX_SCAN_FILES)) {
     const rawPath = compactText(ref?.path || ref?.uri || "", 700);
     const workspaceScanMatch = rawPath.match(TRUSTED_WORKSPACE_SCAN_URI_RE);
     if (workspaceScanMatch) {
@@ -1657,8 +1791,11 @@ function executeLifecycleWrite(operation, request = {}) {
   const matchedPostimages = matchedScanRefs
     .filter((ref) => ref.kind === "workspace_text_postimage")
     .map((ref) => ({ ...ref, projectId: project.projectId, moduleId }));
-  const sourceRefs = [...coreSourceRefs(scan, project.projectId, moduleId)
-    .filter((ref) => ref.kind === "workspace_scan_receipt" || matchedTitles.has(ref.title)), ...matchedPostimages]
+  const completeScanRefs = coreSourceRefs(scan, project.projectId, moduleId);
+  const scanBindingRef = completeScanRefs.find((ref) => ref.kind === "workspace_scan_receipt");
+  const matchedCanonicalRefs = completeScanRefs.filter((ref) => ref.kind !== "workspace_scan_receipt" && matchedTitles.has(ref.title));
+  const sourceRefs = [scanBindingRef, ...matchedCanonicalRefs, ...matchedPostimages]
+    .filter(Boolean)
     .filter((ref, index, values) => values.findIndex((candidate) => candidate.path === ref.path && candidate.hash === ref.hash) === index);
   const previous = authorizedCheckpointWorkingState(runtime, storeRoot, scan.projectIdentity, optionalContinuitySlots());
   const previousStateRefs = Object.values(previous.workingState)
@@ -1764,6 +1901,10 @@ function executeRefreshBinding(request = {}) {
       ...acceptedChangedPaths.filter((relativePath) => !previewPaths.has(relativePath)),
     ])].slice(0, MAX_SCAN_FILES),
   };
+  const targetScan = scanExactWorkspace(scanRequest);
+  if (request.expectedScanSha256 === previewScan.scanSha256 && targetScan.scanSha256 !== previewScan.scanSha256) {
+    throw new Error(`refresh_binding_target_scan_required:${targetScan.scanSha256}`);
+  }
   const { scan, payload, sourceRefs } = exactWorkspaceWriteBinding(scanRequest, "refresh_binding");
   const storeRoot = resolveStoreRoot(request);
   const runtime = runtimeForRead(storeRoot);
@@ -1797,12 +1938,16 @@ function executeRefreshBinding(request = {}) {
     sourceRefs: payload.sourceRefs,
   };
   const writeResult = executeLifecycleWrite("writeback_evidence", { ...scanRequest, evidence });
-  if (writeResult.accepted !== true || !writeResult.receiptId) throw new Error("refresh_binding_writeback_not_accepted");
+  if (writeResult.accepted !== true || !writeResult.receiptId) {
+    const reasonCode = writeResult.reasonCodes?.[0] || "unknown";
+    throw new Error(`refresh_binding_writeback_not_accepted:${reasonCode}`);
+  }
   const checkpointWrite = writeResult.writes.find((write) => write.kind === "projectCheckpoint") || null;
   if (!checkpointWrite || !["insert", "noop"].includes(checkpointWrite.action)) {
     const reasonCode = checkpointWrite?.reasonCodes?.[0] || checkpointWrite?.action || "missing";
     throw new Error(`refresh_binding_checkpoint_write_not_accepted:${reasonCode}`);
   }
+  const scanProfile = persistAuthorizedScanProfile(storeRoot, scan);
   const verified = verifyMemoryCore({ ...scanRequest, workspace: scan.workspace });
   if (verified.current !== true || verified.recoveryReady !== true || verified.scanBinding?.currentScanSha256 !== scan.scanSha256) {
     throw new Error("refresh_binding_post_write_verify_failed");
@@ -1828,6 +1973,7 @@ function executeRefreshBinding(request = {}) {
     acceptedChangedPaths,
     lane,
     receiptId: writeResult.receiptId,
+    scanProfile: { action: scanProfile.action, persisted: true },
     contextGenerationId: contextGenerationId(verified),
     continuity: verified.continuity,
     takeover: {

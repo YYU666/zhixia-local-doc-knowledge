@@ -436,7 +436,7 @@ function main() {
     assert.equal(hashStale.scanBinding.matched, false);
     assert.ok(hashStale.warnings.includes("workspace_head_or_canonical_sources_changed_reseed_required"));
 
-    const additionalAcceptedPaths = Array.from({ length: 10 }, (_, index) => `docs/A-${String(index).padStart(3, "0")}.md`);
+    const additionalAcceptedPaths = Array.from({ length: 20 }, (_, index) => `docs/A-${String(index).padStart(3, "0")}.md`);
     for (const relativePath of additionalAcceptedPaths) {
       fs.appendFileSync(path.join(workspace, relativePath), "Accepted refresh evidence.\n", "utf8");
     }
@@ -528,6 +528,9 @@ function main() {
     assert.equal(advancedSeed.current, true);
     assert.equal(advancedSeed.recoveryReady, true);
     assertSafeBounded(advancedSeed, 16 * 1024);
+    const preSaturationCheckpointId = advancedSeed.checkpoint.writes
+      .find((write) => write.kind === "projectCheckpoint")?.id
+      || execute({ operation: "verify", workspace, storeRoot }).scanBinding.authorizedCheckpointId;
     const advancedTakeover = runStrictCli({ ...retrieveRequest, operation: "prepare_takeover" });
     assert.equal(advancedTakeover.takeover.shouldInject, true);
     assert.notEqual(advancedTakeover.contextGenerationId, prepared.contextGenerationId, "advanced HEAD and scan binding must create a new takeover generation");
@@ -550,8 +553,10 @@ function main() {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, `export const acceptedHeadSource${index} = true;\n`, "utf8");
     }
+    const acceptedSourceHead = commitAll(workspace, "implement bounded accepted source lane");
     fs.writeFileSync(path.join(workspace, "docs", "EXAMPLE_PROJECT_ACCEPTED_HEAD_SOURCE_ACCEPTANCE.md"), "# Accepted HEAD source QA\n\nDecision: accept\n", "utf8");
-    commitAll(workspace, "accept bounded HEAD source lane");
+    const acceptedDocumentationHead = commitAll(workspace, "accept bounded HEAD source lane");
+    assert.notEqual(acceptedSourceHead, acceptedDocumentationHead, "the regression must model product code and formal acceptance as separate commits");
     const saturatedHeadScan = execute({ operation: "scan", workspace, storeRoot });
     assert.equal(saturatedHeadScan.files.length, 48, "the regression must exercise the bounded scan capacity");
     for (const relativePath of acceptedHeadSources) {
@@ -563,6 +568,54 @@ function main() {
     assert.ok(saturatedHeadScan.sourceRefs.some((ref) => ref.title === "docs/EXAMPLE_PROJECT_PROGRAM_GOAL.md"));
     assert.ok(saturatedHeadScan.sourceRefs.some((ref) => ref.title === "README.md"));
     assert.ok(saturatedHeadScan.sourceRefs.some((ref) => ref.title === "docs/EXAMPLE_PROJECT_ACCEPTED_HEAD_SOURCE_ACCEPTANCE.md"));
+
+    const saturatedAcceptedPaths = [
+      ...acceptedHeadSources,
+      "docs/EXAMPLE_PROJECT_ACCEPTED_HEAD_SOURCE_ACCEPTANCE.md",
+    ];
+    const explicitlyPinnedScan = execute({
+      operation: "scan",
+      workspace,
+      storeRoot,
+      relativePaths: saturatedAcceptedPaths,
+    });
+    assert.equal(
+      explicitlyPinnedScan.scanSha256,
+      saturatedHeadScan.scanSha256,
+      "default scan and accepted-path scan must resolve to one deterministic target SHA",
+    );
+    const saturatedRefresh = execute({
+      operation: "refresh_binding",
+      workspace,
+      storeRoot,
+      execute: true,
+      expectedProjectIdentitySha256: saturatedHeadScan.projectIdentity.projectIdentitySha256,
+      expectedScanSha256: saturatedHeadScan.scanSha256,
+      previousCheckpointId: preSaturationCheckpointId,
+      acceptedEvidenceReceipt: "qa-accept-two-commit-source-lane-001",
+      acceptedChangedPaths: saturatedAcceptedPaths,
+      lane: "example_project-two-commit-source-lane",
+      evidence: {
+        decision: "accept",
+        eventType: "checkpoint",
+        moduleId: "example_project-two-commit-source-lane",
+        title: "Two-commit source lane accepted",
+        summary: "Product source and its later formal acceptance remain bound to one deterministic scan.",
+        phase: "accepted two-commit source lane",
+        acceptedProgress: ["The two-commit accepted source lane is source-backed."],
+        sourceRefs: saturatedAcceptedPaths.map((relativePath) => {
+          const ref = saturatedHeadScan.sourceRefs.find((candidate) => candidate.title === relativePath);
+          assert.ok(ref, `accepted source ref must be present before refresh: ${relativePath}`);
+          return { path: relativePath, hash: ref.hash };
+        }),
+      },
+    });
+    assert.equal(saturatedRefresh.current, true, JSON.stringify(saturatedRefresh));
+    assert.equal(saturatedRefresh.scanSha256, saturatedHeadScan.scanSha256);
+    assert.equal(saturatedRefresh.scanProfile.persisted, true);
+    const ordinaryPostRefreshVerify = execute({ operation: "verify", workspace, storeRoot });
+    assert.equal(ordinaryPostRefreshVerify.current, true, JSON.stringify(ordinaryPostRefreshVerify));
+    assert.equal(ordinaryPostRefreshVerify.scanBinding.currentScanSha256, saturatedHeadScan.scanSha256);
 
     console.log("EXAMPLE_PROJECT app-owned Memory Runtime recovery integration tests passed.");
   } finally {

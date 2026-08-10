@@ -8,14 +8,14 @@ const { spawnSync } = require("node:child_process");
 const { invoke } = require("./invoke-app-memory-runtime.cjs");
 
 const SERVER_NAME = "zhixia-control";
-const SERVER_VERSION = "1.0.0";
+const SERVER_VERSION = "1.1.0";
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 const MAX_MESSAGE_BYTES = 128 * 1024;
 
 const sourceRefsSchema = {
   type: "array",
   minItems: 1,
-  maxItems: 16,
+  maxItems: 48,
   items: {
     type: "object",
     properties: {
@@ -286,6 +286,58 @@ function invokeRuntime(request) {
   return JSON.parse(invoke(JSON.stringify(request), process.env));
 }
 
+function compactScanOutput(output) {
+  const sourceRefs = (output.sourceRefs || []).slice(0, 48).map((ref) => ({
+    kind: ref.kind,
+    path: ref.title,
+    title: ref.title,
+    hash: ref.hash,
+    projectId: ref.projectId,
+  }));
+  const workingEntries = (output.workingTree?.entries || []).slice(0, 24).map((entry) => ({
+    relativePath: entry.relativePath,
+    state: entry.state,
+    sha256: entry.sha256,
+  }));
+  return {
+    schemaVersion: output.schemaVersion,
+    operation: output.operation,
+    status: output.status,
+    current: output.current,
+    recoveryReady: output.recoveryReady,
+    memoryMode: output.memoryMode,
+    authorityVerification: output.authorityVerification,
+    workspace: output.workspace,
+    projectIdentity: output.projectIdentity,
+    scanSha256: output.scanSha256,
+    sourceRefs,
+    workingTree: {
+      changedPathCount: Number(output.workingTree?.changedPathCount || 0),
+      fingerprint: output.workingTree?.fingerprint || null,
+      entries: workingEntries,
+      truncated: Boolean(output.workingTree?.truncated || (output.workingTree?.entries || []).length > workingEntries.length),
+    },
+    generatedKnowledgeCount: (output.generatedKnowledge || []).length,
+    skipped: (output.skipped || []).slice(0, 12),
+    performance: output.performance,
+    warnings: output.warnings,
+  };
+}
+
+function compactContentReceipt(output) {
+  return JSON.stringify({
+    operation: output.operation || null,
+    status: output.status || null,
+    current: output.current === true,
+    recoveryReady: output.recoveryReady === true,
+    memoryMode: output.memoryMode || null,
+    authorityVerification: output.authorityVerification || null,
+    scanSha256: output.scanSha256 || output.scanBinding?.currentScanSha256 || null,
+    contextGenerationId: output.contextGenerationId || null,
+    returnedCount: output.returnedCount ?? null,
+  });
+}
+
 function maybeOpenApp(args, defaultValue) {
   if (args.showApp === false || (!defaultValue && args.showApp !== true)) return null;
   return openApp(args.workspace);
@@ -313,7 +365,10 @@ function callTool(name, args) {
   const workspace = resolveWorkspace(args.workspace);
   if (name === "scan_workspace") {
     const app = maybeOpenApp({ ...args, workspace }, true);
-    return { ...invokeRuntime({ operation: "scan", workspace, relativePaths: args.relativePaths }), app };
+    return {
+      ...compactScanOutput(invokeRuntime({ operation: "scan", workspace, relativePaths: args.relativePaths })),
+      app,
+    };
   }
   if (name === "verify_project") {
     const app = maybeOpenApp({ ...args, workspace }, true);
@@ -429,7 +484,7 @@ function handleRequest(message) {
     try {
       const output = callTool(name, args);
       result(message.id, {
-        content: [{ type: "text", text: JSON.stringify(output) }],
+        content: [{ type: "text", text: compactContentReceipt(output) }],
         structuredContent: output,
         isError: false,
       });

@@ -2,6 +2,13 @@
 
 This public staging copy intentionally contains a short release summary instead of private operational runlogs.
 
+## 0.9.8 - Deterministic Accepted-Range Binding
+
+- Exact scans now include bounded text sources changed between the previous authorized HEAD and the current HEAD, covering the common product-commit then acceptance-commit workflow without project-specific paths.
+- Successful seed and refresh operations persist an owner-only bounded scan profile so later verify and takeover calls reproduce the authorized scan without carrying path lists in long Codex tasks.
+- Binding refresh now requires the caller's scan and its accepted-path target to resolve to one SHA; it never silently authorizes a different scan.
+- Source-backed refresh accepts the full documented 24-path bound, and the Codex control scan response no longer duplicates a roughly 45-KiB manifest into both MCP content channels.
+
 ## 0.9.7 - Accepted Source Scan Coverage
 
 - Exact scans now prioritize bounded text sources changed by the current Git HEAD, so a clean accepted commit remains source-backed even when canonical documentation fills the 48-file budget.
