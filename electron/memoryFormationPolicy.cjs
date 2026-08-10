@@ -102,6 +102,10 @@ const MAX_ARTIFACT_REFS = 16;
 const MAX_THREAD_REFS = 12;
 const MAX_CANDIDATE_SOURCE_REFS = 8;
 const MAX_RELATION_SOURCE_REFS = 4;
+const MAX_CHECKPOINT_PROGRESS_ITEMS = 8;
+const MAX_CHECKPOINT_TASK_ITEMS = 4;
+const MAX_CHECKPOINT_BLOCKER_ITEMS = 4;
+const MAX_CHECKPOINT_NEXT_ACTION_ITEMS = 4;
 const FORMATION_SCAN_LIMITS = Object.freeze({
   maxDepth: 8,
   maxNodes: 4096,
@@ -1172,6 +1176,12 @@ function buildRelationCandidates(event, episode) {
 }
 
 function childRecord(title, event, disposition, idPrefix) {
+  const evidenceRef = event.sourceRefs.find((ref) => ref?.kind !== "workspace_scan_receipt") || event.sourceRefs[0] || null;
+  const sourceRefs = [evidenceRef].filter(Boolean).map((ref) => ({
+    kind: ref.kind || "checkpoint_evidence",
+    ...(ref.hash ? { hash: ref.hash } : ref.path ? { path: ref.path } : ref.uri ? { uri: ref.uri } : {}),
+    ...(ref.title ? { title: ref.title } : {}),
+  }));
   return {
     id: deterministicId(idPrefix, { projectId: event.projectId, moduleId: event.moduleId, title: normalizedKey(title) }, 16),
     title,
@@ -1179,19 +1189,32 @@ function childRecord(title, event, disposition, idPrefix) {
     moduleId: event.moduleId,
     authorityStatus: disposition.status,
     status: "open",
-    sourceRefs: event.sourceRefs.slice(0, MAX_CANDIDATE_SOURCE_REFS),
+    sourceRefs,
     observedAt: event.observedAt,
   };
 }
 
 function buildCheckpointCandidate(event, episode, disposition) {
   if (!CHECKPOINT_EVENT_TYPES.has(event.eventType)) return null;
+  const prioritizedProgressValues = disposition.status === "accepted"
+    && ["accepted", "test_pass", "build", "install", "release"].includes(event.eventType)
+    ? uniqueStrings([event.summary, event.result, event.after], MAX_CHECKPOINT_PROGRESS_ITEMS, 360)
+    : [];
   const progressValues = uniqueStrings([
     event.acceptedProgress,
     disposition.status === "accepted" && ["accepted", "test_pass", "build", "install", "release"].includes(event.eventType)
       ? [event.result, event.after, event.summary]
       : [],
   ], MAX_TEXT_ITEMS, 360);
+  const checkpointProgressValues = [];
+  const checkpointProgressKeys = new Set();
+  for (const value of [...prioritizedProgressValues, ...progressValues]) {
+    const key = normalizedKey(value);
+    if (!key || checkpointProgressKeys.has(key)) continue;
+    checkpointProgressKeys.add(key);
+    checkpointProgressValues.push(value);
+    if (checkpointProgressValues.length >= MAX_CHECKPOINT_PROGRESS_ITEMS) break;
+  }
   const blockerValues = uniqueStrings([
     event.blockers,
     ["block", "test_failure"].includes(event.eventType) ? event.failures.map((failure) => failure.summary || failure.code) : [],
@@ -1201,10 +1224,14 @@ function buildCheckpointCandidate(event, episode, disposition) {
     projectId: event.projectId,
     phase: event.phase,
     moduleIds: event.moduleIds,
-    acceptedProgress: progressValues.map((title) => childRecord(title, event, disposition, "progress")),
-    taskStates: event.openTasks.map((title) => childRecord(title, event, disposition, "task")),
-    blockers: blockerValues.map((title) => childRecord(title, event, disposition, "blocker")),
-    nextActions: event.nextActions.map((title) => childRecord(title, event, disposition, "action")),
+    acceptedProgress: checkpointProgressValues
+      .map((title) => childRecord(title, event, disposition, "progress")),
+    taskStates: event.openTasks.slice(0, MAX_CHECKPOINT_TASK_ITEMS)
+      .map((title) => childRecord(title, event, disposition, "task")),
+    blockers: blockerValues.slice(0, MAX_CHECKPOINT_BLOCKER_ITEMS)
+      .map((title) => childRecord(title, event, disposition, "blocker")),
+    nextActions: event.nextActions.slice(0, MAX_CHECKPOINT_NEXT_ACTION_ITEMS)
+      .map((title) => childRecord(title, event, disposition, "action")),
     threadLineage: event.threads.map((thread) => thread.threadId),
     canonicalDocRefs: event.artifacts.map((artifact) => artifact.sourceRef),
     authorityStatus: disposition.status,

@@ -32,6 +32,12 @@ const sourceRefsSchema = {
 };
 
 const workspaceProperty = { type: "string", minLength: 1, maxLength: 1200 };
+const relativePathsProperty = {
+  type: "array",
+  maxItems: 48,
+  items: { type: "string", minLength: 1, maxLength: 700 },
+  description: "Bounded workspace-relative source paths that must be pinned into this exact scan.",
+};
 const showAppProperty = {
   type: "boolean",
   description: "Open or focus the Zhixia Mac app before the operation. Defaults to true for visible control operations.",
@@ -42,6 +48,7 @@ const retrievalProperties = {
   queryType: { type: "string", maxLength: 80 },
   limit: { type: "integer", minimum: 1, maximum: 20 },
   tokenBudget: { type: "integer", minimum: 200, maximum: 4000 },
+  relativePaths: relativePathsProperty,
   showApp: showAppProperty,
 };
 const lifecycleProperties = {
@@ -49,6 +56,7 @@ const lifecycleProperties = {
   execute: { type: "boolean", const: true },
   expectedProjectIdentitySha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
   expectedScanSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+  relativePaths: relativePathsProperty,
   showApp: showAppProperty,
 };
 const continuityListProperty = {
@@ -73,7 +81,7 @@ const tools = [
     description: "Open Zhixia and perform a bounded, read-only exact scan of a local workspace. A scan is evidence, not authority.",
     inputSchema: {
       type: "object",
-      properties: { workspace: workspaceProperty, showApp: showAppProperty },
+      properties: { workspace: workspaceProperty, relativePaths: relativePathsProperty, showApp: showAppProperty },
       required: ["workspace"],
       additionalProperties: false,
     },
@@ -87,6 +95,7 @@ const tools = [
       properties: {
         workspace: workspaceProperty,
         taskGoal: { type: "string", maxLength: 600 },
+        relativePaths: relativePathsProperty,
         showApp: showAppProperty,
       },
       required: ["workspace"],
@@ -292,6 +301,7 @@ function lifecycleEvidence(args) {
     acceptedEvidenceReceipt: _receipt,
     acceptedChangedPaths: _paths,
     lane: _lane,
+    relativePaths: _relativePaths,
     showApp: _showApp,
     ...evidence
   } = args;
@@ -303,11 +313,19 @@ function callTool(name, args) {
   const workspace = resolveWorkspace(args.workspace);
   if (name === "scan_workspace") {
     const app = maybeOpenApp({ ...args, workspace }, true);
-    return { ...invokeRuntime({ operation: "scan", workspace }), app };
+    return { ...invokeRuntime({ operation: "scan", workspace, relativePaths: args.relativePaths }), app };
   }
   if (name === "verify_project") {
     const app = maybeOpenApp({ ...args, workspace }, true);
-    return { ...invokeRuntime({ operation: "verify", workspace, taskGoal: args.taskGoal || "Verify current Zhixia project memory" }), app };
+    return {
+      ...invokeRuntime({
+        operation: "verify",
+        workspace,
+        taskGoal: args.taskGoal || "Verify current Zhixia project memory",
+        relativePaths: args.relativePaths,
+      }),
+      app,
+    };
   }
   if (name === "retrieve_context" || name === "prepare_takeover") {
     const operation = name === "retrieve_context" ? "retrieve" : "prepare_takeover";
@@ -320,6 +338,7 @@ function callTool(name, args) {
         queryType: args.queryType || (operation === "prepare_takeover" ? "thread_recovery" : "task_context"),
         limit: args.limit,
         tokenBudget: args.tokenBudget,
+        relativePaths: args.relativePaths,
       }),
       ...(app ? { app } : {}),
     };
@@ -333,6 +352,7 @@ function callTool(name, args) {
         execute: args.execute,
         expectedProjectIdentitySha256: args.expectedProjectIdentitySha256,
         expectedScanSha256: args.expectedScanSha256,
+        relativePaths: args.relativePaths,
         evidence: lifecycleEvidence(args),
       }),
       app,
@@ -351,6 +371,7 @@ function callTool(name, args) {
         acceptedEvidenceReceipt: args.acceptedEvidenceReceipt,
         acceptedChangedPaths: args.acceptedChangedPaths,
         lane: args.lane,
+        relativePaths: args.relativePaths || args.acceptedChangedPaths,
         evidence: lifecycleEvidence(args),
       }),
       app,

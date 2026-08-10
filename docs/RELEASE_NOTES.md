@@ -2,6 +2,29 @@
 
 This public staging copy intentionally contains a short release summary instead of private operational runlogs.
 
+## 0.9.7 - Accepted Source Scan Coverage
+
+- Exact scans now prioritize bounded text sources changed by the current Git HEAD, so a clean accepted commit remains source-backed even when canonical documentation fills the 48-file budget.
+- Codex control tools now expose bounded `relativePaths` pinning across scan, verify, retrieval, takeover, writeback, and binding refresh operations.
+- `refresh_binding` automatically pins its accepted changed paths into the exact scan while preserving the existing identity, receipt, checkpoint projection, and fail-closed gates.
+
+## 0.9.6 - Bounded Checkpoint Projection
+
+- High-cardinality checkpoints now bound accepted progress, tasks, blockers, and next actions before persistence while retaining one independent source-backed evidence pointer per current child.
+- Explicit newly accepted progress takes precedence over carried checkpoint progress, preventing a valid refresh result from being truncated by older state.
+- Optional checkpoint fields are normalized before strict persistence inspection; the existing 1,024-node, 32,000-signal-character, 64-KiB, secret, raw-session, and base64 safety limits remain unchanged.
+
+## 0.9.5 - Refresh Checkpoint Diagnostics
+
+- Refresh failures now retain bounded checkpoint write action/status/reason codes and stop before post-write verification when the checkpoint itself was not inserted or idempotently reused.
+- Diagnostic output remains code-only and does not expose private Memory Core bodies, source text, credentials, or raw sessions.
+
+## 0.9.4 - Exact Scan Refresh Binding
+
+- Refresh checkpoints now retain the current exact workspace-scan receipt before bounded accepted-path evidence and discard stale carried scan receipts.
+- A regression covers more accepted changed paths than the checkpoint source-ref limit, preventing a valid refresh from advancing authority while still bound to an older scan.
+- Project identity, exact source hashes, owner-scoped Memory Core authority, and fail-closed writeback gates remain unchanged.
+
 ## 0.9.3 - Codex Control Plugin
 
 - Added an app-owned MCP control surface for Codex to open or focus the installed Mac app, exact-scan a workspace, verify authority, retrieve bounded context, and prepare clean takeover packets.

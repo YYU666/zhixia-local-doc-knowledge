@@ -15,7 +15,12 @@ const {
   normalizeLifecycleInput,
 } = require("../electron/memoryCoreRuntime.cjs");
 const { PROJECT_CONTINUITY_SLOTS } = require("../electron/projectBrainPolicy.cjs");
-const { listMemoryFacts, upsertMemoryFact } = require("../electron/memoryRuntimeIndexStore.cjs");
+const {
+  inspectMemoryCorePayload,
+  listMemoryFacts,
+  listProjectCheckpoints,
+  upsertMemoryFact,
+} = require("../electron/memoryRuntimeIndexStore.cjs");
 
 const NOW = "2026-07-16T06:00:00.000Z";
 
@@ -159,6 +164,48 @@ function main() {
     assert.equal(secondFormation.receipt.persistedAction, "noop", "formation receipt persistence must be idempotent");
     assert.equal(secondFormation.writes.some((write) => write.kind === "episode" && write.action === "noop"), true);
     assert.equal(firstFormation.noHostEffects, true);
+
+    const denseCheckpointFormation = runtime.formAppOwnedLifecycleEvent("writeback_evidence", acceptedWriteback(alphaPath, "module-dense-checkpoint", {
+      taskId: "task-dense-checkpoint",
+      eventType: "checkpoint",
+      acceptedProgress: Array.from({ length: 16 }, (_, index) => `Accepted dense progress ${index + 1}`),
+      openTasks: Array.from({ length: 16 }, (_, index) => `Dense task ${index + 1}`),
+      blockers: Array.from({ length: 16 }, (_, index) => `Dense blocker ${index + 1}`),
+      nextActions: Array.from({ length: 16 }, (_, index) => `Dense next action ${index + 1}`),
+      threads: Array.from({ length: 12 }, (_, index) => `dense-thread-${index + 1}`),
+      evidence: {
+        summary: "The dense checkpoint remains bounded and source-backed.",
+        tests: ["Dense checkpoint persistence passed."],
+        sourceRefs: Array.from({ length: 8 }, (_, index) => sourceRef(alphaId, "module-dense-checkpoint", `dense-source-${index + 1}`)),
+      },
+    }), { now: NOW });
+    assert.equal(denseCheckpointFormation.status, "accepted", JSON.stringify(denseCheckpointFormation));
+    assert.equal(
+      denseCheckpointFormation.writes.find((write) => write.kind === "projectCheckpoint")?.action,
+      "insert",
+      `accepted high-cardinality continuity must compact redundant child provenance before the 1000-node persistence gate: ${JSON.stringify(denseCheckpointFormation.writes)}`,
+    );
+    const denseCheckpointId = denseCheckpointFormation.writes.find((write) => write.kind === "projectCheckpoint")?.id;
+    const denseCheckpoint = listProjectCheckpoints(root, { projectId: alphaId })
+      .find((checkpoint) => checkpoint.id === denseCheckpointId)?.payload;
+    assert.ok(denseCheckpoint, "the accepted dense checkpoint must be durably readable");
+    assert.equal(inspectMemoryCorePayload(denseCheckpoint).safe, true, "the persisted projection must stay inside Memory Core safety limits");
+    assert.deepEqual(
+      [denseCheckpoint.acceptedProgress.length, denseCheckpoint.taskStates.length, denseCheckpoint.blockers.length],
+      [8, 4, 4],
+      "the checkpoint projection must keep stable progress/task/blocker bounds",
+    );
+    assert.ok(denseCheckpoint.nextActions.length > 0 && denseCheckpoint.nextActions.length <= 4,
+      "the normalized next-action projection must remain non-empty and bounded");
+    for (const child of [
+      ...denseCheckpoint.acceptedProgress,
+      ...denseCheckpoint.taskStates,
+      ...denseCheckpoint.blockers,
+      ...denseCheckpoint.nextActions,
+    ]) {
+      assert.equal(child.sourceRefs.length, 1, "each current child must retain one independent evidence pointer");
+      assert.ok(child.sourceRefs[0].hash || child.sourceRefs[0].path || child.sourceRefs[0].uri);
+    }
 
     const unsafeToken = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456";
     const unsafeFormation = runtime.formLifecycleEvent("writeback_evidence", {

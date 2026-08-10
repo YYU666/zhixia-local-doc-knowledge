@@ -64,8 +64,10 @@ async function main() {
   const storeRoot = path.join(root, "memory-runtime");
   const fakeApp = path.join(root, "知匣.app");
   fs.mkdirSync(path.join(workspace, "docs"), { recursive: true });
+  fs.mkdirSync(path.join(workspace, "src"), { recursive: true });
   fs.mkdirSync(fakeApp, { recursive: true });
   fs.writeFileSync(path.join(workspace, "docs", "PRD.md"), "# Codex control MCP acceptance\n", "utf8");
+  fs.writeFileSync(path.join(workspace, "src", "accepted-source.ts"), "export const accepted = true;\n", "utf8");
   const client = createClient({
     ZHIXIA_MEMORY_RUNTIME_CLI: runtimePath,
     ZHIXIA_MEMORY_RUNTIME_ROOT: storeRoot,
@@ -97,16 +99,20 @@ async function main() {
 
     const scanned = await client.request("tools/call", {
       name: "scan_workspace",
-      arguments: { workspace },
+      arguments: { workspace, relativePaths: ["src/accepted-source.ts"] },
     });
     assert.equal(scanned.result.isError, false);
     assert.equal(scanned.result.structuredContent.operation, "scan");
     assert.equal(scanned.result.structuredContent.app.status, "disabled_for_test");
     assert.match(scanned.result.structuredContent.scanSha256, /^[a-f0-9]{64}$/);
+    assert.ok(
+      scanned.result.structuredContent.sourceRefs.some((ref) => ref.title === "src/accepted-source.ts"),
+      "Codex control must forward bounded explicit scan pins to the app-owned Runtime",
+    );
 
     const verified = await client.request("tools/call", {
       name: "verify_project",
-      arguments: { workspace, taskGoal: "Verify Codex control" },
+      arguments: { workspace, taskGoal: "Verify Codex control", relativePaths: ["src/accepted-source.ts"] },
     });
     assert.equal(verified.result.isError, false);
     assert.equal(verified.result.structuredContent.operation, "verify");
@@ -120,6 +126,7 @@ async function main() {
         execute: true,
         expectedProjectIdentitySha256: scanned.result.structuredContent.projectIdentity.projectIdentitySha256,
         expectedScanSha256: scanned.result.structuredContent.scanSha256,
+        relativePaths: ["src/accepted-source.ts"],
         decision: "accept",
         title: "Codex control MCP accepted",
         summary: "The app-owned MCP accepted exact source-backed evidence.",
@@ -137,6 +144,7 @@ async function main() {
         execute: true,
         expectedProjectIdentitySha256: scanned.result.structuredContent.projectIdentity.projectIdentitySha256,
         expectedScanSha256: scanned.result.structuredContent.scanSha256,
+        relativePaths: ["src/accepted-source.ts"],
         decision: "accept",
         title: "Reject arbitrary URI",
         summary: "An external URI must not become app-owned evidence.",

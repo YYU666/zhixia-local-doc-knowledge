@@ -187,6 +187,34 @@ function collectChangedSourcePaths(workspace) {
   return changed;
 }
 
+function collectHeadSourcePaths(workspace) {
+  try {
+    const output = execFileSync("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-z", "HEAD"], {
+      cwd: workspace,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const paths = new Set();
+    for (const item of output.split("\0")) {
+      const normalized = item.replace(/\\/g, "/").trim();
+      if (!normalized || path.isAbsolute(normalized)) continue;
+      if (normalized.startsWith("docs/") || ROOT_SOURCE_FILES.includes(normalized)) continue;
+      const segments = normalized.toLowerCase().split("/");
+      if (segments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))) continue;
+      if (SENSITIVE_WORKTREE_PATH_RE.test(normalized)) continue;
+      if (!WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase())) continue;
+      const filePath = resolveContainedFile(workspace, normalized);
+      if (!fs.existsSync(filePath)) continue;
+      const stats = fs.lstatSync(filePath);
+      if (!stats.isFile() || stats.isSymbolicLink() || stats.size > MAX_SCANNED_FILE_BYTES) continue;
+      paths.add(normalized);
+    }
+    return [...paths].sort((left, right) => left.localeCompare(right));
+  } catch {
+    return [];
+  }
+}
+
 function workingTreeSnapshot(workspace) {
   const changedPaths = [...collectChangedSourcePaths(workspace)].sort();
   const eligiblePaths = changedPaths.filter((relativePath) => {
@@ -239,6 +267,8 @@ function collectDocCandidates(workspace, request = {}) {
     candidates.add(normalized);
     requestedCandidates.push(normalized);
   }
+  const headSourcePaths = collectHeadSourcePaths(workspace);
+  for (const relativePath of headSourcePaths) candidates.add(relativePath);
   const docsRoot = path.join(workspace, "docs");
   const queue = fs.existsSync(docsRoot) ? [docsRoot] : [];
   let directoriesRead = 0;
@@ -257,7 +287,7 @@ function collectDocCandidates(workspace, request = {}) {
       candidates.add(path.relative(workspace, fullPath).replace(/\\/g, "/"));
     }
   }
-  const preferred = [...new Set([...PRIORITY_SOURCE_FILES, ...requestedCandidates, ...ROOT_SOURCE_FILES])];
+  const preferred = [...new Set([...PRIORITY_SOURCE_FILES, ...ROOT_SOURCE_FILES, ...requestedCandidates, ...headSourcePaths])];
   const preferredSet = new Set(preferred);
   const changedSourcePaths = collectChangedSourcePaths(workspace);
   const dynamicPriority = (relativePath) => {
@@ -447,7 +477,9 @@ function coreSourceRefs(scan, coreProjectId, moduleId) {
 
 function compactCheckpointSourceRefs(refs = [], preferredRefs = []) {
   const values = [...preferredRefs, ...refs];
-  const scanBinding = values.find((ref) => ref?.kind === "workspace_scan_receipt") || null;
+  const scanBinding = refs.find((ref) => ref?.kind === "workspace_scan_receipt")
+    || values.find((ref) => ref?.kind === "workspace_scan_receipt")
+    || null;
   const selected = [];
   const seen = new Set();
   const add = (ref) => {
@@ -460,6 +492,8 @@ function compactCheckpointSourceRefs(refs = [], preferredRefs = []) {
   add(scanBinding);
   for (const ref of values) {
     if (selected.length >= MAX_CHECKPOINT_SOURCE_REFS) break;
+    if (ref?.kind === "workspace_scan_receipt" && scanBinding
+        && (ref.path !== scanBinding.path || ref.hash !== scanBinding.hash)) continue;
     add(ref);
   }
   return selected;
@@ -1638,6 +1672,7 @@ function executeLifecycleWrite(operation, request = {}) {
   };
   const requestedEventType = compactText(payload.eventType || payload.type || (operation === "writeback_evidence" ? "accepted" : "checkpoint"), 80);
   const explicitBlockers = compactSafeList(payload.openBlockers || payload.blockers || [], 8, 320);
+  const explicitAcceptedProgress = compactSafeList(payload.acceptedProgress || [], 8, 320);
   const carriedBlockers = explicitBlockers.length > 0 ? explicitBlockers : previousTitles("openBlockers").slice(0, 8);
   const eventType = carriedBlockers.length > 0 && explicitBlockers.length === 0 && ["accepted", "test_pass"].includes(requestedEventType)
     ? "checkpoint"
@@ -1655,9 +1690,9 @@ function executeLifecycleWrite(operation, request = {}) {
     result: compactSafeText(payload.result || payload.summary || payload.title || `${operation} evidence`, 500),
     phase: compactText(payload.phase || "", 80) || null,
     acceptedProgress: [...new Set([
+      ...explicitAcceptedProgress,
       ...previousTitles("acceptedProgress"),
-      ...compactSafeList(payload.acceptedProgress || [], 8, 320),
-    ])].slice(0, 12),
+    ])].slice(0, 8),
     openTasks: preferredList(payload.openTasks, "openTasks"),
     blockers: carriedBlockers,
     failures: compactSafeList(payload.latestFailures || payload.failures || [], 8, 360),
@@ -1710,13 +1745,26 @@ function executeLifecycleWrite(operation, request = {}) {
       action: write.action,
       id: write.id || write.record?.id || null,
       status: write.status || write.record?.status || null,
+      reasonCodes: Array.isArray(write.reasonCodes) ? write.reasonCodes.slice(0, 8) : [],
     })),
     safety: { rawSessionBodyRead: false, generatedKnowledgeAuthority: false, exactScanBound: true, uiRequired: false },
   }, MAX_RESUME_PACKET_BYTES, operation);
 }
 
 function executeRefreshBinding(request = {}) {
-  const { scan, payload, sourceRefs } = exactWorkspaceWriteBinding(request, "refresh_binding");
+  const preliminaryPayload = request.evidence && typeof request.evidence === "object" ? request.evidence : request;
+  const acceptedChangedPaths = compactSafeList(request.acceptedChangedPaths || preliminaryPayload.acceptedChangedPaths || [], 24, 500)
+    .map((value) => value.replace(/\\/g, "/").replace(/^\.\//, ""));
+  const previewScan = scanExactWorkspace(request);
+  const previewPaths = new Set(previewScan.files.map((file) => file.relativePath));
+  const scanRequest = {
+    ...request,
+    relativePaths: [...new Set([
+      ...(Array.isArray(request.relativePaths) ? request.relativePaths : []),
+      ...acceptedChangedPaths.filter((relativePath) => !previewPaths.has(relativePath)),
+    ])].slice(0, MAX_SCAN_FILES),
+  };
+  const { scan, payload, sourceRefs } = exactWorkspaceWriteBinding(scanRequest, "refresh_binding");
   const storeRoot = resolveStoreRoot(request);
   const runtime = runtimeForRead(storeRoot);
   if (!runtime) throw new Error("refresh_binding_app_owned_memory_core_required");
@@ -1729,8 +1777,6 @@ function executeRefreshBinding(request = {}) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,219}$/.test(acceptedEvidenceReceipt) || !safeText(acceptedEvidenceReceipt)) {
     throw new Error("refresh_binding_accepted_evidence_receipt_required");
   }
-  const acceptedChangedPaths = compactSafeList(request.acceptedChangedPaths || payload.acceptedChangedPaths || [], 24, 500)
-    .map((value) => value.replace(/\\/g, "/").replace(/^\.\//, ""));
   if (acceptedChangedPaths.length === 0) throw new Error("refresh_binding_accepted_changed_paths_required");
   const matchedRelativePaths = new Set(sourceRefs
     .filter((ref) => ref.kind !== "workspace_scan_receipt")
@@ -1750,9 +1796,14 @@ function executeRefreshBinding(request = {}) {
     summary: payload.summary || `${lane} accepted evidence refreshed the exact workspace binding.`,
     sourceRefs: payload.sourceRefs,
   };
-  const writeResult = executeLifecycleWrite("writeback_evidence", { ...request, evidence });
+  const writeResult = executeLifecycleWrite("writeback_evidence", { ...scanRequest, evidence });
   if (writeResult.accepted !== true || !writeResult.receiptId) throw new Error("refresh_binding_writeback_not_accepted");
-  const verified = verifyMemoryCore({ ...request, workspace: scan.workspace });
+  const checkpointWrite = writeResult.writes.find((write) => write.kind === "projectCheckpoint") || null;
+  if (!checkpointWrite || !["insert", "noop"].includes(checkpointWrite.action)) {
+    const reasonCode = checkpointWrite?.reasonCodes?.[0] || checkpointWrite?.action || "missing";
+    throw new Error(`refresh_binding_checkpoint_write_not_accepted:${reasonCode}`);
+  }
+  const verified = verifyMemoryCore({ ...scanRequest, workspace: scan.workspace });
   if (verified.current !== true || verified.recoveryReady !== true || verified.scanBinding?.currentScanSha256 !== scan.scanSha256) {
     throw new Error("refresh_binding_post_write_verify_failed");
   }

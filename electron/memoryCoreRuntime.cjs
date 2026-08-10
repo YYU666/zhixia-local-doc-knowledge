@@ -1044,39 +1044,47 @@ class MemoryCoreRuntime {
     }
     if (plan.checkpointCandidate) {
       const checkpointStatus = plan.accepted ? "accepted" : "review";
-      const compactItems = (items) => safeArray(items).slice(0, 32).map((item) => ({
+      const checkpoint = plan.checkpointCandidate;
+      const compactItems = (items, maxItems) => safeArray(items).slice(0, maxItems).map((item) => ({
         id: item.id,
         title: compactText(item.title || item.summary, 360),
         status: compactText(item.status || "open", 40).toLowerCase(),
         authorityStatus: checkpointStatus,
         authoritative: plan.accepted,
         projectId: plan.episode.projectId,
-        sourceRefs: safeArray(item.sourceRefs).slice(0, 2),
+        sourceRefs: safeArray(item.sourceRefs).slice(0, 1).map((ref) => ({
+          kind: ref.kind || "checkpoint_evidence",
+          ...(ref.hash ? { hash: ref.hash } : ref.path ? { path: ref.path } : ref.uri ? { uri: ref.uri } : {}),
+          ...(ref.title ? { title: ref.title } : {}),
+        })),
         observedAt: item.observedAt || plan.event.observedAt,
         updatedAt: item.updatedAt || plan.event.observedAt,
       }));
-      const checkpoint = plan.checkpointCandidate;
-      writes.push({ kind: "projectCheckpoint", ...appendProjectCheckpoint(this.storeRoot, {
+      const checkpointPayload = {
         checkpointId: checkpoint.checkpointId,
         projectId: plan.episode.projectId,
-        phase: checkpoint.phase,
+        phase: checkpoint.phase || null,
         moduleIds: safeArray(checkpoint.moduleIds).slice(0, 32),
-        acceptedProgress: compactItems(checkpoint.acceptedProgress),
-        taskStates: compactItems(checkpoint.taskStates),
-        blockers: compactItems(checkpoint.blockers),
-        nextActions: compactItems(checkpoint.nextActions),
+        acceptedProgress: compactItems(checkpoint.acceptedProgress, 8),
+        taskStates: compactItems(checkpoint.taskStates, 4),
+        blockers: compactItems(checkpoint.blockers, 4),
+        nextActions: compactItems(checkpoint.nextActions, 4),
         threadLineage: safeArray(checkpoint.threadLineage).slice(0, 32),
         canonicalDocRefs: safeArray(checkpoint.canonicalDocRefs).slice(0, 16),
-        originalGoal: checkpoint.originalGoal,
+        originalGoal: checkpoint.originalGoal || null,
         architectureAnchors: safeArray(checkpoint.architectureAnchors).slice(0, 16),
         authorityReceiptId: plan.event.authority.receiptId,
         authorityStatus: checkpointStatus,
         authoritative: plan.accepted,
         sourceRefs: safeArray(checkpoint.sourceRefs).slice(0, 8),
-        observedAt: checkpoint.observedAt,
-        updatedAt: checkpoint.updatedAt,
+        observedAt: checkpoint.observedAt || null,
+        updatedAt: checkpoint.updatedAt || null,
         scopeKey,
-      }) });
+      };
+      const checkpointInspection = inspectMemoryCorePayload(checkpointPayload);
+      writes.push(checkpointInspection.safe
+        ? { kind: "projectCheckpoint", ...appendProjectCheckpoint(this.storeRoot, checkpointPayload) }
+        : { kind: "projectCheckpoint", action: "reject", record: null, reasonCodes: checkpointInspection.reasonCodes });
     }
     return writes.map((write) => ({
       kind: write.kind,

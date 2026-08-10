@@ -402,7 +402,11 @@ function main() {
         moduleId: "example_project-engine-core",
         title: "Dirty source postimage accepted",
         summary: "The bounded source postimage passed exact-scan lifecycle review.",
-        acceptedProgress: ["The dirty source postimage is source-backed by its exact hash."],
+        acceptedProgress: Array.from({ length: 12 }, (_, index) => `Accepted bounded recovery progress ${index + 1}.`),
+        openTasks: Array.from({ length: 8 }, (_, index) => `Bounded recovery task ${index + 1}.`),
+        openBlockers: Array.from({ length: 8 }, (_, index) => `Bounded recovery blocker ${index + 1}.`),
+        nextActions: Array.from({ length: 8 }, (_, index) => `Bounded recovery next action ${index + 1}.`),
+        threadLineage: Array.from({ length: 8 }, (_, index) => `bounded-recovery-thread-${index + 1}`),
         latestFailures: ["The previous source postimage did not satisfy the current exact scan."],
         sourceRefs: [{ path: "src/current-feature.js", hash: sourcePostimage.sha256 }],
       },
@@ -432,7 +436,12 @@ function main() {
     assert.equal(hashStale.scanBinding.matched, false);
     assert.ok(hashStale.warnings.includes("workspace_head_or_canonical_sources_changed_reseed_required"));
 
-    const hashScan = execute({ operation: "scan", workspace, storeRoot });
+    const additionalAcceptedPaths = Array.from({ length: 10 }, (_, index) => `docs/A-${String(index).padStart(3, "0")}.md`);
+    for (const relativePath of additionalAcceptedPaths) {
+      fs.appendFileSync(path.join(workspace, relativePath), "Accepted refresh evidence.\n", "utf8");
+    }
+    const refreshRelativePaths = ["docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md", ...additionalAcceptedPaths];
+    const hashScan = execute({ operation: "scan", workspace, storeRoot, relativePaths: refreshRelativePaths });
     const hashScanReceipt = {
       kind: "workspace_scan_receipt",
       path: `memory-runtime://workspace-scan/${hashScan.scanSha256}`,
@@ -448,9 +457,10 @@ function main() {
       execute: true,
       expectedProjectIdentitySha256: hashScan.projectIdentity.projectIdentitySha256,
       expectedScanSha256: hashScan.scanSha256,
+      relativePaths: refreshRelativePaths,
       previousCheckpointId,
       acceptedEvidenceReceipt: "qa-accept-current-checkpoint-001",
-      acceptedChangedPaths: ["docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md"],
+      acceptedChangedPaths: refreshRelativePaths,
       lane: "example_project-engine-core",
       evidence: {
         decision: "accept",
@@ -461,12 +471,11 @@ function main() {
         projectSummary: "EXAMPLE_PROJECT continues from the accepted checkpoint clarification.",
         phase: "accepted checkpoint clarification",
         acceptedProgress: ["Current checkpoint clarification accepted by formal QA."],
-        openTasks: ["Continue the current engine recovery task."],
-        nextActions: ["Prepare one clean takeover generation."],
-        sourceRefs: [
-          hashScanReceipt,
-          hashScan.sourceRefs.find((ref) => ref.title === "docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md"),
-        ],
+        sourceRefs: ["docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md", ...additionalAcceptedPaths]
+          .map((relativePath) => hashScan.sourceRefs.find((ref) => ref.title === relativePath) || {
+            path: relativePath,
+            hash: hashScan.workingTree.entries.find((entry) => entry.relativePath === relativePath)?.sha256,
+          }),
       },
     };
     assert.throws(() => execute({ ...refreshRequest, acceptedEvidenceReceipt: "" }), /accepted_evidence_receipt_required/);
@@ -496,12 +505,15 @@ function main() {
     assert.equal(hashRefresh.takeover.shouldInject, true);
     assert.equal(hashRefresh.safety.unacceptedChangeAutoSeeded, false);
     assertSafeBounded(hashRefresh, 16 * 1024);
-    const hashRefreshVerify = execute({ operation: "verify", workspace, storeRoot });
+    const hashRefreshVerify = execute({ operation: "verify", workspace, storeRoot, relativePaths: refreshRelativePaths });
     assert.equal(hashRefreshVerify.scanBinding.authorizedBindingCount, 1, "the exact internal scan receipt must survive checkpoint and authority-receipt persistence");
     assert.equal(hashRefreshVerify.scanBinding.matchedPath, hashScanReceipt.path);
-    const refreshedRecall = execute({ operation: "retrieve", workspace, storeRoot, taskGoal: "current checkpoint clarification", queryType: "thread_recovery", limit: 12, tokenBudget: 3000 });
-    const clarifiedItem = refreshedRecall.items.find((item) => /checkpoint clarification accepted/i.test(`${item.title} ${item.summary}`));
-    assert.equal(clarifiedItem?.sourceRefs?.[0]?.title, "docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md", "refresh binding must preserve the accepted changed file as the item evidence ref");
+    const refreshedRecall = execute({ operation: "retrieve", workspace, storeRoot, relativePaths: refreshRelativePaths, taskGoal: "current checkpoint clarification", queryType: "thread_recovery", limit: 12, tokenBudget: 3000 });
+    const clarifiedItem = refreshedRecall.items.find((item) => (
+      /accepted checkpoint clarification|checkpoint clarification accepted/i.test(`${item.title} ${item.summary}`)
+      && item.sourceRefs?.some((ref) => ref.title === "docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md")
+    ));
+    assert.ok(clarifiedItem, "refresh binding must preserve the accepted changed file as the item evidence ref");
 
     const advancedHead = commitAll(workspace, "EXAMPLE_PROJECT handoff clarification");
     assert.notEqual(advancedHead, baselineHead);
@@ -519,6 +531,38 @@ function main() {
     const advancedTakeover = runStrictCli({ ...retrieveRequest, operation: "prepare_takeover" });
     assert.equal(advancedTakeover.takeover.shouldInject, true);
     assert.notEqual(advancedTakeover.contextGenerationId, prepared.contextGenerationId, "advanced HEAD and scan binding must create a new takeover generation");
+
+    for (let index = 0; index < 60; index += 1) {
+      fs.writeFileSync(path.join(workspace, "docs", `SATURATION-${String(index).padStart(3, "0")}.md`), `# Saturation ${index}\n`, "utf8");
+    }
+    commitAll(workspace, "saturate bounded canonical docs");
+    const acceptedHeadSources = [
+      "src/plugins/core2d/ids.ts",
+      "src/plugins/core2d/index.ts",
+      "src/plugins/core2d/index.test.ts",
+      "src/project/comicPrintShaderPreset.ts",
+      "src/project/comicPrintShaderPreset.test.ts",
+      "src/runtime/phaser/PhaserRuntimeAdapter.ts",
+      "src/runtime/phaser/PhaserRuntimeAdapter.comicPrintShader.test.ts",
+    ];
+    for (const [index, relativePath] of acceptedHeadSources.entries()) {
+      const target = path.join(workspace, relativePath);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, `export const acceptedHeadSource${index} = true;\n`, "utf8");
+    }
+    fs.writeFileSync(path.join(workspace, "docs", "EXAMPLE_PROJECT_ACCEPTED_HEAD_SOURCE_ACCEPTANCE.md"), "# Accepted HEAD source QA\n\nDecision: accept\n", "utf8");
+    commitAll(workspace, "accept bounded HEAD source lane");
+    const saturatedHeadScan = execute({ operation: "scan", workspace, storeRoot });
+    assert.equal(saturatedHeadScan.files.length, 48, "the regression must exercise the bounded scan capacity");
+    for (const relativePath of acceptedHeadSources) {
+      assert.ok(
+        saturatedHeadScan.sourceRefs.some((ref) => ref.title === relativePath),
+        `latest clean HEAD source must survive saturated canonical docs: ${relativePath}`,
+      );
+    }
+    assert.ok(saturatedHeadScan.sourceRefs.some((ref) => ref.title === "docs/EXAMPLE_PROJECT_PROGRAM_GOAL.md"));
+    assert.ok(saturatedHeadScan.sourceRefs.some((ref) => ref.title === "README.md"));
+    assert.ok(saturatedHeadScan.sourceRefs.some((ref) => ref.title === "docs/EXAMPLE_PROJECT_ACCEPTED_HEAD_SOURCE_ACCEPTANCE.md"));
 
     console.log("EXAMPLE_PROJECT app-owned Memory Runtime recovery integration tests passed.");
   } finally {

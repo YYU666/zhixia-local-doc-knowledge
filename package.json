@@ -1,7 +1,7 @@
 {
   "name": "local-doc-knowledge",
   "private": true,
-  "version": "0.9.3",
+  "version": "0.9.7",
   "description": "Zhixia, the local-first official Memory Runtime for CEO Flow",
   "license": "MIT",
   "author": "Zhixia contributors",
