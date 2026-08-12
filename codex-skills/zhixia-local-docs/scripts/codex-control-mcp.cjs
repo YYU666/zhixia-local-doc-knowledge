@@ -8,7 +8,7 @@ const { spawnSync } = require("node:child_process");
 const { invoke } = require("./invoke-app-memory-runtime.cjs");
 
 const SERVER_NAME = "zhixia-control";
-const SERVER_VERSION = "1.1.0";
+const SERVER_VERSION = "1.2.0";
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 const MAX_MESSAGE_BYTES = 128 * 1024;
 
@@ -47,7 +47,22 @@ const retrievalProperties = {
   taskGoal: { type: "string", minLength: 1, maxLength: 600 },
   queryType: { type: "string", maxLength: 80 },
   limit: { type: "integer", minimum: 1, maximum: 20 },
-  tokenBudget: { type: "integer", minimum: 200, maximum: 4000 },
+  tokenBudget: {
+    type: "integer",
+    minimum: 800,
+    maximum: 10000,
+    description: "Preferred starting budget. The Runtime may grow within maxTokenBudget unless strictTokenBudget=true.",
+  },
+  maxTokenBudget: {
+    type: "integer",
+    minimum: 800,
+    maximum: 10000,
+    description: "Maximum adaptive envelope for this read-only retrieval. Never exceeds 10000.",
+  },
+  strictTokenBudget: {
+    type: "boolean",
+    description: "Keep tokenBudget fixed instead of allowing bounded adaptive growth.",
+  },
   relativePaths: relativePathsProperty,
   showApp: showAppProperty,
 };
@@ -393,6 +408,8 @@ function callTool(name, args) {
         queryType: args.queryType || (operation === "prepare_takeover" ? "thread_recovery" : "task_context"),
         limit: args.limit,
         tokenBudget: args.tokenBudget,
+        maxTokenBudget: args.maxTokenBudget,
+        strictTokenBudget: args.strictTokenBudget,
         relativePaths: args.relativePaths,
       }),
       ...(app ? { app } : {}),

@@ -11,7 +11,7 @@ Send strict JSON to `scripts/invoke-app-memory-runtime.cjs`:
 ```
 
 ```json
-{"operation":"prepare_takeover","workspace":"<exact workspace>","taskGoal":"<goal>","queryType":"thread_recovery","limit":12,"tokenBudget":3000}
+{"operation":"prepare_takeover","workspace":"<exact workspace>","taskGoal":"<goal>","queryType":"thread_recovery","limit":12,"tokenBudget":2200,"maxTokenBudget":10000}
 ```
 
 Only treat the result as current authority when all of these fields are true:
@@ -23,7 +23,7 @@ Only treat the result as current authority when all of these fields are true:
 - `returnedCount>0` for retrieval
 - `takeover.shouldInject=true`
 
-`prepare_takeover` is capped at 3000 estimated tokens and returns one deterministic `contextGenerationId`. A CEO task may inject that generation once; it must not append the same packet on later wakeups. A changed HEAD, canonical scan, authority checkpoint, or continuity manifest produces a different generation.
+`prepare_takeover` uses an adaptive budget envelope: 2200 estimated tokens is the preferred start and 10000 is the hard ceiling. It grows only when the minimum source-backed recovery anchors do not fit, and reports the attempted/effective budgets. `strictTokenBudget=true` keeps the preferred budget fixed. The call returns one deterministic `contextGenerationId`; a CEO task may inject that generation once and must not append the same packet on later wakeups. A changed HEAD, canonical scan, authority checkpoint, or continuity manifest produces a different generation.
 
 `fallback_stale`, helper-only output, a missing CLI, an incomplete continuity manifest, a changed HEAD, or changed canonical source hashes cannot authorize recovery.
 

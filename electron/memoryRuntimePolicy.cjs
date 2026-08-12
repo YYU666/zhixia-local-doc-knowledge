@@ -262,7 +262,7 @@ function buildMemoryRouterPlan(options = {}) {
   const queryType = taskType === "retrieve_precedent" ? "retrieve_precedent" : taskType;
   const topKDefault = ["project_resume", "thread_recovery"].includes(taskType) ? 10 : 8;
   const topK = clampNumber(options.topK || options.maxResults, topKDefault, 1, 12);
-  const tokenBudget = clampNumber(options.tokenBudget, taskType === "project_resume" ? 1500 : 1200, 400, 3000);
+  const tokenBudget = clampNumber(options.tokenBudget, taskType === "project_resume" ? 1500 : 1200, 400, 10000);
   const timeBudgetMs = clampNumber(options.timeBudgetMs, MEMORY_ROUTER_DEFAULT_TIME_BUDGET_MS, 50, 1200);
   const allowColdLayer = options.allowColdLayer === true || COLD_MEMORY_QUERY_TYPES.has(taskType);
   const hardRawGate = options.rawSessionHardGate === true && options.explicitRawSessionRequest === true && options.sourceRange;
@@ -968,7 +968,7 @@ function buildThreadRecoveryPacket(input = {}) {
       title: title || null,
       query: compactText(input.query || title || threadId || "", 240),
       projectPath,
-      tokenBudget: clampNumber(input.tokenBudget, 1200, 400, 3000),
+      tokenBudget: clampNumber(input.tokenBudget, 1200, 400, 10000),
     },
     thread: {
       threadId: threadId || vaultManifests[0]?.threadId || lineage[0]?.ceoThreadId || null,

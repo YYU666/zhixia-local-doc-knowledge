@@ -13,8 +13,10 @@ At project bootstrap, takeover, direction correction, long-thread recovery, or b
 
 ```powershell
 '{"operation":"verify","workspace":"<workspace>","taskGoal":"<goal>"}' | node scripts/invoke-app-memory-runtime.cjs
-'{"operation":"prepare_takeover","workspace":"<workspace>","taskGoal":"<goal>","queryType":"thread_recovery","limit":12,"tokenBudget":3000}' | node scripts/invoke-app-memory-runtime.cjs
+'{"operation":"prepare_takeover","workspace":"<workspace>","taskGoal":"<goal>","queryType":"thread_recovery","limit":12,"tokenBudget":2200,"maxTokenBudget":10000}' | node scripts/invoke-app-memory-runtime.cjs
 ```
+
+Retrieval budgets are envelopes, not fixed packet sizes. Ordinary context starts near 1200 tokens and takeover near 2200; the Runtime may grow through bounded steps only when the minimum source-backed Hot/Warm/continuity packet does not fit. The hard ceiling is 10000 tokens. Use `strictTokenBudget=true` when a caller needs a fixed cap. Never grow merely to include more history, Cold bodies, raw chat, logs, images/base64, credentials, or unrelated graph paths.
 
 Use the result as replacement context only when `memoryMode=app_owned_memory_core`, `authorityVerification=app_owned_verified`, `current=true`, `recoveryReady=true`, `takeover.shouldInject=true`, and retrieval is non-empty. Inject one `contextGenerationId` at most once per task. Otherwise freeze the old task with explicit stale/partial status.
 

@@ -462,7 +462,7 @@ Codex 工具与 Skill 资产图谱是项目记忆的一部分。它的目标是�
 6. P1 阶段复用现有 metadata-first retrieval 读取 Project Resume Packet、KnowledgeItem、MemoryCard、ProjectArtifact、ToolSkillRecord、hot/warm thread summary；后续再落持久化 WarmSummaryIndex。
 7. 如命中老线程或归档历史，只返回 Vault pointer、摘要、receipt 和 sourceRefs；默认不读 raw session。
 8. 如果任务是旧线程恢复，系统可合成 `ThreadRecoveryPacket`：包含 threadId/title/projectPath、lineage、vault manifest、recommendedReadOrder、coldHistorySources、sourceRefs、恢复 prompt 和安全边界。它是新 CEO 线程的启动包，不是 raw session 全文。
-9. 系统合成 `RuntimeContextPacket`，最多 800-1500 token，复杂恢复不超过 3000 token，交给 Codex。
+9. 系统合成 `RuntimeContextPacket`：普通任务优先 800-1500 token，复杂恢复优先约 2200 token；只有最小 Hot/Warm/continuity 包装不下时才受控扩容，硬上限 10000 token，并向 Codex 返回实际预算轨迹。
 10. 如果 packet 置信度不足，返回 warning，例如 `partial_context`、`stale_project_summary`、`source_conflict`、`no_thread_history_vault_manifest_matched`，让 Codex 在任务卡里显式说明。
 
 ### 5.8.2 Codex 执行中
@@ -924,7 +924,7 @@ type AgentRuntimeSession = {
 - MVP / planned split：Agent 检索默认不全量读取 documents，而是优先读取 Project Resume Packet、curated memory、ready knowledge、当前有效 artifact、ToolSkillRecord advisory metadata 和 thread hot/warm layer；当前已有 metadata-first bounded retrieval，完整权威 ThreadLineageIndex / archive UI/e2e 仍 planned。
 - Target/planned：Agent 检索在命中 CEO 线程、员工线程或 task/handoff id 时，优先走 CEO Flow Record / ThreadLineageIndex，再局部读取相关产物和热/温摘要。
 - Agent 检索必须有范围过滤、topK、token budget、缓存和冷层 hard gate；归档后的完整历史可搜索，但不能默认全库扫 Vault 或 raw session。
-- Target/planned：Memory Runtime 快速召回能在默认预算内返回 RuntimeContextPacket；普通任务默认 800-1500 token，复杂项目恢复不超过 3000 token，所有返回必须带 sourceRefs 或 advisory warning。
+- Target/planned：Memory Runtime 快速召回能在弹性预算内返回 RuntimeContextPacket；普通任务默认 800-1500 token，复杂项目恢复优先约 2200 token，最小权威包确实装不下时可逐级扩容但绝不超过 10000 token；所有返回必须带 sourceRefs 或 advisory warning。
 - Target/planned：MemoryRouter 冷启动不触发全量扫描、Vault walk、AI 摘要或图谱重建；项目切换和检索必须使用 metadata-first / cache-first 路径。
 - Target/planned：MemoryGraph 只做增量节点/边更新和关系检索，不作为默认 UI 大图谱渲染；图谱重建只能手动或维护窗口触发。
 - Target/planned：后台 dirty queue 必须有批量上限、checkpoint、每日低频维护和可见状态；不能每几分钟静默高成本扫描。

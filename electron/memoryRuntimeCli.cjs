@@ -34,7 +34,11 @@ const MAX_SCAN_CANDIDATES = 4096;
 const MAX_WORKTREE_POSTIMAGES = 128;
 const MAX_SCANNED_FILE_BYTES = 1024 * 1024;
 const MAX_RESUME_PACKET_BYTES = 16 * 1024;
-const MAX_RETRIEVAL_PACKET_BYTES = 32 * 1024;
+const MAX_RETRIEVAL_PACKET_BYTES = 48 * 1024;
+const MAX_RETRIEVAL_TOKEN_BUDGET = 10_000;
+const DEFAULT_CONTEXT_TOKEN_BUDGET = 1_200;
+const DEFAULT_TAKEOVER_TOKEN_BUDGET = 2_200;
+const ADAPTIVE_TOKEN_BUDGET_STEPS = [1_200, 2_200, 3_000, 5_000, 7_500, 10_000];
 const TRUSTED_WORKSPACE_SCAN_URI_RE = /^memory-runtime:\/\/workspace-scan\/([a-f0-9]{64})$/;
 const MAX_TEXT_CHARS = 1200;
 const MAX_LIST_ITEMS = 24;
@@ -112,6 +116,36 @@ function compactSafeList(values, maxItems = MAX_LIST_ITEMS, maxChars = 360) {
     if (result.length >= maxItems) break;
   }
   return result;
+}
+
+function boundedTokenBudget(value, fallback) {
+  const parsed = Number(value);
+  const selected = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Math.max(800, Math.min(Math.floor(selected), MAX_RETRIEVAL_TOKEN_BUDGET));
+}
+
+function retrievalBudgetEnvelope(request = {}, operation = "retrieve") {
+  const defaultPreferred = operation === "prepare_takeover"
+    ? DEFAULT_TAKEOVER_TOKEN_BUDGET
+    : DEFAULT_CONTEXT_TOKEN_BUDGET;
+  const preferredTokenBudget = boundedTokenBudget(request.tokenBudget, defaultPreferred);
+  const strictTokenBudget = request.strictTokenBudget === true;
+  const requestedMax = boundedTokenBudget(request.maxTokenBudget, MAX_RETRIEVAL_TOKEN_BUDGET);
+  const maxTokenBudget = strictTokenBudget
+    ? preferredTokenBudget
+    : Math.max(preferredTokenBudget, requestedMax);
+  return {
+    mode: strictTokenBudget ? "strict" : "adaptive",
+    preferredTokenBudget,
+    maxTokenBudget,
+    hardTokenLimit: MAX_RETRIEVAL_TOKEN_BUDGET,
+    strictTokenBudget,
+  };
+}
+
+function nextAdaptiveTokenBudget(current, maximum) {
+  const next = ADAPTIVE_TOKEN_BUDGET_STEPS.find((value) => value > current);
+  return Math.min(maximum, next || maximum);
 }
 
 function resolveUserData(env = process.env) {
@@ -1472,12 +1506,14 @@ function retrieveMemoryCore(request = {}, options = {}) {
   const retrievalStartedAt = Date.now();
   const verified = verifyMemoryCore(request);
   const responseOperation = options.operation === "prepare_takeover" ? "prepare_takeover" : "retrieve";
+  const budgetEnvelope = retrievalBudgetEnvelope(request, responseOperation);
   const generationId = contextGenerationId(verified);
   const memoryStateHash = verifiedMemoryStateHash(verified);
   if (!verified.recoveryReady) {
-    const requestedTokenBudget = Math.max(800, Math.min(Number(request.tokenBudget || 3000), 3000));
+    let requestedTokenBudget = budgetEnvelope.preferredTokenBudget;
+    const attemptedTokenBudgets = [requestedTokenBudget];
     const semanticGraph = unreadySemanticGraphSupplement(verified, request);
-    const bounded = withStrictRetrievalMetrics({
+    const unreadyPacket = () => withStrictRetrievalMetrics({
       ...verified,
       operation: responseOperation,
       contextGenerationId: generationId,
@@ -1497,12 +1533,27 @@ function retrieveMemoryCore(request = {}, options = {}) {
       performance: {
         bounded: true,
         requestedTokenBudget,
+        budgetEnvelope: { ...budgetEnvelope, effectiveTokenBudget: requestedTokenBudget, attemptedTokenBudgets: [...attemptedTokenBudgets] },
         maxPacketBytes: MAX_RETRIEVAL_PACKET_BYTES,
         semanticGraphAdditionalWorkspaceScans: 0,
         semanticGraphSeedWritten: 0,
         durationMs: Date.now() - retrievalStartedAt,
       },
+      warnings: [
+        ...new Set([
+          ...(verified.warnings || []),
+          ...(attemptedTokenBudgets.length > 1 ? ["retrieval_token_budget_adapted"] : []),
+        ]),
+      ],
     });
+    let bounded = unreadyPacket();
+    while (!budgetEnvelope.strictTokenBudget
+      && (bounded.packetBytes > MAX_RETRIEVAL_PACKET_BYTES || bounded.tokenEstimate > requestedTokenBudget)
+      && requestedTokenBudget < budgetEnvelope.maxTokenBudget) {
+      requestedTokenBudget = nextAdaptiveTokenBudget(requestedTokenBudget, budgetEnvelope.maxTokenBudget);
+      attemptedTokenBudgets.push(requestedTokenBudget);
+      bounded = unreadyPacket();
+    }
     if (bounded.packetBytes > MAX_RETRIEVAL_PACKET_BYTES || bounded.tokenEstimate > requestedTokenBudget) {
       throw new Error("unready_retrieval_packet_cannot_fit_requested_budget");
     }
@@ -1572,9 +1623,10 @@ function retrieveMemoryCore(request = {}, options = {}) {
       recoveryPriority: priorityScore,
       authorityVerification: "app_owned_verified",
     }));
-  const requestedTokenBudget = Math.max(800, Math.min(Number(request.tokenBudget || 3000), 3000));
-  const semanticGraphReserve = Math.max(400, Math.min(600, Math.floor(requestedTokenBudget * 0.18)));
-  const itemPacketTokenTarget = Math.max(400, requestedTokenBudget - semanticGraphReserve);
+  let requestedTokenBudget = budgetEnvelope.preferredTokenBudget;
+  let semanticGraphReserve = Math.max(400, Math.min(600, Math.floor(requestedTokenBudget * 0.18)));
+  let itemPacketTokenTarget = Math.max(400, requestedTokenBudget - semanticGraphReserve);
+  const attemptedTokenBudgets = [requestedTokenBudget];
   const packetForItems = (packetItems, graph = null) => ({
     schemaVersion: CLI_SCHEMA,
     operation: responseOperation,
@@ -1612,6 +1664,11 @@ function retrieveMemoryCore(request = {}, options = {}) {
     performance: {
       bounded: true,
       requestedTokenBudget,
+      budgetEnvelope: {
+        ...budgetEnvelope,
+        effectiveTokenBudget: requestedTokenBudget,
+        attemptedTokenBudgets: [...attemptedTokenBudgets],
+      },
       maxPacketBytes: MAX_RETRIEVAL_PACKET_BYTES,
       semanticGraphReserve,
       semanticGraphSeedCandidateLimit: 24,
@@ -1621,8 +1678,23 @@ function retrieveMemoryCore(request = {}, options = {}) {
       semanticGraphBackgroundRebuild: false,
       durationMs: Date.now() - retrievalStartedAt,
     },
-    warnings: graph?.partial === true ? ["semantic_graph_recall_partial"] : [],
+    warnings: [
+      ...(graph?.partial === true ? ["semantic_graph_recall_partial"] : []),
+      ...(attemptedTokenBudgets.length > 1 ? ["retrieval_token_budget_adapted"] : []),
+    ],
   });
+  const requiredAnchorCount = responseOperation === "prepare_takeover" ? Math.min(5, rankedItems.length) : Math.min(3, rankedItems.length);
+  if (!budgetEnvelope.strictTokenBudget && requiredAnchorCount > 0) {
+    let requiredAnchorPacket = withStrictRetrievalMetrics(packetForItems(rankedItems.slice(0, requiredAnchorCount)));
+    while ((requiredAnchorPacket.tokenEstimate > itemPacketTokenTarget || requiredAnchorPacket.packetBytes > MAX_RETRIEVAL_PACKET_BYTES)
+      && requestedTokenBudget < budgetEnvelope.maxTokenBudget) {
+      requestedTokenBudget = nextAdaptiveTokenBudget(requestedTokenBudget, budgetEnvelope.maxTokenBudget);
+      attemptedTokenBudgets.push(requestedTokenBudget);
+      semanticGraphReserve = Math.max(400, Math.min(600, Math.floor(requestedTokenBudget * 0.18)));
+      itemPacketTokenTarget = Math.max(400, requestedTokenBudget - semanticGraphReserve);
+      requiredAnchorPacket = withStrictRetrievalMetrics(packetForItems(rankedItems.slice(0, requiredAnchorCount)));
+    }
+  }
   let selectedItems = rankedItems;
   let itemOnlyPacket = withStrictRetrievalMetrics(packetForItems(selectedItems));
   while ((itemOnlyPacket.tokenEstimate > itemPacketTokenTarget || itemOnlyPacket.packetBytes > MAX_RETRIEVAL_PACKET_BYTES) && selectedItems.length > 1) {
@@ -1702,7 +1774,8 @@ function retrieveMemoryCore(request = {}, options = {}) {
     refreshGraphReceipt();
     bounded = withStrictRetrievalMetrics(packetForItems(selectedItems, semanticGraph));
   }
-  while ((bounded.tokenEstimate > requestedTokenBudget || bounded.packetBytes > MAX_RETRIEVAL_PACKET_BYTES) && selectedItems.length > 1) {
+  const minimumFinalItemCount = budgetEnvelope.strictTokenBudget ? 1 : requiredAnchorCount;
+  while ((bounded.tokenEstimate > requestedTokenBudget || bounded.packetBytes > MAX_RETRIEVAL_PACKET_BYTES) && selectedItems.length > minimumFinalItemCount) {
     selectedItems = selectedItems.slice(0, -1);
     bounded = withStrictRetrievalMetrics(packetForItems(selectedItems, semanticGraph));
   }

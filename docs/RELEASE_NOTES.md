@@ -2,6 +2,13 @@
 
 This public staging copy intentionally contains a short release summary instead of private operational runlogs.
 
+## 0.9.9 - Adaptive Retrieval Budget Envelope
+
+- Runtime context now uses a preferred starting budget plus a bounded maximum instead of treating one token number as a fixed packet size.
+- Ordinary retrieval starts near 1200 tokens and takeover near 2200, growing only when the minimum source-backed Hot/Warm/continuity anchors do not fit; the user-approved hard ceiling is 10000 tokens.
+- `strictTokenBudget=true` preserves fixed-budget callers, while response diagnostics report preferred, maximum, attempted, and effective budgets.
+- Codex control and CEO Flow now share the same 10000-token ceiling; raw chat, Cold bodies, logs, credentials, images/base64, and unrelated graph expansion remain forbidden.
+
 ## 0.9.8 - Deterministic Accepted-Range Binding
 
 - Exact scans now include bounded text sources changed between the previous authorized HEAD and the current HEAD, covering the common product-commit then acceptance-commit workflow without project-specific paths.

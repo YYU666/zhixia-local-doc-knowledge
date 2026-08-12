@@ -89,6 +89,10 @@ async function main() {
       listed.result.tools.map((tool) => tool.name),
       ["open_app", "scan_workspace", "verify_project", "retrieve_context", "prepare_takeover", "writeback_evidence", "refresh_binding"],
     );
+    const takeoverTool = listed.result.tools.find((tool) => tool.name === "prepare_takeover");
+    assert.equal(takeoverTool.inputSchema.properties.tokenBudget.maximum, 10000);
+    assert.equal(takeoverTool.inputSchema.properties.maxTokenBudget.maximum, 10000);
+    assert.equal(takeoverTool.inputSchema.properties.strictTokenBudget.type, "boolean");
 
     const opened = await client.request("tools/call", {
       name: "open_app",

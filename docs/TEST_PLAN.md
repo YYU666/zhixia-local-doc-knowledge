@@ -257,7 +257,7 @@ Fresh-user / second-machine release signoff is intentionally outside default `np
 - Prove an app-owned seed reaches verified continuity and persists its scan SHA in signed sourceRefs.
 - Prove linked worktrees inherit at identical HEAD/hash, foreign projects do not, and HEAD or canonical hash changes immediately force stale until reseeded.
 - Prove helper-only and generated `.codex-knowledge` packets never claim current/readiness and unsafe bodies do not enter output packets.
-- Prove `thread_recovery` returns non-empty current summary/progress/task/action/thread items plus original-goal and architecture anchors under a 3000-token/32-KB hard bound.
+- Prove `thread_recovery` starts with a compact preferred budget, adaptively preserves the minimum Hot/Warm recovery anchors when 1200 tokens cannot fit, never exceeds 10000 tokens/48 KB, and honors `strictTokenBudget=true` without silent growth.
 - Prove generated stale July UI text, raw-session body, base64, credential, and long-log sentinels do not enter retrieval, receipts, or compatibility outputs.
 - Prove exact-scan reseed supersedes a former singleton original goal instead of leaving two accepted goals and a continuity conflict.
 - Prove `write_compatibility` rejects a mismatched scan SHA, backs up existing generated packets with SHA-256 manifest evidence, writes three bounded outputs, and leaves canonical authority current.

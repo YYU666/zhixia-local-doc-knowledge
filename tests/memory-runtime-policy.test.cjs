@@ -30,7 +30,7 @@ async function main() {
     maxResults: 999,
   });
   assert.equal(defaultRouterPlan.taskType, "runtime_diagnosis", "performance/cpu task goals should route to runtime_diagnosis");
-  assert.equal(defaultRouterPlan.budgets.tokenBudget, 3000, "MemoryRouter should clamp excessive token budgets");
+  assert.equal(defaultRouterPlan.budgets.tokenBudget, 10000, "MemoryRouter should clamp excessive token budgets at the user-approved ceiling");
   assert.equal(defaultRouterPlan.budgets.topK, 12, "MemoryRouter should clamp excessive topK/maxResults");
   assert.equal(defaultRouterPlan.layers.hot.enabled, true, "MemoryRouter should always enable hot state");
   assert.equal(defaultRouterPlan.layers.warm.enabled, true, "MemoryRouter should always enable warm summaries");

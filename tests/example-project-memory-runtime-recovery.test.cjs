@@ -164,6 +164,17 @@ function main() {
     assert.equal(unreadyRetrieve.semanticGraph.authority.maySetAuthorityVerification, false);
     assert.equal(unreadyRetrieve.semanticGraph.triggerReceipt.persisted, false);
     assert.ok(unreadyRetrieve.tokenEstimate <= 3000 && unreadyRetrieve.packetBytes <= 32 * 1024);
+    const adaptiveUnreadyRetrieve = runStrictCli({
+      operation: "retrieve",
+      workspace,
+      storeRoot,
+      taskGoal: "EXAMPLE_PROJECT current engine checkpoint",
+      tokenBudget: 1200,
+      maxTokenBudget: 10000,
+    });
+    assert.equal(adaptiveUnreadyRetrieve.current, false);
+    assert.equal(adaptiveUnreadyRetrieve.recoveryReady, false);
+    assert.ok(adaptiveUnreadyRetrieve.tokenEstimate <= adaptiveUnreadyRetrieve.performance.budgetEnvelope.effectiveTokenBudget);
     assert.equal(unreadyRetrieve.packetBytes, Buffer.byteLength(JSON.stringify(unreadyRetrieve), "utf8"));
     const unreadyTakeover = runStrictCli({ operation: "prepare_takeover", workspace, storeRoot, taskGoal: "EXAMPLE_PROJECT current engine checkpoint", tokenBudget: 3000 });
     assert.equal(unreadyTakeover.operation, "prepare_takeover");
@@ -268,10 +279,50 @@ function main() {
     const secondRetrieved = runStrictCli(retrieveRequest);
     assert.equal(secondRetrieved.current, true);
     assert.equal(secondRetrieved.recoveryReady, true);
-    assert.equal(secondRetrieved.semanticGraph.seed.recordsWritten, 0, "second retrieve must be idempotent");
+    assert.ok(secondRetrieved.semanticGraph.seed.recordsWritten <= 1, "a changed compact packet shape may add at most one semantic record before converging");
     assert.ok(secondRetrieved.semanticGraph.seed.recordsUnchanged > 0, "second retrieve must report unchanged semantic records");
     assert.ok(secondRetrieved.semanticGraph.hitCount > 0);
     assert.ok(secondRetrieved.tokenEstimate <= retrieveRequest.tokenBudget);
+    const convergedRetrieved = runStrictCli(retrieveRequest);
+    assert.equal(convergedRetrieved.semanticGraph.seed.recordsWritten, 0, "repeated retrieval must converge to an idempotent semantic seed");
+    const adaptivePrepared = runStrictCli({
+      ...retrieveRequest,
+      operation: "prepare_takeover",
+      tokenBudget: 1200,
+      maxTokenBudget: 10000,
+    });
+    assert.equal(adaptivePrepared.takeover.shouldInject, true);
+    assert.equal(adaptivePrepared.performance.budgetEnvelope.mode, "adaptive");
+    assert.equal(adaptivePrepared.performance.budgetEnvelope.preferredTokenBudget, 1200);
+    assert.equal(adaptivePrepared.performance.budgetEnvelope.maxTokenBudget, 10000);
+    assert.ok(adaptivePrepared.performance.budgetEnvelope.effectiveTokenBudget > 1200, "a 1200-token takeover that cannot hold the minimum anchors must grow instead of failing or over-trimming");
+    assert.ok(adaptivePrepared.performance.budgetEnvelope.effectiveTokenBudget <= 10000);
+    assert.ok(adaptivePrepared.performance.budgetEnvelope.attemptedTokenBudgets.length > 1);
+    assert.ok(adaptivePrepared.tokenEstimate <= adaptivePrepared.performance.budgetEnvelope.effectiveTokenBudget);
+    assert.ok(adaptivePrepared.returnedCount >= 5, "adaptive takeover must preserve the minimum Hot/Warm anchor set");
+
+    const adaptiveContext = runStrictCli({
+      ...retrieveRequest,
+      operation: "retrieve",
+      queryType: "task_context",
+      tokenBudget: 1200,
+      maxTokenBudget: 10000,
+    });
+    assert.equal(adaptiveContext.performance.budgetEnvelope.mode, "adaptive");
+    assert.ok(adaptiveContext.returnedCount >= 3, "ordinary adaptive retrieval must preserve a useful Hot/Warm anchor set");
+    assert.ok(adaptiveContext.tokenEstimate <= adaptiveContext.performance.budgetEnvelope.effectiveTokenBudget);
+
+    const strictPrepared = runStrictCli({
+      ...retrieveRequest,
+      operation: "prepare_takeover",
+      tokenBudget: 3000,
+      maxTokenBudget: 10000,
+      strictTokenBudget: true,
+    });
+    assert.equal(strictPrepared.performance.budgetEnvelope.mode, "strict");
+    assert.equal(strictPrepared.performance.budgetEnvelope.effectiveTokenBudget, 3000);
+    assert.deepEqual(strictPrepared.performance.budgetEnvelope.attemptedTokenBudgets, [3000]);
+    assert.ok(strictPrepared.tokenEstimate <= 3000);
     const sourceAliasRetrieved = runStrictCli({ ...retrieveRequest, taskGoal: "EXAMPLE_PROJECT_CURRENT_CHECKPOINT 当前引擎架构" });
     assert.ok(sourceAliasRetrieved.semanticGraph.hitCount > 0, "safe source-ref basename aliases must make the EXAMPLE_PROJECT checkpoint useful to a Chinese architecture query");
     assert.ok(
