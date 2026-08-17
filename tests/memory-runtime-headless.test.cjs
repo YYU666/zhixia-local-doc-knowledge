@@ -40,9 +40,14 @@ function main() {
     fs.mkdirSync(unsafeUserData, { mode: 0o777 });
     fs.chmodSync(unsafeUserData, 0o777);
     const unsafeBefore = fs.readdirSync(unsafeUserData);
-    const unsafeRoot = run({ action: "retrieve_context", workspace, taskGoal: "Alpha runtime" }, { ZHIXIA_USER_DATA: unsafeUserData }, 1);
-    assert.equal(unsafeRoot.error, "PRIVATE_SQLITE_TRUSTED_ROOT_NOT_OWNER_CONTROLLED");
-    assert.deepEqual(fs.readdirSync(unsafeUserData), unsafeBefore, "unsafe headless authority must be rejected before creating storage");
+    if (process.platform === "win32") {
+      const windowsBoundary = run({ action: "retrieve_context", workspace, taskGoal: "Alpha runtime" }, { ZHIXIA_USER_DATA: unsafeUserData });
+      assert.equal(windowsBoundary.memoryMode, "fallback_stale", "Windows cannot infer ACL safety from POSIX mode bits");
+    } else {
+      const unsafeRoot = run({ action: "retrieve_context", workspace, taskGoal: "Alpha runtime" }, { ZHIXIA_USER_DATA: unsafeUserData }, 1);
+      assert.equal(unsafeRoot.error, "PRIVATE_SQLITE_TRUSTED_ROOT_NOT_OWNER_CONTROLLED");
+      assert.deepEqual(fs.readdirSync(unsafeUserData), unsafeBefore, "unsafe headless authority must be rejected before creating storage");
+    }
 
     const initial = run({ action: "retrieve_context", workspace, taskGoal: "Alpha runtime" }, env);
     assert.equal(initial.memoryMode, "fallback_stale", "missing Memory Core must remain fallback_stale");
