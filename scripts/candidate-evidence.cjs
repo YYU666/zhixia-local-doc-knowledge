@@ -202,6 +202,10 @@ function readPackage(root) {
   return JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 }
 
+function npmExecutable(platform = process.platform) {
+  return platform === "win32" ? "npm.cmd" : "npm";
+}
+
 function readToolchain(root) {
   const version = (relativePath) => {
     const packagePath = path.join(root, relativePath, "package.json");
@@ -209,7 +213,7 @@ function readToolchain(root) {
   };
   return {
     node: process.version,
-    npm: childProcess.execFileSync("npm", ["--version"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(),
+    npm: childProcess.execFileSync(npmExecutable(), ["--version"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(),
     platform: process.platform,
     arch: process.arch,
     electron: version("node_modules/electron"),
@@ -412,6 +416,7 @@ module.exports = {
   buildCandidateManifest,
   buildCandidatePayload,
   candidateId,
+  npmExecutable,
   parsePorcelainV1Z,
   readDirtyPostimage,
   verifyCandidateManifest,

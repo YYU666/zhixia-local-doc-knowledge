@@ -6,6 +6,7 @@ const path = require("node:path");
 
 const {
   buildCandidateManifest,
+  npmExecutable,
   verifyCandidateManifest,
   writeCandidateManifest,
 } = require("../scripts/candidate-evidence.cjs");
@@ -69,6 +70,9 @@ function assertPostimageMismatch(root, manifestPath, mutate, message) {
   );
 }
 
+assert.equal(npmExecutable("win32"), "npm.cmd");
+assert.equal(npmExecutable("darwin"), "npm");
+
 (() => {
   const root = fixture();
   try {
@@ -78,7 +82,13 @@ function assertPostimageMismatch(root, manifestPath, mutate, message) {
     write(root, "tracked.txt", "dirty postimage\n");
     write(root, "untracked.txt", "untracked postimage\n");
     fs.unlinkSync(path.join(root, "electron-builder.mac.json"));
-    fs.symlinkSync("tracked.txt", path.join(root, "dirty-link"));
+    let symlinkCreated = false;
+    try {
+      fs.symlinkSync("tracked.txt", path.join(root, "dirty-link"));
+      symlinkCreated = true;
+    } catch (error) {
+      if (process.platform !== "win32" || !["EACCES", "EPERM"].includes(error?.code)) throw error;
+    }
 
     const built = buildCandidateManifest({ root });
     assert.match(built.candidateId, /^[a-f0-9]{64}$/);
@@ -94,7 +104,7 @@ function assertPostimageMismatch(root, manifestPath, mutate, message) {
     assert.equal(dirtyByPath["tracked.txt"].kind, "file");
     assert.equal(dirtyByPath["untracked.txt"].kind, "file");
     assert.equal(dirtyByPath["electron-builder.mac.json"].kind, "missing");
-    assert.equal(dirtyByPath["dirty-link"].kind, "symlink");
+    if (symlinkCreated) assert.equal(dirtyByPath["dirty-link"].kind, "symlink");
 
     const { manifestPath } = writeCandidateManifest({ root });
     const receipt = verifyCandidateManifest({ root, manifestPath });
