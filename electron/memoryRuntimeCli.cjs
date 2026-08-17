@@ -536,7 +536,7 @@ function writeAcceptedEvidenceReceiptStoreUnlocked(storePath, data, options = {}
   try {
     const serialized = `${JSON.stringify(data)}\n`;
     fs.writeFileSync(temporaryPath, serialized, { encoding: "utf8", flag: "wx", mode: 0o600 });
-    const temporaryFd = fs.openSync(temporaryPath, "r");
+    const temporaryFd = fs.openSync(temporaryPath, (options.platform || process.platform) === "win32" ? "r+" : "r");
     try { fs.fsyncSync(temporaryFd); } finally { fs.closeSync(temporaryFd); }
     fs.renameSync(temporaryPath, storePath);
     let directorySync;
