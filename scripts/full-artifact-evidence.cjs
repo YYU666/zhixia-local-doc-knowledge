@@ -282,13 +282,23 @@ function buildProductionSbom(sourceRoot) {
 }
 
 function normalizeArchivePath(value) {
-  return String(value || "").replace(/^[/\\]+/, "").split(path.sep).join("/");
+  return String(value || "").replace(/^[/\\]+/, "").replaceAll("\\", "/");
+}
+
+function archiveLookupPath(value) {
+  return normalizeArchivePath(value).split("/").join(path.sep);
 }
 
 function inventoryAsar(asarPath) {
   const entries = [];
-  for (const archivePath of asar.listPackage(asarPath).map(normalizeArchivePath).filter(Boolean).sort(comparePaths)) {
-    const stat = asar.statFile(asarPath, archivePath, false);
+  const archiveEntries = asar.listPackage(asarPath)
+    .map((rawPath) => ({ path: normalizeArchivePath(rawPath) }))
+    .filter((entry) => entry.path)
+    .sort((left, right) => comparePaths(left.path, right.path));
+  for (const archiveEntry of archiveEntries) {
+    const archivePath = archiveEntry.path;
+    const lookupPath = archiveLookupPath(archivePath);
+    const stat = asar.statFile(asarPath, lookupPath, false);
     if (Object.hasOwn(stat, "files")) continue;
     if (Object.hasOwn(stat, "link")) {
       const rawTarget = String(stat.link || "").replaceAll("\\", "/");
@@ -301,7 +311,7 @@ function inventoryAsar(asarPath) {
       continue;
     }
     if (stat.size == null) throw new Error(`artifact_asar_special_file_forbidden:${archivePath}`);
-    const bytes = asar.extractFile(asarPath, archivePath);
+    const bytes = asar.extractFile(asarPath, lookupPath);
     entries.push({ path: archivePath, type: "file", bytes: bytes.length, sha256: sha256Buffer(bytes), unpacked: stat.unpacked === true });
   }
   return {
@@ -352,7 +362,8 @@ function readToolchain(sourceRoot) {
   };
   let npmVersion = null;
   try {
-    npmVersion = childProcess.execFileSync("npm", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    const invocation = npmVersionInvocation();
+    npmVersion = childProcess.execFileSync(invocation.command, invocation.args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   } catch {
     throw new Error("artifact_npm_toolchain_unavailable");
   }
@@ -365,6 +376,19 @@ function readToolchain(sourceRoot) {
     electronBuilder: readVersion("node_modules/electron-builder"),
     asar: readVersion("node_modules/@electron/asar"),
   };
+}
+
+function npmVersionInvocation(options = {}) {
+  const platform = options.platform || process.platform;
+  const env = options.env || process.env;
+  const npmExecPath = String(env.npm_execpath || "");
+  if (npmExecPath && path.isAbsolute(npmExecPath)) {
+    return { command: process.execPath, args: [npmExecPath, "--version"] };
+  }
+  if (platform === "win32") {
+    return { command: env.ComSpec || "cmd.exe", args: ["/d", "/s", "/c", "npm --version"] };
+  }
+  return { command: "npm", args: ["--version"] };
 }
 
 function selectedSourceEvidence(asarPath) {
@@ -611,6 +635,7 @@ module.exports = {
   enumerateSourceInputs,
   inventoryAsar,
   inventoryBundle,
+  npmVersionInvocation,
   verifyFullArtifactManifest,
   writeFullArtifactManifest,
 };

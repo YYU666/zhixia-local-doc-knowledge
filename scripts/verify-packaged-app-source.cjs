@@ -15,21 +15,25 @@ const {
 } = require("./packaged-source-manifest.cjs");
 
 function normalizeArchivePath(value) {
-  return String(value || "").replace(/^[/\\]+/, "").split(path.sep).join("/");
+  return String(value || "").replace(/^[/\\]+/, "").replaceAll("\\", "/");
+}
+
+function archiveLookupPath(value) {
+  return normalizeArchivePath(value).split("/").join(path.sep);
 }
 
 function selectedArchiveFiles(asarPath) {
   const selected = asar.listPackage(asarPath)
-    .map(normalizeArchivePath)
-    .filter((entry) => entry && PACKAGED_SOURCE_ROOTS.some((root) => entry === root || entry.startsWith(`${root}/`)))
-    .sort(comparePaths);
+    .map((rawPath) => ({ path: normalizeArchivePath(rawPath) }))
+    .filter((entry) => entry.path && PACKAGED_SOURCE_ROOTS.some((root) => entry.path === root || entry.path.startsWith(`${root}/`)))
+    .sort((left, right) => comparePaths(left.path, right.path));
   const files = [];
   for (const entry of selected) {
-    const archiveStat = asar.statFile(asarPath, entry, false);
-    if (Object.hasOwn(archiveStat, "link")) throw new Error(`packaged_source_archive_symlink_forbidden:${entry}`);
+    const archiveStat = asar.statFile(asarPath, archiveLookupPath(entry.path), false);
+    if (Object.hasOwn(archiveStat, "link")) throw new Error(`packaged_source_archive_symlink_forbidden:${entry.path}`);
     if (Object.hasOwn(archiveStat, "files")) continue;
-    if (archiveStat.size == null) throw new Error(`packaged_source_archive_special_file_forbidden:${entry}`);
-    if (!PACKAGED_SOURCE_POLICY.excludedPaths.includes(entry)) files.push(entry);
+    if (archiveStat.size == null) throw new Error(`packaged_source_archive_special_file_forbidden:${entry.path}`);
+    if (!PACKAGED_SOURCE_POLICY.excludedPaths.includes(entry.path)) files.push(entry.path);
   }
   return files;
 }
@@ -71,10 +75,11 @@ function validateManifestEntries(manifest) {
 }
 
 function readManifestFromAsar(asarPath) {
-  const manifestStat = asar.statFile(asarPath, MANIFEST_RELATIVE_PATH, false);
+  const manifestPath = archiveLookupPath(MANIFEST_RELATIVE_PATH);
+  const manifestStat = asar.statFile(asarPath, manifestPath, false);
   if (Object.hasOwn(manifestStat, "link")) throw new Error("packaged_source_manifest_archive_symlink_forbidden");
   if (manifestStat.size == null) throw new Error("packaged_source_manifest_archive_not_file");
-  const bytes = asar.extractFile(asarPath, MANIFEST_RELATIVE_PATH);
+  const bytes = asar.extractFile(asarPath, manifestPath);
   const manifest = JSON.parse(bytes.toString("utf8"));
   if (manifest.schemaVersion !== MANIFEST_SCHEMA) throw new Error("packaged_source_manifest_schema_invalid");
   if (!Array.isArray(manifest.entries) || manifest.entryCount !== manifest.entries.length) {
@@ -110,7 +115,7 @@ function verifyPackagedAppSource(options = {}) {
     throw new Error("packaged_source_manifest_archive_file_set_mismatch");
   }
   for (const entry of manifest.entries) {
-    const archived = asar.extractFile(asarPath, entry.path);
+    const archived = asar.extractFile(asarPath, archiveLookupPath(entry.path));
     if (archived.length !== entry.bytes || sha256Buffer(archived) !== entry.sha256) {
       throw new Error(`packaged_source_archive_hash_mismatch:${entry.path}`);
     }
@@ -123,7 +128,7 @@ function verifyPackagedAppSource(options = {}) {
       }
     }
   }
-  const packagedPackage = JSON.parse(asar.extractFile(asarPath, "package.json").toString("utf8"));
+  const packagedPackage = JSON.parse(asar.extractFile(asarPath, archiveLookupPath("package.json")).toString("utf8"));
   if (sourceRoot) {
     const sourcePackage = JSON.parse(fs.readFileSync(path.join(sourceRoot, "package.json"), "utf8"));
     for (const key of ["name", "version", "main", "productName"]) {

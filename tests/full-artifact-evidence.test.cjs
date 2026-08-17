@@ -6,9 +6,19 @@ const path = require("node:path");
 
 const {
   APP_ASAR_RELATIVE,
+  npmVersionInvocation,
   verifyFullArtifactManifest,
   writeFullArtifactManifest,
 } = require("../scripts/full-artifact-evidence.cjs");
+
+assert.deepEqual(
+  npmVersionInvocation({ platform: "win32", env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" } }),
+  { command: "C:\\Windows\\System32\\cmd.exe", args: ["/d", "/s", "/c", "npm --version"] },
+);
+assert.deepEqual(
+  npmVersionInvocation({ platform: "win32", env: { npm_execpath: path.resolve("npm-cli.js") } }),
+  { command: process.execPath, args: [path.resolve("npm-cli.js"), "--version"] },
+);
 
 const CREATE_ASAR_CHILD = `
 const asar = require(process.argv[1]);
