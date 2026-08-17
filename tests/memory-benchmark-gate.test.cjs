@@ -31,6 +31,17 @@ function releaseInput(corpus = buildMemoryReleaseCorpus()) {
   return { schemaVersion: RELEASE_INPUT_SCHEMA, corpus };
 }
 
+function npmRunInvocation(scriptName) {
+  const npmExecPath = String(process.env.npm_execpath || "");
+  if (npmExecPath && path.isAbsolute(npmExecPath)) {
+    return { command: process.execPath, args: [npmExecPath, "run", "--silent", scriptName] };
+  }
+  if (process.platform === "win32") {
+    return { command: process.env.ComSpec || "cmd.exe", args: ["/d", "/s", "/c", `npm run --silent ${scriptName}`] };
+  }
+  return { command: "npm", args: ["run", "--silent", scriptName] };
+}
+
 try {
   assert.equal(packageJson.scripts["memory:gate"], realGateCommand, "the default package memory gate must execute the 120-case production adapter corpus");
   assert.equal(packageJson.scripts["memory:evaluate:synthetic"], "node scripts/run-memory-release-benchmark.cjs --synthetic", "synthetic metrics must have an explicit evaluation-only command");
@@ -242,12 +253,13 @@ module.exports={schemaVersion:base.schemaVersion,adapterContract:base.adapterCon
     "real execution inputs carrying precomputed metrics or verdicts must fail closed",
   );
 
-  const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-  const packageGateRun = spawnSync(npmCommand, ["run", "--silent", "memory:gate"], {
+  const npmInvocation = npmRunInvocation("memory:gate");
+  const packageGateRun = spawnSync(npmInvocation.command, npmInvocation.args, {
     cwd: repositoryRoot,
     encoding: "utf8",
     maxBuffer: 4 * 1024 * 1024,
   });
+  assert.equal(packageGateRun.error, undefined, packageGateRun.error?.message);
   assert.equal(packageGateRun.status, 0, packageGateRun.stderr);
   const packageGateReceipt = JSON.parse(packageGateRun.stdout);
   assert.equal(packageGateReceipt.gateType, "production_path_release_gate", "npm run memory:gate must invoke the real adapter gate");
