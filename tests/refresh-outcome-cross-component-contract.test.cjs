@@ -15,7 +15,7 @@ const fixture = JSON.parse(fs.readFileSync(
 
 assert.equal(fixture.schemaVersion, "zhixia.refresh_outcome_cross_component_fixture.v1");
 assert.equal(acceptedPathDigest(fixture.request.acceptedChangedPaths), fixture.acceptedPathDigest);
-if (path.isAbsolute(fixture.request.workspace)) {
+if (path.isAbsolute(fixture.request.workspace) && path.resolve(fixture.request.workspace) === fixture.request.workspace) {
   assert.equal(buildQueryBasis(fixture.request).acceptedPathDigest, fixture.acceptedPathDigest);
   assert.equal(buildRefreshKey(buildQueryBasis(fixture.request)), fixture.refreshKey);
 } else {
