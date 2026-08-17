@@ -68,8 +68,9 @@ function fixture(root) {
   return { workspace, storeRoot, authorityKey, request, result };
 }
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-completed-refresh-"));
-try {
+function main() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-completed-refresh-"));
+  try {
   const wideAcceptedPaths = Array.from({ length: 30 }, (_, index) => `src/wide-${String(index).padStart(2, "0")}.ts`);
   assert.match(buildQueryBasis({
     workspace: path.join(root, "wide-workspace"),
@@ -95,6 +96,12 @@ try {
 
   const current = fixture(root);
   const beforeUnknown = snapshot(current.storeRoot);
+  if (process.platform !== "darwin") {
+    assert.equal(queryCompletedRefreshOutcome(current.request, { storeRoot: current.storeRoot }).reasonCodes[0], "refresh_outcome_openat_unavailable");
+    assert.deepEqual(snapshot(current.storeRoot), beforeUnknown, "unsupported-platform query must be byte-, path-, and mode-stable");
+    console.log("Completed refresh outcome unsupported-platform zero-write boundary passed.");
+    return;
+  }
   assert.equal(queryCompletedRefreshOutcome(current.request, { storeRoot: current.storeRoot }).reasonCodes[0], "refresh_outcome_unknown");
   assert.deepEqual(snapshot(current.storeRoot), beforeUnknown, "unknown query must be byte-, path-, and mode-stable");
 
@@ -220,9 +227,9 @@ try {
   const helperOutput = require("node:child_process").execFileSync("/usr/bin/python3", ["-c", helperSource], {
     env: { ...process.env, ZHIXIA_OPENAT_TEST_MARKER: marker },
     input: JSON.stringify({
-    operation: "list_directory",
-    root: swapRoot,
-    directorySegments: ["completed-refresh-outcomes", "v2", current.request.refreshKey.slice(0, 2), current.request.refreshKey],
+      operation: "list_directory",
+      root: swapRoot,
+      directorySegments: ["completed-refresh-outcomes", "v2", current.request.refreshKey.slice(0, 2), current.request.refreshKey],
     }),
     encoding: "utf8",
   });
@@ -238,6 +245,9 @@ try {
   assert.equal(queryCompletedRefreshOutcome(current.request, { storeRoot: symlinkRoot }).reasonCodes[0], "refresh_outcome_unsafe_path");
 
   console.log("Completed refresh outcome publication and zero-write query tests passed.");
-} finally {
-  fs.rmSync(root, { recursive: true, force: true });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
+
+main();
