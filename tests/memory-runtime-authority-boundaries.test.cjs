@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const { execFileSync, spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -8,6 +9,24 @@ const runtimeCli = require("../electron/memoryRuntimeCli.cjs");
 const { invoke } = require("../codex-skills/zhixia-local-docs/scripts/invoke-app-memory-runtime.cjs");
 const { execute } = runtimeCli;
 const runtimeCliPath = path.resolve(__dirname, "..", "electron", "memoryRuntimeCli.cjs");
+
+function snapshot(root) {
+  const entries = [];
+  const visit = (target, relative) => {
+    const stats = fs.lstatSync(target);
+    entries.push({
+      path: relative,
+      mode: stats.mode & 0o777,
+      size: stats.size,
+      sha256: stats.isFile() ? crypto.createHash("sha256").update(fs.readFileSync(target)).digest("hex") : null,
+    });
+    if (stats.isDirectory()) {
+      for (const name of fs.readdirSync(target).sort()) visit(path.join(target, name), path.join(relative, name));
+    }
+  };
+  visit(root, ".");
+  return entries;
+}
 
 function git(workspace, args) {
   return execFileSync("git", args, { cwd: workspace, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -404,6 +423,17 @@ async function testAcceptedEvidenceReceipt(root) {
   );
   receiptStore.receipts.find((entry) => entry.receiptId === tampered.receiptId).binding.lane = "authority-boundary";
   fs.writeFileSync(receiptStorePath, `${JSON.stringify(receiptStore)}\n`, { encoding: "utf8", mode: 0o600 });
+
+  const beforeUnsupportedRefresh = snapshot(storeRoot);
+  assert.throws(
+    () => runtimeCli.executeRefreshBinding(
+      refreshRequest(workspace, storeRoot, scan, previousCheckpointId, receipt.receiptId, [changedPath]),
+      { platform: "win32" },
+    ),
+    /refresh_outcome_publication_unavailable/,
+  );
+  assert.deepEqual(snapshot(storeRoot), beforeUnsupportedRefresh,
+    "unsupported refresh must not consume its receipt, advance a checkpoint, publish a key/outcome, or leave temporary paths");
 
   const refreshed = execute(refreshRequest(workspace, storeRoot, scan, previousCheckpointId, receipt.receiptId, [changedPath]));
   assert.equal(refreshed.current, true);

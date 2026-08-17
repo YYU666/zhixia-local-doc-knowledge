@@ -96,6 +96,11 @@ function main() {
 
   const current = fixture(root);
   const beforeUnknown = snapshot(current.storeRoot);
+  assert.throws(
+    () => publishCompletedRefreshOutcome({ ...current, request: current.request, result: current.result, platform: "win32" }),
+    /refresh_outcome_publication_unavailable/,
+  );
+  assert.deepEqual(snapshot(current.storeRoot), beforeUnknown, "unsupported publication must not create a key, outcome, or temporary path");
   if (process.platform !== "darwin") {
     assert.equal(queryCompletedRefreshOutcome(current.request, { storeRoot: current.storeRoot }).reasonCodes[0], "refresh_outcome_openat_unavailable");
     assert.deepEqual(snapshot(current.storeRoot), beforeUnknown, "unsupported-platform query must be byte-, path-, and mode-stable");

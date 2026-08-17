@@ -26,6 +26,7 @@ const {
 } = require("./memoryRuntimeIndexStore.cjs");
 const { buildSemanticGraphSeedFromRuntimeItems } = require("./semanticMemoryGraphPolicy.cjs");
 const {
+  assertCompletedRefreshOutcomePublicationSupported,
   buildQueryBasis: buildCompletedRefreshQueryBasis,
   buildRefreshKey: buildCompletedRefreshKey,
   publishCompletedRefreshOutcome,
@@ -658,6 +659,36 @@ function issueAcceptedEvidenceReceiptFromApp(request = {}, options = {}) {
   }, MAX_RESUME_PACKET_BYTES, "accepted_evidence_receipt");
 }
 
+function validateAcceptedEvidenceReceipt(receipt, signingKey, scan, previousCheckpointId, acceptedChangedPaths, lane, nowMs) {
+  const receiptId = String(receipt?.receiptId || "");
+  if (!receipt) throw new Error("accepted_evidence_receipt_not_found");
+  if (receipt.status === "consumed") throw new Error("accepted_evidence_receipt_already_consumed");
+  if (receipt.status !== "issued") throw new Error("accepted_evidence_receipt_status_invalid");
+  const binding = receipt.binding || {};
+  const expectedProof = acceptedEvidenceReceiptProof(signingKey, binding);
+  const actualProof = String(receipt.proof || "");
+  if (!/^[a-f0-9]{64}$/.test(actualProof) || !crypto.timingSafeEqual(Buffer.from(actualProof), Buffer.from(expectedProof))) {
+    throw new Error("accepted_evidence_receipt_proof_invalid");
+  }
+  if (receiptId !== `accepted-evidence-${sha256(`${actualProof}:${binding.nonce}`).slice(0, 32)}`) {
+    throw new Error("accepted_evidence_receipt_id_invalid");
+  }
+  if (Date.parse(binding.issuedAt || "") > nowMs || Date.parse(binding.expiresAt || "") <= nowMs) {
+    throw new Error("accepted_evidence_receipt_expired");
+  }
+  const expected = acceptedEvidenceBinding(
+    scan, previousCheckpointId, acceptedChangedPaths, lane, "accept", binding.issuer, binding.issuedAt, binding.expiresAt, binding.nonce,
+  );
+  if (stableStringify(binding) !== stableStringify(expected)) throw new Error("accepted_evidence_receipt_binding_mismatch");
+  return {
+    receiptId,
+    receiptDigest: sha256(stableStringify({ binding, proof: actualProof })),
+    issuer: binding.issuer,
+    issuedAt: binding.issuedAt,
+    expiresAt: binding.expiresAt,
+  };
+}
+
 function consumeAcceptedEvidenceReceipt(storeRoot, scan, request, previousCheckpointId, acceptedChangedPaths, lane, options = {}) {
   const receiptId = compactText(request.acceptedEvidenceReceipt || request.evidence?.acceptedEvidenceReceipt, 220);
   if (!/^accepted-evidence-[a-f0-9]{32}$/.test(receiptId)) throw new Error("refresh_binding_accepted_evidence_receipt_invalid");
@@ -666,37 +697,28 @@ function consumeAcceptedEvidenceReceipt(storeRoot, scan, request, previousCheckp
   const nowMs = trustedAuthorityNowMs(options);
   const mutation = mutateAcceptedEvidenceReceiptStore(storeRoot, scan.projectIdentity.projectId, (data) => {
     const receipt = data.receipts.find((candidate) => candidate.receiptId === receiptId);
-    if (!receipt) throw new Error("accepted_evidence_receipt_not_found");
-    if (receipt.status === "consumed") throw new Error("accepted_evidence_receipt_already_consumed");
-    if (receipt.status !== "issued") throw new Error("accepted_evidence_receipt_status_invalid");
-    const binding = receipt.binding || {};
-    const expectedProof = acceptedEvidenceReceiptProof(signingKey, binding);
-    const actualProof = String(receipt.proof || "");
-    if (!/^[a-f0-9]{64}$/.test(actualProof) || !crypto.timingSafeEqual(Buffer.from(actualProof), Buffer.from(expectedProof))) {
-      throw new Error("accepted_evidence_receipt_proof_invalid");
-    }
-    if (receiptId !== `accepted-evidence-${sha256(`${actualProof}:${binding.nonce}`).slice(0, 32)}`) {
-      throw new Error("accepted_evidence_receipt_id_invalid");
-    }
-    if (Date.parse(binding.issuedAt || "") > nowMs || Date.parse(binding.expiresAt || "") <= nowMs) {
-      throw new Error("accepted_evidence_receipt_expired");
-    }
-    const expected = acceptedEvidenceBinding(
-      scan, previousCheckpointId, acceptedChangedPaths, lane, "accept", binding.issuer, binding.issuedAt, binding.expiresAt, binding.nonce,
+    const validated = validateAcceptedEvidenceReceipt(
+      receipt, signingKey, scan, previousCheckpointId, acceptedChangedPaths, lane, nowMs,
     );
-    if (stableStringify(binding) !== stableStringify(expected)) throw new Error("accepted_evidence_receipt_binding_mismatch");
     receipt.status = "consumed";
     receipt.consumedAt = new Date(nowMs).toISOString();
     receipt.consumedBy = sha256(stableStringify({ projectId: scan.projectIdentity.projectId, scanSha256: scan.scanSha256, previousCheckpointId, lane }));
-    return {
-      receiptId,
-      receiptDigest: sha256(stableStringify({ binding, proof: actualProof })),
-      issuer: binding.issuer,
-      issuedAt: binding.issuedAt,
-      expiresAt: binding.expiresAt,
-    };
+    return validated;
   }, options);
   return { ...mutation.value, persistence: mutation.persistence };
+}
+
+function inspectAcceptedEvidenceReceipt(storeRoot, scan, request, previousCheckpointId, acceptedChangedPaths, lane, options = {}) {
+  const receiptId = compactText(request.acceptedEvidenceReceipt || request.evidence?.acceptedEvidenceReceipt, 220);
+  if (!/^accepted-evidence-[a-f0-9]{32}$/.test(receiptId)) throw new Error("refresh_binding_accepted_evidence_receipt_invalid");
+  const signingKey = loadExistingSigningKey(storeRoot);
+  if (!signingKey) throw new Error("accepted_evidence_receipt_authority_unavailable");
+  const nowMs = trustedAuthorityNowMs(options);
+  const { data } = readAcceptedEvidenceReceiptStore(storeRoot, scan.projectIdentity.projectId);
+  const receipt = data.receipts.find((candidate) => candidate.receiptId === receiptId);
+  return validateAcceptedEvidenceReceipt(
+    receipt, signingKey, scan, previousCheckpointId, acceptedChangedPaths, lane, nowMs,
+  );
 }
 
 function consumeAcceptedEvidenceReceiptForTest(request = {}, options = {}) {
@@ -2458,6 +2480,10 @@ function executeRefreshBinding(request = {}, options = {}) {
   }
   const lane = compactSafeText(request.lane || payload.lane || payload.moduleId, 180);
   if (!lane) throw new Error("refresh_binding_lane_required");
+  inspectAcceptedEvidenceReceipt(
+    storeRoot, scan, request, expectedCheckpointId, acceptedChangedPaths, lane, options,
+  );
+  assertCompletedRefreshOutcomePublicationSupported(options);
   const acceptedEvidence = consumeAcceptedEvidenceReceipt(
     storeRoot, scan, request, expectedCheckpointId, acceptedChangedPaths, lane, options,
   );

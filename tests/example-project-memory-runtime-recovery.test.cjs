@@ -611,27 +611,34 @@ function main() {
       ...refreshRequest,
       evidence: { ...refreshRequest.evidence, sourceRefs: [{ ...hashScanReceipt, path: `memory-runtime:\/\/other\/${hashScan.scanSha256}` }, ...refreshRequest.evidence.sourceRefs.slice(1)] },
     }), /non_file_source_ref_not_trusted/);
-    const hashRefresh = execute(refreshRequest);
-    assert.equal(hashRefresh.status, "verified", JSON.stringify(hashRefresh));
-    assert.equal(hashRefresh.current, true);
-    assert.equal(hashRefresh.recoveryReady, true);
-    assert.equal(hashRefresh.scanSha256, hashScan.scanSha256);
-    assert.equal(hashRefresh.previousCheckpointId, previousCheckpointId);
-    assert.notEqual(hashRefresh.authorizedCheckpointId, previousCheckpointId);
-    assert.match(hashRefresh.receiptId, /^authority-decision-/);
-    assert.match(hashRefresh.contextGenerationId, /^context-[a-f0-9]{24}$/);
-    assert.equal(hashRefresh.takeover.shouldInject, true);
-    assert.equal(hashRefresh.safety.unacceptedChangeAutoSeeded, false);
-    assertSafeBounded(hashRefresh, 16 * 1024);
-    const hashRefreshVerify = execute({ operation: "verify", workspace, storeRoot, relativePaths: refreshRelativePaths });
-    assert.equal(hashRefreshVerify.scanBinding.authorizedBindingCount, 1, "the exact internal scan receipt must survive checkpoint and authority-receipt persistence");
-    assert.equal(hashRefreshVerify.scanBinding.matchedPath, hashScanReceipt.path);
-    const refreshedRecall = execute({ operation: "retrieve", workspace, storeRoot, relativePaths: refreshRelativePaths, taskGoal: "current checkpoint clarification", queryType: "thread_recovery", limit: 12, tokenBudget: 3000 });
-    const clarifiedItem = refreshedRecall.items.find((item) => (
-      /accepted checkpoint clarification|checkpoint clarification accepted/i.test(`${item.title} ${item.summary}`)
-      && item.sourceRefs?.some((ref) => ref.title === "docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md")
-    ));
-    assert.ok(clarifiedItem, "refresh binding must preserve the accepted changed file as the item evidence ref");
+    if (process.platform === "darwin") {
+      const hashRefresh = execute(refreshRequest);
+      assert.equal(hashRefresh.status, "verified", JSON.stringify(hashRefresh));
+      assert.equal(hashRefresh.current, true);
+      assert.equal(hashRefresh.recoveryReady, true);
+      assert.equal(hashRefresh.scanSha256, hashScan.scanSha256);
+      assert.equal(hashRefresh.previousCheckpointId, previousCheckpointId);
+      assert.notEqual(hashRefresh.authorizedCheckpointId, previousCheckpointId);
+      assert.match(hashRefresh.receiptId, /^authority-decision-/);
+      assert.match(hashRefresh.contextGenerationId, /^context-[a-f0-9]{24}$/);
+      assert.equal(hashRefresh.takeover.shouldInject, true);
+      assert.equal(hashRefresh.safety.unacceptedChangeAutoSeeded, false);
+      assertSafeBounded(hashRefresh, 16 * 1024);
+      const hashRefreshVerify = execute({ operation: "verify", workspace, storeRoot, relativePaths: refreshRelativePaths });
+      assert.equal(hashRefreshVerify.scanBinding.authorizedBindingCount, 1, "the exact internal scan receipt must survive checkpoint and authority-receipt persistence");
+      assert.equal(hashRefreshVerify.scanBinding.matchedPath, hashScanReceipt.path);
+      const refreshedRecall = execute({ operation: "retrieve", workspace, storeRoot, relativePaths: refreshRelativePaths, taskGoal: "current checkpoint clarification", queryType: "thread_recovery", limit: 12, tokenBudget: 3000 });
+      const clarifiedItem = refreshedRecall.items.find((item) => (
+        /accepted checkpoint clarification|checkpoint clarification accepted/i.test(`${item.title} ${item.summary}`)
+        && item.sourceRefs?.some((ref) => ref.title === "docs/EXAMPLE_PROJECT_CURRENT_CHECKPOINT.md")
+      ));
+      assert.ok(clarifiedItem, "refresh binding must preserve the accepted changed file as the item evidence ref");
+    } else {
+      assert.throws(() => execute(refreshRequest), /refresh_outcome_publication_unavailable/);
+      const unsupportedVerify = execute({ operation: "verify", workspace, storeRoot, relativePaths: refreshRelativePaths });
+      assert.equal(unsupportedVerify.scanBinding.authorizedCheckpointId, previousCheckpointId);
+      assert.equal(unsupportedVerify.current, false, "unsupported refresh publication must not advance authority");
+    }
 
     const advancedHead = commitAll(workspace, "EXAMPLE_PROJECT handoff clarification");
     assert.notEqual(advancedHead, baselineHead);
@@ -710,7 +717,7 @@ function main() {
       acceptedChangedPaths: saturatedAcceptedPaths,
       lane: "example_project-two-commit-source-lane",
     });
-    const saturatedRefresh = execute({
+    const saturatedRefreshRequest = {
       operation: "refresh_binding",
       workspace,
       storeRoot,
@@ -735,13 +742,21 @@ function main() {
           return { path: relativePath, hash: ref.hash };
         }),
       },
-    });
-    assert.equal(saturatedRefresh.current, true, JSON.stringify(saturatedRefresh));
-    assert.equal(saturatedRefresh.scanSha256, saturatedHeadScan.scanSha256);
-    assert.equal(saturatedRefresh.scanProfile.persisted, true);
-    const ordinaryPostRefreshVerify = execute({ operation: "verify", workspace, storeRoot });
-    assert.equal(ordinaryPostRefreshVerify.current, true, JSON.stringify(ordinaryPostRefreshVerify));
-    assert.equal(ordinaryPostRefreshVerify.scanBinding.currentScanSha256, saturatedHeadScan.scanSha256);
+    };
+    if (process.platform === "darwin") {
+      const saturatedRefresh = execute(saturatedRefreshRequest);
+      assert.equal(saturatedRefresh.current, true, JSON.stringify(saturatedRefresh));
+      assert.equal(saturatedRefresh.scanSha256, saturatedHeadScan.scanSha256);
+      assert.equal(saturatedRefresh.scanProfile.persisted, true);
+      const ordinaryPostRefreshVerify = execute({ operation: "verify", workspace, storeRoot });
+      assert.equal(ordinaryPostRefreshVerify.current, true, JSON.stringify(ordinaryPostRefreshVerify));
+      assert.equal(ordinaryPostRefreshVerify.scanBinding.currentScanSha256, saturatedHeadScan.scanSha256);
+    } else {
+      assert.throws(() => execute(saturatedRefreshRequest), /refresh_outcome_publication_unavailable/);
+      const unsupportedVerify = execute({ operation: "verify", workspace, storeRoot });
+      assert.equal(unsupportedVerify.scanBinding.authorizedCheckpointId, preSaturationCheckpointId);
+      assert.equal(unsupportedVerify.current, false);
+    }
 
     console.log("EXAMPLE_PROJECT app-owned Memory Runtime recovery integration tests passed.");
   } finally {

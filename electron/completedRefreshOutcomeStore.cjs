@@ -84,6 +84,12 @@ function unavailable(request, reason) {
   };
 }
 
+function assertCompletedRefreshOutcomePublicationSupported(options = {}) {
+  if ((options.platform || process.platform) !== "darwin") {
+    throw new Error("refresh_outcome_publication_unavailable");
+  }
+}
+
 function containedRelative(root, candidate) {
   const relative = path.relative(root, candidate);
   if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
@@ -352,6 +358,7 @@ function buildOutcome(basis, refreshKey, result, signingIdentity) {
 }
 
 function publishCompletedRefreshOutcome(options = {}) {
+  assertCompletedRefreshOutcomePublicationSupported(options);
   const basis = buildQueryBasis(options.request);
   const refreshKey = buildRefreshKey(basis);
   if (options.request.refreshKey && options.request.refreshKey !== refreshKey) throw new Error("refresh_outcome_refresh_key_mismatch");
@@ -389,6 +396,7 @@ function publishCompletedRefreshOutcome(options = {}) {
 module.exports = {
   OUTCOME_SCHEMA,
   acceptedPathDigest,
+  assertCompletedRefreshOutcomePublicationSupported,
   buildQueryBasis,
   buildRefreshKey,
   publishCompletedRefreshOutcome,
