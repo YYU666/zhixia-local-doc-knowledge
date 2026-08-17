@@ -27,12 +27,30 @@ function main() {
   fs.mkdirSync(path.join(workspace, "docs"), { recursive: true });
   fs.writeFileSync(path.join(workspace, "docs", "PRD.md"), "# Alpha PRD\nCanonical acceptance source.\n", "utf8");
   fs.writeFileSync(path.join(workspace, ".codex-knowledge", "retrieval-packet.md"), "# Alpha runtime\nCurrent bounded context.\n", "utf8");
+  const sidecarRoot = path.join(userData, "memory-runtime");
+  const sidecarPath = path.join(sidecarRoot, "memory-runtime-index.sqlite");
+  fs.mkdirSync(sidecarRoot, { recursive: true, mode: 0o777 });
+  fs.chmodSync(sidecarRoot, 0o777);
+  fs.writeFileSync(sidecarPath, "", { mode: 0o666 });
+  fs.chmodSync(sidecarPath, 0o666);
   const env = { ZHIXIA_USER_DATA: userData };
 
   try {
+    const unsafeUserData = path.join(root, "unsafe-user-data");
+    fs.mkdirSync(unsafeUserData, { mode: 0o777 });
+    fs.chmodSync(unsafeUserData, 0o777);
+    const unsafeBefore = fs.readdirSync(unsafeUserData);
+    const unsafeRoot = run({ action: "retrieve_context", workspace, taskGoal: "Alpha runtime" }, { ZHIXIA_USER_DATA: unsafeUserData }, 1);
+    assert.equal(unsafeRoot.error, "PRIVATE_SQLITE_TRUSTED_ROOT_NOT_OWNER_CONTROLLED");
+    assert.deepEqual(fs.readdirSync(unsafeUserData), unsafeBefore, "unsafe headless authority must be rejected before creating storage");
+
     const initial = run({ action: "retrieve_context", workspace, taskGoal: "Alpha runtime" }, env);
     assert.equal(initial.memoryMode, "fallback_stale", "missing Memory Core must remain fallback_stale");
     assert.equal(initial.triggerReceipt.action, "retrieve_context");
+    if (process.platform !== "win32") {
+      assert.equal(fs.statSync(sidecarRoot).mode & 0o777, 0o700, "headless runtime must repair its private sidecar directory");
+      assert.equal(fs.statSync(sidecarPath).mode & 0o777, 0o600, "headless runtime must repair its pre-existing database mode");
+    }
 
     const writeback = run({
       action: "writeback_evidence",

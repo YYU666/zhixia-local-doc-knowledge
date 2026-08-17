@@ -5,6 +5,11 @@ const path = require("node:path");
 const { fileURLToPath } = require("node:url");
 const { DatabaseSync } = require("node:sqlite");
 const {
+  derivePrivateSqliteTrustedRoot,
+  preparePrivateSqliteStorage,
+  repairPrivateSqliteFiles,
+} = require("./private-sqlite-storage.cjs");
+const {
   buildMemoryCoreContinuityStatus,
   buildRuntimeContextPacket,
   buildRuntimePrecedentPacket,
@@ -47,6 +52,10 @@ function resolveUserData(env = process.env) {
 
 function databasePath(env = process.env) {
   return path.join(resolveUserData(env), "memory-runtime", "memory-runtime-index.sqlite");
+}
+
+function storageTrustedRoot(env = process.env) {
+  return derivePrivateSqliteTrustedRoot(path.dirname(databasePath(env)));
 }
 
 function readRequest(argv = process.argv.slice(2)) {
@@ -97,7 +106,8 @@ function normalizeSourceRefs(sourceRefs, identity) {
 
 function openDatabase(env = process.env) {
   const dbPath = databasePath(env);
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const trustedRoot = storageTrustedRoot(env);
+  preparePrivateSqliteStorage(dbPath, { trustedRoot });
   const db = new DatabaseSync(dbPath);
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -141,6 +151,7 @@ function openDatabase(env = process.env) {
     );
     CREATE INDEX IF NOT EXISTS idx_headless_worker_events_task ON headless_worker_task_events(projectId, workerTaskId, createdAt DESC);
   `);
+  repairPrivateSqliteFiles(dbPath, { trustedRoot });
   return { db, dbPath };
 }
 
@@ -454,7 +465,8 @@ function main() {
   try {
     process.stdout.write(`${JSON.stringify(execute(readRequest()))}\n`);
   } catch (error) {
-    process.stdout.write(`${JSON.stringify({ schemaVersion: HEADLESS_SCHEMA, status: "error", error: compact(error?.message || error, 240) })}\n`);
+    const publicError = String(error?.code || "").startsWith("PRIVATE_SQLITE_") ? error.code : error?.message || error;
+    process.stdout.write(`${JSON.stringify({ schemaVersion: HEADLESS_SCHEMA, status: "error", error: compact(publicError, 240) })}\n`);
     process.exitCode = 1;
   }
 }

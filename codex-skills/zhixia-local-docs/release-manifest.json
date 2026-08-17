@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "zhixia.skill_release_manifest.v1",
+  "skillName": "zhixia-local-docs",
+  "inclusionPolicy": {
+    "schemaVersion": "zhixia.skill_release_inclusion_policy.v1",
+    "inclusion": "all_regular_files_recursive",
+    "excludedPaths": [
+      "release-manifest.json"
+    ],
+    "requiredPaths": [
+      "SKILL.md",
+      "agents/openai.yaml"
+    ],
+    "symlinkPolicy": "forbid",
+    "specialFilePolicy": "forbid"
+  },
+  "entryCount": 16,
+  "entries": [
+    {
+      "path": "SKILL.md",
+      "bytes": 15970,
+      "sha256": "531bfa4cff948927b41c14d54850cc83fff7a2bb31474d054c9a4d1ac45672d9"
+    },
+    {
+      "path": "agents/openai.yaml",
+      "bytes": 255,
+      "sha256": "90c5530730f026789e6becf6f74b67727fe0428eac226552fca7830986e9adb7"
+    },
+    {
+      "path": "references/app-owned-memory-runtime.md",
+      "bytes": 10055,
+      "sha256": "84bef0142d6321d81884f800f80a8fc18d9663c29158213e3426bcd9eb972da1"
+    },
+    {
+      "path": "references/context-bundle.md",
+      "bytes": 4294,
+      "sha256": "6bb6756ca36f9f667b4f15ce2f943ad98536486d38e4dcca0e700f34f913f1fa"
+    },
+    {
+      "path": "references/headless-runtime-contract.md",
+      "bytes": 2867,
+      "sha256": "dff04a58171547dff41e2ea3d823529483f5f11951477fcab2790dde91032457"
+    },
+    {
+      "path": "references/memory-core-lifecycle.md",
+      "bytes": 10708,
+      "sha256": "1fb5ba5117372a9272bdcf3ce6b707b8514633e28daed4c1951714818ff4b0d5"
+    },
+    {
+      "path": "references/openclaw-cold-archive.md",
+      "bytes": 2290,
+      "sha256": "cfd949bb6061391b8f98d3792907fc0a2fc0b88b9ee7f0ceb26f1748b87f1dac"
+    },
+    {
+      "path": "scripts/codex-control-mcp.cjs",
+      "bytes": 31420,
+      "sha256": "c4eb443ee89de5566acb973eda3da11ae0182b737a0ccb6935754125cae18154"
+    },
+    {
+      "path": "scripts/invoke-app-memory-runtime.cjs",
+      "bytes": 5659,
+      "sha256": "18642d5b74a4837dc04751b072b2737b0a4f1f52a0b8b4a41b8edf75d16548b8"
+    },
+    {
+      "path": "scripts/memory-runtime-headless.cjs",
+      "bytes": 23354,
+      "sha256": "9d5be1f40951606b183d86369ca87a3d12bab46cae8d17561c8bd6044226fe06"
+    },
+    {
+      "path": "scripts/memory-runtime-mcp.cjs",
+      "bytes": 9890,
+      "sha256": "0a229089828472f0fa708b7b889a0b795af419a67b5216c99ab8b31b8f134ca6"
+    },
+    {
+      "path": "scripts/openclaw-memory-archive-index.cjs",
+      "bytes": 22715,
+      "sha256": "942628f99cd84cf22b1061dac20ed8deb5bed93ed1c3f0cc37fdf8da2a4d3ee7"
+    },
+    {
+      "path": "scripts/private-sqlite-storage.cjs",
+      "bytes": 15412,
+      "sha256": "95f5706843ec3fa08b118d1ff60c52ea002d4bb93f58806dd6db9e7db1a72c34"
+    },
+    {
+      "path": "scripts/project-identity.cjs",
+      "bytes": 4887,
+      "sha256": "54d982e47230ba5c49aa2ff44663e5813bbbe346be7d246ce461d26036598b9e"
+    },
+    {
+      "path": "scripts/read-openclaw-memory-archive.cjs",
+      "bytes": 2525,
+      "sha256": "606e790405cf642128636ef5c7b52dda8399390fb8e208976692b6f99388fb37"
+    },
+    {
+      "path": "scripts/read-project-knowledge.cjs",
+      "bytes": 148033,
+      "sha256": "57e15342d4665446ffe65659949119b92aa04814bfb103742e0c2e854d42f22b"
+    }
+  ],
+  "payloadSha256": "b5ec0c67a663a198561aa1ad883f59f16514204641ba29af5d7d54fe70baf1ca",
+  "releaseGeneration": "sha256:b5ec0c67a663a198561aa1ad883f59f16514204641ba29af5d7d54fe70baf1ca"
+}

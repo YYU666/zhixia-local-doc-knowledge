@@ -140,6 +140,16 @@ export type SkillStatus = {
   installedVersion: string | null;
   sourceFingerprint: string | null;
   installedFingerprint: string | null;
+  releaseGeneration?: string | null;
+  releaseEntryCount?: number;
+  releaseParity?: {
+    readOnly: true;
+    verified: boolean;
+    bundled: string;
+    installed: string;
+    upgradePlan: { state: string; required?: boolean | null; executable: false; reason?: string };
+  } | null;
+  releaseParityError?: string | null;
   updateAvailable: boolean;
 };
 
@@ -1003,6 +1013,7 @@ export type AgentRetrieveOptions = {
   tokenBudget?: number;
   maxResults?: number;
   includeKinds?: AgentRetrieveKind[];
+  readOnly?: boolean;
 };
 
 export type AgentRetrieveResult = {
@@ -1017,6 +1028,9 @@ export type AgentRetrieveResult = {
   tokenEstimate: number;
   freshness: AgentRetrieveFreshness;
   generatedAt: string;
+  availability?: "available" | "unavailable";
+  reasonCodes?: string[];
+  readOnly?: boolean;
   cache?: AgentRetrieveCacheInfo;
   items: AgentRetrieveItem[];
 };
@@ -1205,6 +1219,47 @@ export type MemoryCoreContinuityPage = {
   nextCursor: string | null;
   mandatoryComplete: boolean;
   warnings: string[];
+};
+
+export type ProjectReleaseEvidenceEnvelope = {
+  schemaVersion: "zhixia.release_evidence_load.v1";
+  status: "verified" | "missing" | "invalid";
+  readOnly: true;
+  project: {
+    projectId: string;
+    canonicalRepoId: string;
+    projectIdentitySha256: string;
+    gitHead: string | null;
+  };
+  receipt: {
+    schemaVersion: "zhixia.release_evidence_receipt.v1";
+    receiptId: string;
+    decision: "release_ready";
+    projectIdentity: { projectId: string; canonicalRepoId: string; projectIdentitySha256: string };
+    issuer: {
+      id: string;
+      role: "independent_release_qa";
+      sourceRef: { path: string; sha256: string };
+    };
+    issuedAt: string;
+    expiresAt: string;
+    gates: Array<{
+      id: string;
+      status: "pass";
+      sourceRefs: Array<{ path: string; sha256: string }>;
+    }>;
+  } | null;
+  verification: {
+    verified: boolean;
+    reasonCodes: string[];
+    receiptPath?: string;
+    receiptSha256?: string;
+    gitHead?: string;
+    trackedAtHead?: boolean;
+    headBytesMatch?: boolean;
+    sourceRefsVerified?: boolean;
+    verifiedSourceRefs?: Array<{ gateId: string; path: string; sha256: string }>;
+  };
 };
 
 export type MemoryCoreDiagnostics = {
@@ -2055,6 +2110,14 @@ export type AgentRuntimeMonitorOptions = {
 declare global {
   interface Window {
     docKnowledge: {
+      platformCapabilities: {
+        guardian: {
+          supported: boolean;
+          adapter: "windows_powershell" | "unavailable";
+          reason: string | null;
+        };
+      };
+      getPlatformGuardianCapability: () => Promise<{ supported: boolean; adapter: "windows_powershell" | "unavailable"; reason: string | null }>;
       listDocuments: (options?: { includeContentText?: boolean; contentTextLimit?: number }) => Promise<{
         documents: KnowledgeDocument[];
         storePath: string;
@@ -2187,8 +2250,50 @@ declare global {
       ) => Promise<{ ok: true; candidate: SkillCandidate | null; overview: MemoryOverview }>;
       retrieveAgentContext: (options?: AgentRetrieveOptions) => Promise<AgentRetrieveResult>;
       retrieveMemoryRuntimeContext: (options?: AgentRetrieveOptions & { taskGoal?: string; threadId?: string | null; allowedKinds?: AgentRetrieveKind[] }) => Promise<RuntimeContextPacket>;
+      reviewMemoryRuntimeAuthority: (options: {
+        workspace: string;
+        acceptedChangedPaths: string[];
+        execute?: boolean;
+        userConfirmed?: boolean;
+        decision?: "accept";
+        reviewToken?: string;
+        expectedProjectIdentitySha256?: string;
+        expectedScanSha256?: string;
+        previousCheckpointId?: string;
+        sourceRefs?: Array<{ path: string; sha256: string }>;
+        issuer?: string;
+        lane?: string;
+        title?: string;
+        summary?: string;
+        expiresAt?: string;
+      }) => Promise<{
+        status: "review_required" | "verified";
+        reviewToken?: string;
+        binding: { projectIdentitySha256: string; scanSha256: string; previousCheckpointId: string; acceptedChangedPaths: string[] };
+        files?: Array<{ relativePath: string; sha256: string; sizeBytes: number }>;
+        receipt?: { receiptId: string; issuer: string; issuedAt: string; expiresAt: string };
+        refresh?: { checkpointId: string; scanSha256: string; contextGenerationId: string };
+        verification?: { memoryMode: string; authorityVerification: string; current: boolean; recoveryReady: boolean; matched: boolean };
+      }>;
+      acceptMemoryRuntimeAuthority: (options: {
+        workspace: string;
+        acceptedChangedPaths: string[];
+        execute: true;
+        userConfirmed: true;
+        decision: "accept";
+        reviewToken: string;
+        expectedProjectIdentitySha256: string;
+        expectedScanSha256: string;
+        previousCheckpointId: string;
+        sourceRefs: Array<{ path: string; sha256: string }>;
+        issuer?: string;
+        lane?: string;
+        title?: string;
+        summary?: string;
+        expiresAt?: string;
+      }) => ReturnType<Window["docKnowledge"]["reviewMemoryRuntimeAuthority"]>;
       activateMemoryRuntimeGraph: (options?: AgentRetrieveOptions & { taskGoal?: string; threadId?: string | null; maxNodes?: number; seedLimit?: number }) => Promise<MemoryGraph & { sync?: { nodes: number; edges: number; projectCount: number; projectPath?: string | null; limit: number } }>;
-      getSemanticMemoryGraphView: (options: { projectPath: string; taskGoal?: string; maxNodes?: number; maxEdges?: number; centerNodeId?: string | null }) => Promise<MemoryGraph>;
+      getSemanticMemoryGraphView: (options: { projectPath: string; taskGoal?: string; maxNodes?: number; maxEdges?: number; centerNodeId?: string | null; readOnly?: boolean }) => Promise<MemoryGraph>;
       retrieveMemoryRuntimePrecedent: (options?: { taskType?: string; task_type?: string; query?: string; projectPath?: string | null; parentCeoThreadId?: string | null; tokenBudget?: number; maxResults?: number; allowedKinds?: AgentRetrieveKind[] }) => Promise<RuntimeContextPacket>;
       recoverMemoryRuntimeThread: (options?: { threadId?: string | null; ceoThreadId?: string | null; title?: string; threadTitle?: string; query?: string; taskGoal?: string; projectPath?: string | null; tokenBudget?: number; maxResults?: number; replacementThreadId?: string | null; takeoverThreadId?: string | null; observeRuntimeEvent?: boolean }) => Promise<ThreadRecoveryPacket>;
       evaluateCeoThreadPressure: (options?: CeoThreadPressureMetrics & { threadId?: string | null; currentThreadId?: string | null; projectPath?: string | null }) => Promise<CeoThreadPressureReport>;
@@ -2206,6 +2311,7 @@ declare global {
       listMemoryCoreReviewQueue: (options?: { projectId?: string | null; projectPath?: string | null; limit?: number }) => Promise<MemoryCoreReviewQueue>;
       getMemoryCoreContinuityStatus: (options?: { projectId?: string | null; projectPath?: string | null; projectName?: string; projectSummary?: string; tokenBudget?: number; maxPacketItems?: number; maxPacketChars?: number }) => Promise<MemoryCoreContinuityStatus>;
       getProjectContinuity: (options: { projectPath: string; projectId?: string | null; projectName?: string; projectSummary?: string; moduleId?: string; taskGoal?: string; query?: string; cursor?: string | null; tokenBudget?: number; maxPacketItems?: number; maxPacketChars?: number }) => Promise<MemoryCoreContinuityPage>;
+      loadProjectReleaseEvidence: (options: { projectPath: string }) => Promise<ProjectReleaseEvidenceEnvelope>;
       closeWorkingMemory: (options: { taskId: string; status?: WorkingMemoryRecord["status"]; nextAction?: string; projectId?: string | null; moduleId?: string | null }) => Promise<WorkingMemoryRecord>;
       promoteMemory: (candidate: MemoryPromotionCandidate) => Promise<MemoryPromotionResult>;
       listRetrieveLogs: (options?: { limit?: number }) => Promise<{ logs: AgentRetrieveLogEntry[] }>;

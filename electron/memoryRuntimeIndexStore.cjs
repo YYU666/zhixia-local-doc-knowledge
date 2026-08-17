@@ -1,6 +1,11 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const {
+  derivePrivateSqliteTrustedRoot,
+  preparePrivateSqliteStorage,
+  repairPrivateSqliteFiles,
+} = require("../codex-skills/zhixia-local-docs/scripts/private-sqlite-storage.cjs");
 let DatabaseSync = null;
 try {
   ({ DatabaseSync } = require("node:sqlite"));
@@ -361,6 +366,10 @@ function indexPath(storeRoot) {
   return path.join(storeRoot, "memory-runtime-index.sqlite");
 }
 
+function storageTrustedRoot(storeRoot) {
+  return derivePrivateSqliteTrustedRoot(storeRoot);
+}
+
 function closeDatabase(db) {
   if (!db) return;
   try {
@@ -653,10 +662,13 @@ function ensureSemanticMemoryGraphSchema(db) {
 
 function openMemoryRuntimeIndex(storeRoot) {
   if (!DatabaseSync) throw new Error("node:sqlite is unavailable; Memory Runtime sidecar requires Node 24+.");
-  fs.mkdirSync(storeRoot, { recursive: true });
+  const resolvedStoreRoot = path.resolve(storeRoot);
+  const trustedRoot = storageTrustedRoot(resolvedStoreRoot);
+  const filePath = indexPath(resolvedStoreRoot);
+  preparePrivateSqliteStorage(filePath, { trustedRoot });
   let db = null;
   try {
-    db = new DatabaseSync(indexPath(storeRoot));
+    db = new DatabaseSync(filePath);
     db.exec(`
     PRAGMA busy_timeout = ${MEMORY_RUNTIME_BUSY_TIMEOUT_MS};
     PRAGMA journal_mode = WAL;
@@ -737,6 +749,7 @@ function openMemoryRuntimeIndex(storeRoot) {
       db.exec("ALTER TABLE memory_search_items ADD COLUMN scope TEXT");
     }
     ensureMemoryCoreSidecarSchema(db);
+    repairPrivateSqliteFiles(filePath, { trustedRoot });
     return db;
   } catch (error) {
     closeDatabase(db);
@@ -2005,6 +2018,7 @@ module.exports = {
   reconcileMemorySearchItems,
   retrieveSemanticGraphPaths,
   searchMemoryRuntimeIndex,
+  storageTrustedRoot,
   tokenizeIndexText,
   upsertMemoryConstraint,
   upsertMemoryCoreRecord,

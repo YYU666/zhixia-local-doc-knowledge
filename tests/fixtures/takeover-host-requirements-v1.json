@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "zhixia.takeover_host_requirements.v1",
+  "packetRole": "clean_task_recovery_context",
+  "requiresCleanReplacementTask": true,
+  "requiresDistinctTaskFromSource": true,
+  "contextDisposition": "replace_not_append",
+  "fullHistoryForkAllowed": false,
+  "oldTaskExecutionAfterFreezeAllowed": false,
+  "oldTaskWakeupsAfterFreezeAllowed": false,
+  "threadRecoveryPacketRequired": true,
+  "harvestDriverPolicy": "unbind_old_then_bind_one_replacement",
+  "callbackRelayPolicy": "compact_decision_hash_diff_refs_only",
+  "existingTaskHistoryTrimmableByMemoryRuntime": false,
+  "requirementsSha256": "b2189aa8052514b4c675c9f0dc32e711037e72bccbb8b6a18c5703c22d2578eb"
+}

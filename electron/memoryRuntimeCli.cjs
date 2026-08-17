@@ -25,6 +25,16 @@ const {
   writeMemoryRuntimeTriggerReceipt,
 } = require("./memoryRuntimeIndexStore.cjs");
 const { buildSemanticGraphSeedFromRuntimeItems } = require("./semanticMemoryGraphPolicy.cjs");
+const {
+  buildQueryBasis: buildCompletedRefreshQueryBasis,
+  buildRefreshKey: buildCompletedRefreshKey,
+  publishCompletedRefreshOutcome,
+  queryCompletedRefreshOutcome,
+} = require("./completedRefreshOutcomeStore.cjs");
+const {
+  reconcileAcceptedSlices,
+  stageAcceptedSlice,
+} = require("./incrementalAcceptanceLedger.cjs");
 
 const CLI_SCHEMA = "zhixia.memory_runtime_cli.v1";
 const MAX_REQUEST_BYTES = 128 * 1024;
@@ -45,6 +55,11 @@ const MAX_LIST_ITEMS = 24;
 const MAX_CHECKPOINT_SOURCE_REFS = 8;
 const MAX_CHECKPOINT_ARTIFACTS = 4;
 const SCAN_PROFILE_SCHEMA = "zhixia.authorized_scan_profile.v1";
+const ACCEPTED_EVIDENCE_RECEIPT_SCHEMA = "zhixia.accepted_evidence_receipt.v1";
+const MAX_ACCEPTED_EVIDENCE_RECEIPTS_PER_PROJECT = 256;
+const MAX_ACCEPTED_EVIDENCE_RECEIPT_TTL_MS = 60 * 60 * 1000;
+const MAX_ACCEPTED_CHANGED_PATHS = 128;
+const MAX_LIFECYCLE_SOURCE_REFS = 128;
 const ALLOWED_SOURCE_EXTENSIONS = new Set([".md", ".json", ".txt", ".yaml", ".yml"]);
 const WORKTREE_TEXT_EXTENSIONS = new Set([
   ...ALLOWED_SOURCE_EXTENSIONS,
@@ -160,6 +175,21 @@ function resolveStoreRoot(request = {}, env = process.env) {
   return path.resolve(request.storeRoot || env.ZHIXIA_MEMORY_RUNTIME_ROOT || path.join(resolveUserData(env), "memory-runtime"));
 }
 
+function resolveAppOwnedQueryStoreRoot() {
+  const account = os.userInfo();
+  const home = path.resolve(String(account?.homedir || ""));
+  if (!path.isAbsolute(home) || !home || (typeof process.getuid === "function" && account.uid !== process.getuid())) {
+    throw new Error("app_owned_query_user_identity_unavailable");
+  }
+  if (process.platform === "win32") {
+    return path.join(process.env.APPDATA || path.join(home, ["App", "Data"].join(""), "Roaming"), "知匣 Local Doc Knowledge", "memory-runtime");
+  }
+  if (process.platform === "darwin") {
+    return path.join(home, "Library", "Application Support", "知匣 Local Doc Knowledge", "memory-runtime");
+  }
+  return path.join(home, ".config", "知匣 Local Doc Knowledge", "memory-runtime");
+}
+
 function readRequest(argv = process.argv.slice(2)) {
   const index = argv.indexOf("--request-json");
   const raw = index >= 0 ? String(argv[index + 1] || "") : fs.readFileSync(0, "utf8");
@@ -185,17 +215,83 @@ function exactMemoryCoreInput(projectIdentity, input = {}) {
   }, projectIdentity);
 }
 
-function resolveContainedFile(workspace, relativePath) {
-  const relative = String(relativePath || "").replace(/\\/g, "/").replace(/^\.\//, "");
-  if (!relative || path.isAbsolute(relative)) throw new Error("workspace_relative_source_path_required");
-  const candidate = path.resolve(workspace, relative);
-  const rel = path.relative(workspace, candidate);
-  if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) throw new Error("cross_project_source_path_rejected");
-  return candidate;
+function pathIsContained(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
-function hashFile(filePath) {
-  const canonicalText = fs.readFileSync(filePath, "utf8").replace(/\r\n/g, "\n");
+function sameCanonicalPath(left, right, platform = process.platform) {
+  const normalize = (value) => path.normalize(String(value || ""));
+  return platform === "win32"
+    ? normalize(left).toLowerCase() === normalize(right).toLowerCase()
+    : normalize(left) === normalize(right);
+}
+
+function inspectContainedScanPath(workspace, relativePath, options = {}) {
+  const fsAdapter = options.fsAdapter || fs;
+  const reparseDetector = typeof options.reparseDetector === "function" ? options.reparseDetector : () => false;
+  const canonicalWorkspace = fsAdapter.realpathSync(path.resolve(workspace));
+  const workspaceStats = fsAdapter.lstatSync(canonicalWorkspace);
+  const relative = String(relativePath || "").replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!relative || path.isAbsolute(relative)) throw new Error("workspace_relative_source_path_required");
+  const candidate = path.resolve(canonicalWorkspace, relative);
+  if (!pathIsContained(canonicalWorkspace, candidate)) throw new Error("cross_project_source_path_rejected");
+  const segments = path.relative(canonicalWorkspace, candidate).split(path.sep).filter(Boolean);
+  let current = canonicalWorkspace;
+  let finalStats = null;
+  for (const segment of segments) {
+    current = path.join(current, segment);
+    let stats;
+    try {
+      stats = fsAdapter.lstatSync(current);
+    } catch (error) {
+      if (error?.code === "ENOENT" || error?.code === "ENOTDIR") {
+        return { path: candidate, canonicalWorkspace, exists: false, stats: null };
+      }
+      throw error;
+    }
+    if (stats.isSymbolicLink()) throw new Error("workspace_source_symlink_rejected");
+    if (reparseDetector(stats, current) === true) throw new Error("workspace_source_reparse_rejected");
+    const real = fsAdapter.realpathSync(current);
+    if (!pathIsContained(canonicalWorkspace, real)) throw new Error("cross_project_source_realpath_rejected");
+    if (!sameCanonicalPath(current, real, options.platform)) throw new Error("workspace_source_reparse_rejected");
+    if (stats.dev !== workspaceStats.dev) throw new Error("workspace_source_mount_rejected");
+    finalStats = stats;
+  }
+  return { path: candidate, canonicalWorkspace, exists: true, stats: finalStats };
+}
+
+function resolveContainedFile(workspace, relativePath) {
+  return inspectContainedScanPath(workspace, relativePath).path;
+}
+
+function openContainedScanFile(workspace, relativePath, options = {}) {
+  const fsAdapter = options.fsAdapter || fs;
+  const inspected = inspectContainedScanPath(workspace, relativePath, options);
+  if (!inspected.exists) throw new Error("workspace_required_source_missing");
+  if (!inspected.stats?.isFile()) throw new Error("workspace_source_regular_file_required");
+  const flags = fsAdapter.constants.O_RDONLY | fsAdapter.constants.O_NOFOLLOW;
+  let fd;
+  try {
+    fd = fsAdapter.openSync(inspected.path, flags);
+    const openedStats = fsAdapter.fstatSync(fd);
+    if (!openedStats.isFile()
+        || openedStats.dev !== inspected.stats.dev
+        || openedStats.ino !== inspected.stats.ino) {
+      throw new Error("workspace_source_identity_changed");
+    }
+    const bytes = fsAdapter.readFileSync(fd);
+    return { ...inspected, bytes: Buffer.from(bytes), stats: openedStats };
+  } catch (error) {
+    if (["ELOOP", "EMLINK"].includes(error?.code)) throw new Error("workspace_source_symlink_rejected");
+    throw error;
+  } finally {
+    if (fd !== undefined) fsAdapter.closeSync(fd);
+  }
+}
+
+function hashCanonicalTextBytes(bytes) {
+  const canonicalText = Buffer.from(bytes).toString("utf8").replace(/\r\n/g, "\n");
   return crypto.createHash("sha256").update(canonicalText, "utf8").digest("hex");
 }
 
@@ -223,31 +319,30 @@ function collectChangedSourcePaths(workspace) {
 }
 
 function collectHeadSourcePaths(workspace) {
+  let output;
   try {
-    const output = execFileSync("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-z", "HEAD"], {
+    output = execFileSync("git", ["ls-files", "--cached", "-z", "--"], {
       cwd: workspace,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     });
-    const paths = new Set();
-    for (const item of output.split("\0")) {
-      const normalized = item.replace(/\\/g, "/").trim();
-      if (!normalized || path.isAbsolute(normalized)) continue;
-      if (normalized.startsWith("docs/") || ROOT_SOURCE_FILES.includes(normalized)) continue;
-      const segments = normalized.toLowerCase().split("/");
-      if (segments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))) continue;
-      if (SENSITIVE_WORKTREE_PATH_RE.test(normalized)) continue;
-      if (!WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase())) continue;
-      const filePath = resolveContainedFile(workspace, normalized);
-      if (!fs.existsSync(filePath)) continue;
-      const stats = fs.lstatSync(filePath);
-      if (!stats.isFile() || stats.isSymbolicLink() || stats.size > MAX_SCANNED_FILE_BYTES) continue;
-      paths.add(normalized);
-    }
-    return [...paths].sort((left, right) => left.localeCompare(right));
   } catch {
     return [];
   }
+  const paths = new Set();
+  for (const item of output.split("\0")) {
+    const normalized = item.replace(/\\/g, "/").trim();
+    if (!normalized || path.isAbsolute(normalized)) continue;
+    const segments = normalized.toLowerCase().split("/");
+    if (segments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))) continue;
+    if (SENSITIVE_WORKTREE_PATH_RE.test(normalized)) continue;
+    if (!WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase())) continue;
+    const inspected = inspectContainedScanPath(workspace, normalized);
+    if (!inspected.exists) continue;
+    if (!inspected.stats.isFile() || inspected.stats.size > MAX_SCANNED_FILE_BYTES) continue;
+    paths.add(normalized);
+  }
+  return [...paths].sort((left, right) => left.localeCompare(right));
 }
 
 function eligibleTrackedSourcePath(workspace, value) {
@@ -257,10 +352,9 @@ function eligibleTrackedSourcePath(workspace, value) {
   if (segments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))) return null;
   if (SENSITIVE_WORKTREE_PATH_RE.test(normalized)) return null;
   if (!WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase())) return null;
-  const filePath = resolveContainedFile(workspace, normalized);
-  if (!fs.existsSync(filePath)) return null;
-  const stats = fs.lstatSync(filePath);
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.size > MAX_SCANNED_FILE_BYTES) return null;
+  const inspected = inspectContainedScanPath(workspace, normalized);
+  if (!inspected.exists) return null;
+  if (!inspected.stats.isFile() || inspected.stats.size > MAX_SCANNED_FILE_BYTES) return null;
   return normalized;
 }
 
@@ -268,24 +362,57 @@ function collectRangeSourcePaths(workspace, fromHead, toHead) {
   if (!/^[a-f0-9]{40,64}$/.test(String(fromHead || ""))
       || !/^[a-f0-9]{40,64}$/.test(String(toHead || ""))
       || fromHead === toHead) return [];
+  let output;
   try {
     execFileSync("git", ["merge-base", "--is-ancestor", fromHead, toHead], {
       cwd: workspace,
       encoding: "utf8",
       stdio: ["ignore", "ignore", "ignore"],
     });
-    const output = execFileSync("git", ["diff", "--name-only", "-z", `${fromHead}..${toHead}`, "--"], {
+    output = execFileSync("git", ["diff", "--name-only", "-z", `${fromHead}..${toHead}`, "--"], {
       cwd: workspace,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     });
-    return [...new Set(output.split("\0")
-      .map((item) => eligibleTrackedSourcePath(workspace, item))
-      .filter(Boolean))]
-      .sort((left, right) => left.localeCompare(right));
   } catch {
     return [];
   }
+  return [...new Set(output.split("\0")
+    .map((item) => eligibleTrackedSourcePath(workspace, item))
+    .filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function collectRangeDeltaForReconciliation(workspace, fromHead, toHead) {
+  if (!/^[a-f0-9]{40,64}$/.test(String(fromHead || ""))
+      || !/^[a-f0-9]{40,64}$/.test(String(toHead || ""))
+      || fromHead === toHead) return { paths: [], excludedCount: 0 };
+  let output;
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", fromHead, toHead], {
+      cwd: workspace, encoding: "utf8", stdio: ["ignore", "ignore", "ignore"],
+    });
+    output = execFileSync("git", ["diff", "--name-only", "-z", `${fromHead}..${toHead}`, "--"], {
+      cwd: workspace, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return { paths: [], excludedCount: 0 };
+  }
+  const paths = [];
+  let excludedCount = 0;
+  for (const item of output.split("\0")) {
+    const normalized = item.replace(/\\/g, "/").trim();
+    if (!normalized) continue;
+    const segments = normalized.toLowerCase().split("/");
+    if (path.isAbsolute(normalized) || segments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))
+        || SENSITIVE_WORKTREE_PATH_RE.test(normalized)
+        || !WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase())) {
+      excludedCount += 1;
+      continue;
+    }
+    paths.push(normalized);
+  }
+  return { paths: [...new Set(paths)].sort((left, right) => left.localeCompare(right)), excludedCount };
 }
 
 function authorizedScanProfilePath(storeRoot, projectId, scanSha256) {
@@ -349,6 +476,232 @@ function persistAuthorizedScanProfile(storeRoot, scan) {
   return { action: "insert", path: profilePath };
 }
 
+function acceptedEvidenceReceiptStorePath(storeRoot, projectId) {
+  if (!/^project-[a-f0-9]{24}$/.test(String(projectId || ""))) throw new Error("accepted_evidence_receipt_project_invalid");
+  return path.join(storeRoot, "accepted-evidence-receipts", `${projectId}.json`);
+}
+
+function acceptedEvidencePathDigest(paths) {
+  return sha256(stableStringify([...new Set(paths)].sort((left, right) => left.localeCompare(right))));
+}
+
+function validateAcceptedChangedPaths(scan, values) {
+  const paths = compactSafeList(values || [], MAX_ACCEPTED_CHANGED_PATHS, 500)
+    .map((value) => value.replace(/\\/g, "/").replace(/^\.\//, ""));
+  if (paths.length === 0) throw new Error("refresh_binding_accepted_changed_paths_required");
+  const sourcePaths = new Set([
+    ...scan.files.map((file) => file.relativePath),
+    ...(scan.workingTree?.entries || [])
+      .filter((entry) => entry.state === "text_postimage" && entry.sha256)
+      .map((entry) => entry.relativePath),
+  ]);
+  for (const relativePath of paths) {
+    if (relativePath.startsWith("../") || path.isAbsolute(relativePath) || !sourcePaths.has(relativePath)) {
+      throw new Error("refresh_binding_changed_path_not_source_backed");
+    }
+    inspectContainedScanPath(scan.workspace, relativePath);
+  }
+  return [...new Set(paths)].sort((left, right) => left.localeCompare(right));
+}
+
+function acceptedEvidenceReceiptProof(signingKey, binding) {
+  return crypto.createHmac("sha256", signingKey).update(stableStringify(binding)).digest("hex");
+}
+
+function readAcceptedEvidenceReceiptStore(storeRoot, projectId) {
+  const storePath = acceptedEvidenceReceiptStorePath(storeRoot, projectId);
+  if (!fs.existsSync(storePath)) return { storePath, data: { schemaVersion: ACCEPTED_EVIDENCE_RECEIPT_SCHEMA, projectId, receipts: [] } };
+  const stats = fs.lstatSync(storePath);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.size > MAX_REQUEST_BYTES * 4) {
+    throw new Error("accepted_evidence_receipt_store_invalid");
+  }
+  const data = JSON.parse(fs.readFileSync(storePath, "utf8"));
+  if (data?.schemaVersion !== ACCEPTED_EVIDENCE_RECEIPT_SCHEMA || data.projectId !== projectId || !Array.isArray(data.receipts)
+      || data.receipts.length > MAX_ACCEPTED_EVIDENCE_RECEIPTS_PER_PROJECT) {
+    throw new Error("accepted_evidence_receipt_store_invalid");
+  }
+  return { storePath, data };
+}
+
+function writeAcceptedEvidenceReceiptStoreUnlocked(storePath, data) {
+  const dir = path.dirname(storePath);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const dirStats = fs.lstatSync(dir);
+  if (!dirStats.isDirectory() || dirStats.isSymbolicLink()) throw new Error("accepted_evidence_receipt_store_invalid");
+  const temporaryPath = `${storePath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  try {
+    const serialized = `${JSON.stringify(data)}\n`;
+    fs.writeFileSync(temporaryPath, serialized, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    const temporaryFd = fs.openSync(temporaryPath, "r");
+    try { fs.fsyncSync(temporaryFd); } finally { fs.closeSync(temporaryFd); }
+    fs.renameSync(temporaryPath, storePath);
+    const dirFd = fs.openSync(dir, "r");
+    try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
+  } finally {
+    if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
+  }
+}
+
+function mutateAcceptedEvidenceReceiptStore(storeRoot, projectId, mutate) {
+  const storePath = acceptedEvidenceReceiptStorePath(storeRoot, projectId);
+  fs.mkdirSync(path.dirname(storePath), { recursive: true, mode: 0o700 });
+  const lockPath = `${storePath}.lock`;
+  let lockFd;
+  try {
+    lockFd = fs.openSync(lockPath, "wx", 0o600);
+    const { data } = readAcceptedEvidenceReceiptStore(storeRoot, projectId);
+    const result = mutate(data);
+    writeAcceptedEvidenceReceiptStoreUnlocked(storePath, data);
+    return result;
+  } catch (error) {
+    if (error?.code === "EEXIST") throw new Error("accepted_evidence_receipt_store_busy");
+    throw error;
+  } finally {
+    if (lockFd !== undefined) {
+      fs.closeSync(lockFd);
+      if (fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
+    }
+  }
+}
+
+function acceptedEvidenceBinding(scan, previousCheckpointId, acceptedChangedPaths, lane, decision, issuer, issuedAt, expiresAt, nonce) {
+  return {
+    schemaVersion: ACCEPTED_EVIDENCE_RECEIPT_SCHEMA,
+    workspace: scan.workspace,
+    projectId: scan.projectIdentity.projectId,
+    projectIdentitySha256: scan.projectIdentity.projectIdentitySha256,
+    previousCheckpointId,
+    targetScanSha256: scan.scanSha256,
+    acceptedPathDigest: acceptedEvidencePathDigest(acceptedChangedPaths),
+    lane,
+    decision,
+    issuer,
+    issuedAt,
+    expiresAt,
+    nonce,
+  };
+}
+
+function trustedAuthorityNowMs(options = {}) {
+  const value = typeof options.clock === "function" ? options.clock() : Date.now();
+  if (!Number.isFinite(value)) throw new Error("accepted_evidence_receipt_time_invalid");
+  return Math.floor(value);
+}
+
+function issueAcceptedEvidenceReceiptFromApp(request = {}, options = {}) {
+  if (request.execute !== true) throw new Error("issue_accepted_evidence_receipt_execute_true_required");
+  const initialPaths = compactSafeList(request.acceptedChangedPaths || [], MAX_ACCEPTED_CHANGED_PATHS, 500);
+  const scan = scanExactWorkspace({
+    ...request,
+    relativePaths: [...new Set([...(Array.isArray(request.relativePaths) ? request.relativePaths : []), ...initialPaths])].slice(0, MAX_SCAN_FILES),
+  });
+  if (request.expectedProjectIdentitySha256 !== scan.projectIdentity.projectIdentitySha256) throw new Error("exact_project_identity_sha256_mismatch");
+  if (request.expectedScanSha256 !== scan.scanSha256) throw new Error("exact_workspace_scan_sha256_mismatch");
+  const storeRoot = resolveStoreRoot(request);
+  const runtime = runtimeForRead(storeRoot);
+  if (!runtime) throw new Error("accepted_evidence_receipt_app_owned_memory_core_required");
+  const previous = authorizedCheckpointWorkingState(runtime, storeRoot, scan.projectIdentity, optionalContinuitySlots());
+  const previousCheckpointId = compactText(request.previousCheckpointId, 220);
+  if (!previousCheckpointId || previousCheckpointId !== previous.checkpointId) throw new Error("refresh_binding_previous_checkpoint_mismatch");
+  const acceptedChangedPaths = validateAcceptedChangedPaths(scan, initialPaths);
+  const lane = compactSafeText(request.lane, 180);
+  const decision = compactText(request.decision, 32);
+  const issuer = "zhixia.app.memory-runtime";
+  if (decision !== "accept") throw new Error("accepted_evidence_receipt_accept_decision_required");
+  const issuedMs = trustedAuthorityNowMs(options);
+  const expiresMs = issuedMs + MAX_ACCEPTED_EVIDENCE_RECEIPT_TTL_MS;
+  const issuedAt = new Date(issuedMs).toISOString();
+  const expiresAt = new Date(expiresMs).toISOString();
+  const signingKey = loadOrCreateSigningKey(storeRoot);
+  const binding = acceptedEvidenceBinding(
+    scan, previousCheckpointId, acceptedChangedPaths, lane, decision, issuer, issuedAt, expiresAt, crypto.randomBytes(24).toString("hex"),
+  );
+  const proof = acceptedEvidenceReceiptProof(signingKey, binding);
+  const receiptId = `accepted-evidence-${sha256(`${proof}:${binding.nonce}`).slice(0, 32)}`;
+  mutateAcceptedEvidenceReceiptStore(storeRoot, scan.projectIdentity.projectId, (data) => {
+    if (data.receipts.some((receipt) => receipt.receiptId === receiptId)) throw new Error("accepted_evidence_receipt_conflict");
+    const active = data.receipts.filter((receipt) => receipt.status === "issued" && Date.parse(receipt.binding?.expiresAt || "") > issuedMs);
+    if (active.length >= MAX_ACCEPTED_EVIDENCE_RECEIPTS_PER_PROJECT) throw new Error("accepted_evidence_receipt_store_capacity_reached");
+    const historical = data.receipts.filter((receipt) => !active.includes(receipt)).slice(-Math.max(0, MAX_ACCEPTED_EVIDENCE_RECEIPTS_PER_PROJECT - active.length - 1));
+    data.receipts = [...historical, ...active, { receiptId, binding, proof, status: "issued", consumedAt: null, consumedBy: null }];
+  });
+  return assertPacketBytes({
+    schemaVersion: CLI_SCHEMA,
+    operation: "issue_accepted_evidence_receipt",
+    status: "issued",
+    workspace: scan.workspace,
+    projectIdentity: scan.projectIdentity,
+    receiptId,
+    receiptDigest: sha256(stableStringify({ binding, proof })),
+    targetScanSha256: scan.scanSha256,
+    previousCheckpointId,
+    acceptedPathDigest: binding.acceptedPathDigest,
+    lane,
+    decision,
+    issuer,
+    issuedAt,
+    expiresAt,
+    oneTimeUse: true,
+    safety: { proofExposed: false, nonceExposed: false, signingKeyExposed: false, rawSessionBodyRead: false },
+  }, MAX_RESUME_PACKET_BYTES, "accepted_evidence_receipt");
+}
+
+function consumeAcceptedEvidenceReceipt(storeRoot, scan, request, previousCheckpointId, acceptedChangedPaths, lane, options = {}) {
+  const receiptId = compactText(request.acceptedEvidenceReceipt || request.evidence?.acceptedEvidenceReceipt, 220);
+  if (!/^accepted-evidence-[a-f0-9]{32}$/.test(receiptId)) throw new Error("refresh_binding_accepted_evidence_receipt_invalid");
+  const signingKey = loadExistingSigningKey(storeRoot);
+  if (!signingKey) throw new Error("accepted_evidence_receipt_authority_unavailable");
+  const nowMs = trustedAuthorityNowMs(options);
+  return mutateAcceptedEvidenceReceiptStore(storeRoot, scan.projectIdentity.projectId, (data) => {
+    const receipt = data.receipts.find((candidate) => candidate.receiptId === receiptId);
+    if (!receipt) throw new Error("accepted_evidence_receipt_not_found");
+    if (receipt.status === "consumed") throw new Error("accepted_evidence_receipt_already_consumed");
+    if (receipt.status !== "issued") throw new Error("accepted_evidence_receipt_status_invalid");
+    const binding = receipt.binding || {};
+    const expectedProof = acceptedEvidenceReceiptProof(signingKey, binding);
+    const actualProof = String(receipt.proof || "");
+    if (!/^[a-f0-9]{64}$/.test(actualProof) || !crypto.timingSafeEqual(Buffer.from(actualProof), Buffer.from(expectedProof))) {
+      throw new Error("accepted_evidence_receipt_proof_invalid");
+    }
+    if (receiptId !== `accepted-evidence-${sha256(`${actualProof}:${binding.nonce}`).slice(0, 32)}`) {
+      throw new Error("accepted_evidence_receipt_id_invalid");
+    }
+    if (Date.parse(binding.issuedAt || "") > nowMs || Date.parse(binding.expiresAt || "") <= nowMs) {
+      throw new Error("accepted_evidence_receipt_expired");
+    }
+    const expected = acceptedEvidenceBinding(
+      scan, previousCheckpointId, acceptedChangedPaths, lane, "accept", binding.issuer, binding.issuedAt, binding.expiresAt, binding.nonce,
+    );
+    if (stableStringify(binding) !== stableStringify(expected)) throw new Error("accepted_evidence_receipt_binding_mismatch");
+    receipt.status = "consumed";
+    receipt.consumedAt = new Date(nowMs).toISOString();
+    receipt.consumedBy = sha256(stableStringify({ projectId: scan.projectIdentity.projectId, scanSha256: scan.scanSha256, previousCheckpointId, lane }));
+    return {
+      receiptId,
+      receiptDigest: sha256(stableStringify({ binding, proof: actualProof })),
+      issuer: binding.issuer,
+      issuedAt: binding.issuedAt,
+      expiresAt: binding.expiresAt,
+    };
+  });
+}
+
+function consumeAcceptedEvidenceReceiptForTest(request = {}, options = {}) {
+  if (options.testOnly !== true) throw new Error("accepted_evidence_receipt_test_only_required");
+  const acceptedPaths = compactSafeList(request.acceptedChangedPaths || [], MAX_ACCEPTED_CHANGED_PATHS, 500);
+  const scan = options.scanEnvelope;
+  if (!scan?.workspace || !scan?.projectIdentity?.projectId || !scan?.scanSha256) {
+    throw new Error("accepted_evidence_receipt_test_scan_required");
+  }
+  const storeRoot = resolveStoreRoot(request);
+  const acceptedChangedPaths = validateAcceptedChangedPaths(scan, acceptedPaths);
+  const previousCheckpointId = compactText(request.previousCheckpointId, 220);
+  const lane = compactSafeText(request.lane, 180);
+  return consumeAcceptedEvidenceReceipt(
+    storeRoot, scan, request, previousCheckpointId, acceptedChangedPaths, lane, options,
+  );
+}
+
 function authorizedScanProfile(request, projectIdentity) {
   try {
     const storeRoot = resolveStoreRoot(request);
@@ -386,18 +739,19 @@ function workingTreeSnapshot(workspace) {
   let excludedBodyCount = changedPaths.length - eligiblePaths.length;
   for (const relativePath of eligiblePaths.slice(0, MAX_WORKTREE_POSTIMAGES)) {
     const normalized = relativePath.replace(/\\/g, "/");
-    const filePath = resolveContainedFile(workspace, normalized);
-    if (!fs.existsSync(filePath)) {
+    const inspected = inspectContainedScanPath(workspace, normalized);
+    if (!inspected.exists) {
       entries.push({ relativePath: normalized, state: "deleted", sizeBytes: 0, sha256: null });
       continue;
     }
-    const stats = fs.lstatSync(filePath);
-    if (!stats.isFile() || stats.isSymbolicLink() || stats.size > MAX_SCANNED_FILE_BYTES) {
+    const stats = inspected.stats;
+    if (!stats.isFile() || stats.size > MAX_SCANNED_FILE_BYTES) {
       entries.push({ relativePath: normalized, state: "body_excluded", sizeBytes: stats.size, sha256: null });
       excludedBodyCount += 1;
       continue;
     }
-    entries.push({ relativePath: normalized, state: "text_postimage", sizeBytes: stats.size, sha256: hashFileBytes(filePath) });
+    const opened = openContainedScanFile(workspace, normalized);
+    entries.push({ relativePath: normalized, state: "text_postimage", sizeBytes: opened.stats.size, sha256: sha256(opened.bytes) });
     textPostimagesHashed += 1;
   }
   const core = {
@@ -440,30 +794,14 @@ function collectDocCandidates(workspace, request = {}) {
   }
   const headSourcePaths = collectHeadSourcePaths(workspace);
   for (const relativePath of headSourcePaths) candidates.add(relativePath);
-  const docsRoot = path.join(workspace, "docs");
-  const queue = fs.existsSync(docsRoot) ? [docsRoot] : [];
-  let directoriesRead = 0;
-  while (queue.length > 0 && directoriesRead < MAX_SCAN_DIRECTORIES && candidates.size < MAX_SCAN_CANDIDATES) {
-    const current = queue.shift();
-    directoriesRead += 1;
-    const entries = fs.readdirSync(current, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
-    for (const entry of entries) {
-      if (candidates.size >= MAX_SCAN_CANDIDATES) break;
-      const fullPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        if (!SKIP_DIRECTORY_NAMES.has(entry.name.toLowerCase())) queue.push(fullPath);
-        continue;
-      }
-      if (!entry.isFile() || !ALLOWED_SOURCE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
-      candidates.add(path.relative(workspace, fullPath).replace(/\\/g, "/"));
-    }
-  }
+  const docsInspection = inspectContainedScanPath(workspace, "docs");
+  if (docsInspection.exists && !docsInspection.stats.isDirectory()) throw new Error("workspace_docs_directory_required");
+  const directoriesRead = 0;
   const preferred = [...new Set([
     ...PRIORITY_SOURCE_FILES,
     ...ROOT_SOURCE_FILES,
     ...requestedCandidates,
     ...automaticCandidates,
-    ...headSourcePaths,
     ...authorizedProfileCandidates,
   ])];
   const preferredSet = new Set(preferred);
@@ -490,7 +828,10 @@ function collectDocCandidates(workspace, request = {}) {
   const changedMtime = new Map();
   const changedFileMtime = (relativePath) => {
     if (!changedSourcePaths.has(relativePath)) return 0;
-    if (!changedMtime.has(relativePath)) changedMtime.set(relativePath, fs.statSync(resolveContainedFile(workspace, relativePath)).mtimeMs);
+    if (!changedMtime.has(relativePath)) {
+      const inspected = inspectContainedScanPath(workspace, relativePath);
+      changedMtime.set(relativePath, inspected.exists ? inspected.stats.mtimeMs : 0);
+    }
     return changedMtime.get(relativePath);
   };
   const recentFirst = (left, right) => Number(changedSourcePaths.has(right)) - Number(changedSourcePaths.has(left))
@@ -544,23 +885,30 @@ function scanExactWorkspace(request = {}) {
   const files = [];
   const skipped = [];
   for (const relativePath of candidates) {
-    const filePath = resolveContainedFile(workspace, relativePath);
-    if (!fs.existsSync(filePath)) continue;
-    const stats = fs.statSync(filePath);
+    const explicitlyRequired = Array.isArray(request.relativePaths)
+      && request.relativePaths.some((value) => String(value || "").replace(/\\/g, "/").replace(/^\.\//, "") === relativePath);
+    const inspected = inspectContainedScanPath(workspace, relativePath);
+    if (!inspected.exists) {
+      if (explicitlyRequired) throw new Error("workspace_required_source_missing");
+      continue;
+    }
+    const filePath = inspected.path;
+    const stats = inspected.stats;
     if (!stats.isFile()) continue;
     if (stats.size > MAX_SCANNED_FILE_BYTES) {
       skipped.push({ relativePath, reason: "canonical_source_too_large", sizeBytes: stats.size });
       continue;
     }
+    const opened = openContainedScanFile(workspace, relativePath);
     files.push({
       kind: "canonical_project_file",
       relativePath,
       path: filePath,
       title: relativePath,
       artifactType: sourceArtifactType(relativePath),
-      sizeBytes: stats.size,
-      updatedAt: stats.mtime.toISOString(),
-      sha256: hashFile(filePath),
+      sizeBytes: opened.stats.size,
+      updatedAt: opened.stats.mtime.toISOString(),
+      sha256: hashCanonicalTextBytes(opened.bytes),
     });
     if (files.length >= MAX_SCAN_FILES) break;
   }
@@ -568,7 +916,8 @@ function scanExactWorkspace(request = {}) {
   for (const fileName of GENERATED_KNOWLEDGE_FILES) {
     const filePath = path.join(workspace, ".codex-knowledge", fileName);
     if (!fs.existsSync(filePath)) continue;
-    const stats = fs.statSync(filePath);
+    const stats = fs.lstatSync(filePath);
+    if (!stats.isFile() || stats.isSymbolicLink()) continue;
     generatedKnowledge.push({ fileName, sizeBytes: stats.size, updatedAt: stats.mtime.toISOString(), authorityEligible: false });
   }
   const scanCore = {
@@ -812,6 +1161,39 @@ function contextGenerationId(verified = {}) {
   })).slice(0, 24)}`;
 }
 
+function takeoverHostRequirements() {
+  const requirements = {
+    schemaVersion: "zhixia.takeover_host_requirements.v1",
+    packetRole: "clean_task_recovery_context",
+    requiresCleanReplacementTask: true,
+    requiresDistinctTaskFromSource: true,
+    contextDisposition: "replace_not_append",
+    fullHistoryForkAllowed: false,
+    oldTaskExecutionAfterFreezeAllowed: false,
+    oldTaskWakeupsAfterFreezeAllowed: false,
+    threadRecoveryPacketRequired: true,
+    harvestDriverPolicy: "unbind_old_then_bind_one_replacement",
+    callbackRelayPolicy: "compact_decision_hash_diff_refs_only",
+    existingTaskHistoryTrimmableByMemoryRuntime: false,
+  };
+  return {
+    ...requirements,
+    requirementsSha256: sha256(stableStringify(requirements)),
+  };
+}
+
+function verifyTakeoverHostRequirements(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const expected = takeoverHostRequirements();
+  const keys = Object.keys(value).sort();
+  const expectedKeys = Object.keys(expected).sort();
+  if (stableStringify(keys) !== stableStringify(expectedKeys)) return false;
+  if (value.requirementsSha256 !== expected.requirementsSha256) return false;
+  const unsigned = Object.fromEntries(Object.entries(value).filter(([key]) => key !== "requirementsSha256"));
+  if (sha256(stableStringify(unsigned)) !== value.requirementsSha256) return false;
+  return stableStringify(value) === stableStringify(expected);
+}
+
 function takeoverControl(verified, returnedCount) {
   const ready = verified.current === true && verified.recoveryReady === true && Number(returnedCount || 0) > 0;
   const reasonCodes = ready ? [] : [...new Set([
@@ -821,9 +1203,11 @@ function takeoverControl(verified, returnedCount) {
     ...(verified.continuity?.conflictSlots || []).map((slot) => `continuity_conflict:${slot}`),
   ])].slice(0, 16);
   return {
+    schemaVersion: "zhixia.takeover_control.v2",
     shouldInject: ready,
     injectionMode: ready ? "replace_long_thread_context" : "blocked_fail_closed",
     maxInjectionsPerTask: 1,
+    hostRequirements: takeoverHostRequirements(),
     reasonCodes,
     nextAction: ready
       ? "Start a clean takeover task and inject this context generation once."
@@ -951,7 +1335,7 @@ function verifyMemoryCore(request = {}) {
     && continuity.pagination.cursorInvalid !== true
     && baselineAndSourcesCurrent;
   const recoveryReady = authorityVerified && continuity.recoveryReady === true;
-  return assertPacketBytes({
+  const result = {
     schemaVersion: CLI_SCHEMA,
     operation: "verify",
     status: recoveryReady ? "verified" : "not_ready",
@@ -983,7 +1367,9 @@ function verifyMemoryCore(request = {}) {
       ...(baselineAndSourcesCurrent ? [] : ["workspace_head_or_canonical_sources_changed_reseed_required"]),
       ...(authorityVerified ? [] : ["helper_only_or_unverified_authority_cannot_claim_current"]),
     ],
-  }, MAX_RESUME_PACKET_BYTES, "resume");
+  };
+  result.contextGenerationId = contextGenerationId(result);
+  return assertPacketBytes(result, MAX_RESUME_PACKET_BYTES, "resume");
 }
 
 function seedMemoryCore(request = {}) {
@@ -1502,8 +1888,57 @@ function unreadySemanticGraphSupplement(verified, request = {}) {
   };
 }
 
+function readOnlySemanticGraphSupplement(verified, request = {}) {
+  const projectPath = verified?.projectIdentity?.canonicalRoot || verified?.workspace || null;
+  return {
+    ...semanticGraphFallback(projectPath, "semantic_graph_skipped_strict_read_only"),
+    seed: {
+      attempted: false,
+      candidatesConsidered: 0,
+      eligibleCandidates: 0,
+      rejectedCandidates: 0,
+      recordsPrepared: 0,
+      recordsWritten: 0,
+      recordsUnchanged: 0,
+      recordsRejected: 0,
+      durationMs: 0,
+      warnings: ["semantic_graph_seed_skipped_strict_read_only"],
+      workspaceScans: 0,
+      documentEnumerations: 0,
+      rawBodyReads: 0,
+      fullTextBodyReads: 0,
+    },
+    performance: {
+      durationMs: 0,
+      seedDurationMs: 0,
+      totalDurationMs: 0,
+      oneHop: true,
+      additionalWorkspaceScans: 0,
+      documentEnumerations: 0,
+      rawBodyReads: 0,
+      fullTextBodyReads: 0,
+      vaultScans: 0,
+      backgroundTimer: false,
+      backgroundRebuild: false,
+      strictReadOnly: true,
+    },
+    triggerReceipt: {
+      hook: "semantic_graph_recall",
+      queryType: compactText(request.queryType || "project_resume", 80),
+      projectPath,
+      returnedCount: 0,
+      tokenEstimate: 0,
+      partial: true,
+      warnings: ["semantic_graph_receipt_skipped_strict_read_only"],
+      sourceRefs: [],
+      persisted: false,
+    },
+  };
+}
+
 function retrieveMemoryCore(request = {}, options = {}) {
   const retrievalStartedAt = Date.now();
+  const strictReadOnly = request.readOnly === true;
   const verified = verifyMemoryCore(request);
   const responseOperation = options.operation === "prepare_takeover" ? "prepare_takeover" : "retrieve";
   const budgetEnvelope = retrievalBudgetEnvelope(request, responseOperation);
@@ -1660,6 +2095,7 @@ function retrieveMemoryCore(request = {}, options = {}) {
       semanticGraphWorkspaceRescan: false,
       semanticGraphDocumentEnumeration: false,
       semanticGraphBackgroundTimer: false,
+      sidecarLifecycleWrites: strictReadOnly ? false : null,
     },
     performance: {
       bounded: true,
@@ -1676,6 +2112,7 @@ function retrieveMemoryCore(request = {}, options = {}) {
       semanticGraphRawBodyReads: 0,
       semanticGraphFullTextBodyReads: 0,
       semanticGraphBackgroundRebuild: false,
+      strictReadOnly,
       durationMs: Date.now() - retrievalStartedAt,
     },
     warnings: [
@@ -1702,7 +2139,9 @@ function retrieveMemoryCore(request = {}, options = {}) {
     itemOnlyPacket = withStrictRetrievalMetrics(packetForItems(selectedItems));
   }
   const graphPathBudget = Math.max(120, Math.min(600, semanticGraphReserve - 320));
-  let semanticGraph = retrieveVerifiedSemanticGraph(storeRoot, selectedItems, request, verified, graphPathBudget);
+  let semanticGraph = strictReadOnly
+    ? readOnlySemanticGraphSupplement(verified, request)
+    : retrieveVerifiedSemanticGraph(storeRoot, selectedItems, request, verified, graphPathBudget);
   semanticGraph = { ...semanticGraph, graphPaths: semanticGraph.graphPaths.map(compactSemanticGraphPath) };
   const originalGraphPathCount = semanticGraph.graphPaths.length;
   const receiptCreatedAt = request.now || new Date().toISOString();
@@ -1749,7 +2188,15 @@ function retrieveMemoryCore(request = {}, options = {}) {
       sourceRefs: semanticGraph.graphPaths.flatMap((graphPath) => graphPath.sourceRefs || []).slice(0, 6),
       createdAt: receiptCreatedAt,
     };
-    try {
+    if (strictReadOnly) {
+      semanticGraph.triggerReceipt = {
+        ...semanticGraph.triggerReceipt,
+        returnedCount: semanticGraph.hitCount,
+        tokenEstimate: semanticGraph.tokenEstimate,
+        durationMs: semanticGraph.performance?.totalDurationMs || 0,
+        persisted: false,
+      };
+    } else try {
       semanticGraph.triggerReceipt = writeMemoryRuntimeTriggerReceipt(storeRoot, receiptEntry);
     } catch {
       semanticGraph.triggerReceipt = {
@@ -1824,7 +2271,7 @@ function exactWorkspaceWriteBinding(request = {}, operation) {
     });
   }
   const sourceRefs = [];
-  for (const ref of requestedRefs.slice(0, MAX_SCAN_FILES)) {
+  for (const ref of requestedRefs.slice(0, MAX_LIFECYCLE_SOURCE_REFS)) {
     const rawPath = compactText(ref?.path || ref?.uri || "", 700);
     const workspaceScanMatch = rawPath.match(TRUSTED_WORKSPACE_SCAN_URI_RE);
     if (workspaceScanMatch) {
@@ -1961,9 +2408,11 @@ function executeLifecycleWrite(operation, request = {}) {
   }, MAX_RESUME_PACKET_BYTES, operation);
 }
 
-function executeRefreshBinding(request = {}) {
+function executeRefreshBinding(request = {}, options = {}) {
   const preliminaryPayload = request.evidence && typeof request.evidence === "object" ? request.evidence : request;
-  const acceptedChangedPaths = compactSafeList(request.acceptedChangedPaths || preliminaryPayload.acceptedChangedPaths || [], 24, 500)
+  const requestedAcceptedChangedPaths = compactSafeList(
+    request.acceptedChangedPaths || preliminaryPayload.acceptedChangedPaths || [], MAX_ACCEPTED_CHANGED_PATHS, 500,
+  )
     .map((value) => value.replace(/\\/g, "/").replace(/^\.\//, ""));
   const previewScan = scanExactWorkspace(request);
   const previewPaths = new Set(previewScan.files.map((file) => file.relativePath));
@@ -1971,7 +2420,7 @@ function executeRefreshBinding(request = {}) {
     ...request,
     relativePaths: [...new Set([
       ...(Array.isArray(request.relativePaths) ? request.relativePaths : []),
-      ...acceptedChangedPaths.filter((relativePath) => !previewPaths.has(relativePath)),
+      ...requestedAcceptedChangedPaths.filter((relativePath) => !previewPaths.has(relativePath)),
     ])].slice(0, MAX_SCAN_FILES),
   };
   const targetScan = scanExactWorkspace(scanRequest);
@@ -1987,11 +2436,7 @@ function executeRefreshBinding(request = {}) {
   if (!expectedCheckpointId || expectedCheckpointId !== previous.checkpointId) {
     throw new Error("refresh_binding_previous_checkpoint_mismatch");
   }
-  const acceptedEvidenceReceipt = compactText(request.acceptedEvidenceReceipt || payload.acceptedEvidenceReceipt, 220);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,219}$/.test(acceptedEvidenceReceipt) || !safeText(acceptedEvidenceReceipt)) {
-    throw new Error("refresh_binding_accepted_evidence_receipt_required");
-  }
-  if (acceptedChangedPaths.length === 0) throw new Error("refresh_binding_accepted_changed_paths_required");
+  const acceptedChangedPaths = validateAcceptedChangedPaths(scan, requestedAcceptedChangedPaths);
   const matchedRelativePaths = new Set(sourceRefs
     .filter((ref) => ref.kind !== "workspace_scan_receipt")
     .map((ref) => path.relative(scan.workspace, ref.path).replace(/\\/g, "/")));
@@ -2000,6 +2445,10 @@ function executeRefreshBinding(request = {}) {
   }
   const lane = compactSafeText(request.lane || payload.lane || payload.moduleId, 180);
   if (!lane) throw new Error("refresh_binding_lane_required");
+  const acceptedEvidence = consumeAcceptedEvidenceReceipt(
+    storeRoot, scan, request, expectedCheckpointId, acceptedChangedPaths, lane, options,
+  );
+  const acceptedEvidenceReceipt = acceptedEvidence.receiptId;
   const evidence = {
     ...payload,
     decision: "accept",
@@ -2028,7 +2477,7 @@ function executeRefreshBinding(request = {}) {
   if (!verified.scanBinding?.authorizedCheckpointId || verified.scanBinding.authorizedCheckpointId === previous.checkpointId) {
     throw new Error("refresh_binding_checkpoint_not_advanced");
   }
-  return assertPacketBytes({
+  const response = assertPacketBytes({
     schemaVersion: CLI_SCHEMA,
     operation: "refresh_binding",
     status: "verified",
@@ -2043,7 +2492,21 @@ function executeRefreshBinding(request = {}) {
     previousCheckpointId: previous.checkpointId,
     authorizedCheckpointId: verified.scanBinding.authorizedCheckpointId,
     acceptedEvidenceReceipt,
+    acceptedEvidenceReceiptDigest: acceptedEvidence.receiptDigest,
+    acceptedEvidenceIssuer: acceptedEvidence.issuer,
+    acceptedEvidenceIssuedAt: acceptedEvidence.issuedAt,
+    acceptedEvidenceExpiresAt: acceptedEvidence.expiresAt,
     acceptedChangedPaths,
+    acceptedPathDigest: buildCompletedRefreshQueryBasis({
+      workspace: scan.workspace,
+      expectedProjectIdentitySha256: scan.projectIdentity.projectIdentitySha256,
+      expectedScanSha256: scan.scanSha256,
+      previousCheckpointId: previous.checkpointId,
+      acceptedEvidenceReceipt,
+      acceptedEvidenceReceiptDigest: acceptedEvidence.receiptDigest,
+      acceptedChangedPaths,
+      lane,
+    }).acceptedPathDigest,
     lane,
     receiptId: writeResult.receiptId,
     scanProfile: { action: scanProfile.action, persisted: true },
@@ -2063,6 +2526,84 @@ function executeRefreshBinding(request = {}) {
     },
     warnings: [],
   }, MAX_RESUME_PACKET_BYTES, "refresh_binding");
+  const outcomeRequest = {
+    workspace: scan.workspace,
+    storeRoot,
+    expectedProjectIdentitySha256: scan.projectIdentity.projectIdentitySha256,
+    expectedScanSha256: scan.scanSha256,
+    previousCheckpointId: previous.checkpointId,
+    acceptedEvidenceReceipt,
+    acceptedEvidenceReceiptDigest: acceptedEvidence.receiptDigest,
+    acceptedChangedPaths,
+    lane,
+  };
+  outcomeRequest.refreshKey = buildCompletedRefreshKey(buildCompletedRefreshQueryBasis(outcomeRequest));
+  const publication = publishCompletedRefreshOutcome({
+    storeRoot,
+    request: outcomeRequest,
+    result: response,
+    authorityKey: loadExistingSigningKey(storeRoot),
+  });
+  return assertPacketBytes({
+    ...response,
+    refreshKey: publication.refreshKey,
+    outcomeDigest: publication.outcomeDigest,
+    outcomeVerification: "app_owned_authenticated",
+  }, MAX_RESUME_PACKET_BYTES, "refresh_binding");
+}
+
+function executeStageAcceptedSlice(request = {}, options = {}) {
+  const { workspace, projectIdentity } = resolveWorkspace(request);
+  const storeRoot = resolveStoreRoot(request);
+  if (!runtimeForRead(storeRoot)) throw new Error("incremental_acceptance_app_owned_memory_core_required");
+  const signingKey = loadExistingSigningKey(storeRoot);
+  if (!signingKey) throw new Error("incremental_acceptance_authority_unavailable");
+  return assertPacketBytes(stageAcceptedSlice({ ...request, workspace }, {
+    storeRoot,
+    projectIdentity,
+    signingKey,
+    clock: options.clock,
+  }), MAX_RETRIEVAL_PACKET_BYTES, "incremental_acceptance_stage_receipt");
+}
+
+function executeReconcileAcceptedSlices(request = {}) {
+  const { workspace, projectIdentity } = resolveWorkspace(request);
+  const storeRoot = resolveStoreRoot(request);
+  const runtime = runtimeForRead(storeRoot);
+  const signingKey = loadExistingSigningKey(storeRoot);
+  if (!runtime || !signingKey) throw new Error("incremental_acceptance_app_owned_memory_core_required");
+  const profile = authorizedScanProfile(request, projectIdentity);
+  const rangePaths = collectRangeSourcePaths(workspace, profile.baselineHead, projectIdentity.baselineHead);
+  const rangeDelta = collectRangeDeltaForReconciliation(workspace, profile.baselineHead, projectIdentity.baselineHead);
+  const stagedScan = scanExactWorkspace(request);
+  const requiredChangedPaths = [...new Set([
+    ...rangeDelta.paths,
+    ...(stagedScan.workingTree?.entries || []).map((entry) => entry.relativePath),
+  ])].sort((left, right) => left.localeCompare(right));
+  const postimageByPath = new Map();
+  for (const entry of stagedScan.workingTree?.entries || []) {
+    if (entry.state === "text_postimage" && /^[a-f0-9]{64}$/.test(String(entry.sha256 || ""))) {
+      postimageByPath.set(entry.relativePath, { relativePath: entry.relativePath, sha256: entry.sha256 });
+    }
+  }
+  for (const relativePath of rangePaths) {
+    if (postimageByPath.has(relativePath)) continue;
+    const inspected = inspectContainedScanPath(workspace, relativePath);
+    if (!inspected.exists || !inspected.stats?.isFile()) continue;
+    const opened = openContainedScanFile(workspace, relativePath);
+    postimageByPath.set(relativePath, { relativePath, sha256: sha256(opened.bytes) });
+  }
+  const checkpoint = authorizedCheckpointWorkingState(runtime, storeRoot, projectIdentity, optionalContinuitySlots());
+  return assertPacketBytes(reconcileAcceptedSlices({ ...request, workspace }, {
+    storeRoot,
+    projectIdentity,
+    signingKey,
+    scan: stagedScan,
+    previousCheckpointId: checkpoint.checkpointId,
+    requiredChangedPaths,
+    currentPostimages: [...postimageByPath.values()],
+    unverifiableDeltaCount: rangeDelta.excludedCount,
+  }), MAX_RETRIEVAL_PACKET_BYTES, "incremental_acceptance_reconciliation");
 }
 
 function compatibilityMarkdown(packet, title) {
@@ -2198,7 +2739,7 @@ function writeCompatibilityPackets(request = {}) {
   }, MAX_RESUME_PACKET_BYTES, "compatibility_write_receipt");
 }
 
-function execute(request = {}) {
+function execute(request = {}, options = {}) {
   switch (request.operation || request.action) {
     case "scan": return scanExactWorkspace(request);
     case "seed": return seedMemoryCore(request);
@@ -2208,6 +2749,12 @@ function execute(request = {}) {
     case "observe_event": return executeLifecycleWrite("observe_event", request);
     case "writeback_evidence": return executeLifecycleWrite("writeback_evidence", request);
     case "refresh_binding": return executeRefreshBinding(request);
+    case "stage_accepted_slice": return executeStageAcceptedSlice(request, options);
+    case "reconcile_accepted_slices": return executeReconcileAcceptedSlices(request);
+    case "query_refresh_outcome": return queryCompletedRefreshOutcome(request, {
+      storeRoot: options.appOwnedQueryStoreRoot || resolveAppOwnedQueryStoreRoot(),
+      rejectStoreRootOverride: true,
+    });
     case "write_compatibility": return writeCompatibilityPackets(request);
     default: throw new Error("unsupported_memory_runtime_cli_operation");
   }
@@ -2231,7 +2778,16 @@ module.exports = {
   execute,
   executeLifecycleWrite,
   executeRefreshBinding,
+  executeReconcileAcceptedSlices,
+  executeStageAcceptedSlice,
+  queryCompletedRefreshOutcome,
+  consumeAcceptedEvidenceReceiptForTest,
+  issueAcceptedEvidenceReceiptFromApp,
+  resolveAppOwnedQueryStoreRoot,
   prepareTakeover,
+  takeoverHostRequirements,
+  verifyTakeoverHostRequirements,
+  inspectContainedScanPath,
   retrieveMemoryCore,
   scanExactWorkspace,
   seedMemoryCore,

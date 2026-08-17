@@ -20,6 +20,12 @@ import {
   Wrench,
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  initialRendererWorkflow,
+  rendererWorkflowView,
+  transitionRendererWorkflow,
+} from "./authorityRendererWorkflow.mjs";
+import { evaluateProjectReleaseReadiness } from "./projectReleaseReadiness.mjs";
 import type { ReactNode } from "react";
 import type {
   AgentRuntimeAction,
@@ -59,6 +65,7 @@ import type {
   MemoryFact,
   MemoryRuntimeTriggerReceipt,
   ParseStatus,
+  ProjectReleaseEvidenceEnvelope,
   SkillCandidate,
   SkillCandidateStatus,
   SkillRunReceipt,
@@ -121,6 +128,8 @@ type ProjectMemoryCoreSnapshot = {
   reviewQueue: MemoryCoreReviewQueue | null;
   errors: string[];
 };
+
+type AuthorityReviewPacket = Awaited<ReturnType<typeof window.docKnowledge.reviewMemoryRuntimeAuthority>>;
 
 const projectContinuitySlots = [
   "project_identity",
@@ -1422,10 +1431,9 @@ function isProjectResumeDocument(doc: KnowledgeDocument | null | undefined) {
   return Boolean(doc?.fileName.toLowerCase() === "project-resume.md" && doc.filePath.toLowerCase().includes(".codex-knowledge"));
 }
 
-function inferProjectCompletionFromDocuments(docs: KnowledgeDocument[]): ProjectRecordCompletion {
+function inferProjectDocumentationStage(docs: KnowledgeDocument[]): ProjectRecordCompletion {
   const types = new Set(docs.map((doc) => doc.artifactType).filter(Boolean));
-  if (types.has("release_notes")) return "released";
-  if (types.has("test_plan")) return "testing";
+  if (types.has("release_notes") || types.has("test_plan")) return "testing";
   if (types.has("technical_design")) return "design";
   if (types.has("prd")) return "prd";
   if (types.has("readme") || types.has("context")) return "idea";
@@ -1453,9 +1461,9 @@ function projectCompletionLabel(stage: ProjectRecordCompletion | null | undefine
     prd: "需求",
     design: "设计",
     implementation: "开发中",
-    testing: "测试中",
+    testing: "测试资料",
     packaging: "打包中",
-    released: "已发布",
+    released: "发布证据已验收",
     maintenance: "维护中",
     unknown: "待整理想法",
   };
@@ -1551,6 +1559,7 @@ function App() {
   const [memoryRuntimeBusy, setMemoryRuntimeBusy] = useState(false);
   const [memoryRuntimeError, setMemoryRuntimeError] = useState<string | null>(null);
   const [projectMemoryCoreByPath, setProjectMemoryCoreByPath] = useState<Record<string, ProjectMemoryCoreSnapshot>>({});
+  const [projectReleaseEvidenceByPath, setProjectReleaseEvidenceByPath] = useState<Record<string, ProjectReleaseEvidenceEnvelope>>({});
   const [projectMemoryCoreLoadingPaths, setProjectMemoryCoreLoadingPaths] = useState<string[]>([]);
   const [projectMemoryRecallByPath, setProjectMemoryRecallByPath] = useState<Record<string, RuntimeContextPacket>>({});
   const [projectMemoryRecallLoadingPaths, setProjectMemoryRecallLoadingPaths] = useState<string[]>([]);
@@ -1559,6 +1568,10 @@ function App() {
   const [projectMemoryGraphLoadingPaths, setProjectMemoryGraphLoadingPaths] = useState<string[]>([]);
   const [projectMemoryGraphErrors, setProjectMemoryGraphErrors] = useState<Record<string, string>>({});
   const [projectMemoryGraphGoals, setProjectMemoryGraphGoals] = useState<Record<string, string>>({});
+  const [authorityChangedPathsDraft, setAuthorityChangedPathsDraft] = useState("");
+  const [authorityReviewPacket, setAuthorityReviewPacket] = useState<AuthorityReviewPacket | null>(null);
+  const [authorityWorkflow, setAuthorityWorkflow] = useState(initialRendererWorkflow);
+  const authorityWorkflowView = rendererWorkflowView(authorityWorkflow);
   const projectMemoryCoreStartedRef = useRef(new Set<string>());
   const projectMemoryRecallStartedRef = useRef(new Set<string>());
   const projectMemoryGraphStartedRef = useRef(new Set<string>());
@@ -1746,6 +1759,7 @@ function App() {
         taskGoal,
         maxNodes: 72,
         maxEdges: 160,
+        readOnly: true,
       });
       setProjectMemoryGraphByPath((current) => ({ ...current, [projectPath]: graph }));
     } catch (error) {
@@ -2350,7 +2364,7 @@ function App() {
 
   async function confirmProjectRecordSnapshot() {
     if (!effectiveProjectPath) return;
-    const completion = inferProjectCompletionFromDocuments(projectDocuments);
+    const completion = inferProjectDocumentationStage(projectDocuments);
     const status: ProjectRecordStatus =
       projectStatus.staleCount > 0 ? "waiting_review" : projectStatus.reviewCount > 0 ? "waiting_review" : "active";
     const nextAction = projectResumeDoc
@@ -2494,6 +2508,75 @@ function App() {
   async function revealSkillsFolder() {
     const result = await window.docKnowledge.revealSkillsFolder();
     setSkillStatus(result);
+  }
+
+  function authorityChangedPaths() {
+    return Array.from(new Set(authorityChangedPathsDraft.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))).slice(0, 24);
+  }
+
+  async function previewAuthorityLifecycle() {
+    if (!effectiveProjectPath) return;
+    setAuthorityWorkflow((current) => transitionRendererWorkflow(current, { type: "VERIFY_STARTED" }));
+    setAuthorityReviewPacket(null);
+    try {
+      const packet = await window.docKnowledge.reviewMemoryRuntimeAuthority({
+        workspace: effectiveProjectPath,
+        acceptedChangedPaths: authorityChangedPaths(),
+      });
+      setAuthorityReviewPacket(packet);
+      setAuthorityWorkflow((current) => transitionRendererWorkflow(current, {
+        type: "REVIEW_PREPARED",
+        reviewToken: packet.reviewToken || "",
+        binding: packet.binding,
+      }));
+    } catch (error) {
+      setAuthorityWorkflow((current) => transitionRendererWorkflow(current, {
+        type: "FAILED",
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  }
+
+  async function acceptAuthorityLifecycle() {
+    if (!effectiveProjectPath || !authorityReviewPacket?.reviewToken || !authorityReviewPacket.files) return;
+    setAuthorityWorkflow((current) => transitionRendererWorkflow(current, {
+      type: "ACCEPT_CONFIRMED",
+      userConfirmed: true,
+      decision: "accept",
+      reviewToken: authorityReviewPacket.reviewToken || "",
+    }));
+    try {
+      const packet = await window.docKnowledge.acceptMemoryRuntimeAuthority({
+        workspace: effectiveProjectPath,
+        acceptedChangedPaths: authorityReviewPacket.binding.acceptedChangedPaths,
+        execute: true,
+        userConfirmed: true,
+        decision: "accept",
+        reviewToken: authorityReviewPacket.reviewToken,
+        expectedProjectIdentitySha256: authorityReviewPacket.binding.projectIdentitySha256,
+        expectedScanSha256: authorityReviewPacket.binding.scanSha256,
+        previousCheckpointId: authorityReviewPacket.binding.previousCheckpointId,
+        sourceRefs: authorityReviewPacket.files.map((file) => ({ path: file.relativePath, sha256: file.sha256 })),
+        issuer: "zhixia.app.ordinary_ui",
+        lane: "ordinary-ui-review",
+        title: "普通 UI 精确来源验收",
+        summary: "用户核对精确 changed paths 与 SHA 后，通过正式 app-owned Runtime 刷新绑定并重新验证。",
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      });
+      setAuthorityReviewPacket(packet);
+      setAuthorityWorkflow((current) => {
+        const accepted = transitionRendererWorkflow(current, { type: "ACCEPTED", receiptId: packet.receipt?.receiptId || "" });
+        const refreshed = transitionRendererWorkflow(accepted, { type: "REFRESHED", checkpointId: packet.refresh?.checkpointId || "" });
+        return transitionRendererWorkflow(refreshed, { type: "REVERIFIED", verification: packet.verification! });
+      });
+      projectMemoryCoreStartedRef.current.delete(effectiveProjectPath);
+      setNotice("来源验收、绑定刷新和重新验证已完成。");
+    } catch (error) {
+      setAuthorityWorkflow((current) => transitionRendererWorkflow(current, {
+        type: "FAILED",
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
   }
 
   async function refreshCodexGuardianReport() {
@@ -3882,6 +3965,7 @@ function App() {
       queryType: "project_resume",
       maxResults: 4,
       tokenBudget: 700,
+      readOnly: true,
     }).then((packet) => {
       setProjectMemoryRecallByPath((current) => ({ ...current, [projectPath]: packet }));
     }).catch(() => {
@@ -3900,6 +3984,20 @@ function App() {
     loadToolSkillInventory(effectiveProjectPath).catch(() => {
       setToolSkillInventory(null);
       setToolSkillInventoryError("Tool/Skill inventory 读取失败。");
+    });
+  }, [effectiveProjectPath]);
+
+  useEffect(() => {
+    if (!effectiveProjectPath || typeof window.docKnowledge.loadProjectReleaseEvidence !== "function") return;
+    const projectPath = effectiveProjectPath;
+    window.docKnowledge.loadProjectReleaseEvidence({ projectPath }).then((evidence) => {
+      setProjectReleaseEvidenceByPath((current) => ({ ...current, [projectPath]: evidence }));
+    }).catch(() => {
+      setProjectReleaseEvidenceByPath((current) => {
+        const next = { ...current };
+        delete next[projectPath];
+        return next;
+      });
     });
   }, [effectiveProjectPath]);
 
@@ -4264,6 +4362,19 @@ function App() {
     projectMemoryCoreSnapshot?.continuityStatus?.conflictSlots || projectMemoryCoreSnapshot?.continuityPage?.conflict || [];
   const projectMemoryReviewItems = projectMemoryCoreSnapshot?.reviewQueue?.items || [];
   const projectMemoryReviewCount = projectMemoryCoreSnapshot?.reviewQueue?.count ?? projectMemoryCoreSnapshot?.diagnostics?.reviewQueueCount ?? 0;
+  const projectDocumentationStage = inferProjectDocumentationStage(projectDocuments);
+  const projectReleaseEvidence = effectiveProjectPath ? projectReleaseEvidenceByPath[effectiveProjectPath] || null : null;
+  const projectReleaseReadiness = evaluateProjectReleaseReadiness({
+    projectIdentity: projectMemoryCoreSnapshot?.diagnostics?.projectId || projectMemoryCoreSnapshot?.continuityStatus?.projectId || null,
+    documentationStage: projectDocumentationStage,
+    productCompletion: settings.projectRecordOverrides?.[effectiveProjectPath || ""]?.completion || "unknown",
+    continuity: {
+      recoveryReady: projectMemoryCoreSnapshot?.continuityStatus?.recoveryReady || projectMemoryCoreSnapshot?.continuityPage?.recoveryReady || false,
+      conflictSlots: projectContinuityConflict,
+      missingCriticalSlots: projectContinuityMissing,
+    },
+    releaseEvidence: projectReleaseEvidence,
+  });
   const projectMemoryRecoveryLabel = !projectMemoryCoreSnapshot || projectMemoryCoreLoading
     ? "读取中"
     : !projectMemoryCoreInitialized
@@ -4555,7 +4666,6 @@ function App() {
         }
         return;
       }
-
       try {
         const result = await window.docKnowledge.retrieveAgentContext({
           query,
@@ -4563,18 +4673,23 @@ function App() {
           projectPath: effectiveProjectPath,
           tokenBudget: 1200,
           maxResults: 7,
+          readOnly: true,
         });
         if (cancelled) return;
-        setAgentRetrieveResult(result);
-        setAgentRetrieveMode("local_contract");
-        setAgentRetrieveError(null);
-        loadRetrieveLogs().catch(() => {});
+        if (result.availability === "unavailable") {
+          setAgentRetrieveResult(null);
+          setAgentRetrieveMode("fallback_preview");
+          setAgentRetrieveError(`严格只读记忆暂不可用，已回退为非权威前端预览：${result.reasonCodes?.join("、") || "unknown"}`);
+        } else {
+          setAgentRetrieveResult(result);
+          setAgentRetrieveMode("local_contract");
+          setAgentRetrieveError(null);
+        }
       } catch (error) {
         if (cancelled) return;
         setAgentRetrieveMode("fallback_preview");
         setAgentRetrieveResult(null);
         setAgentRetrieveError(`本地 retrieval contract 调用失败，已回退为前端预览：${error instanceof Error ? error.message : String(error)}`);
-        loadRetrieveLogs().catch(() => {});
       }
     }
 
@@ -5250,7 +5365,7 @@ function App() {
               <span>当前显示 Top 3 检索来源。</span>
               <strong>{retrievalResult.returnedCount} 条</strong>
               <div className="timeline-meta wrap">
-                <span>{retrievalResult.mode === "local_contract" ? "local contract" : "fallback preview"}</span>
+                <span data-e2e="agent-retrieval-contract">{retrievalResult.readOnly ? "strict read-only" : retrievalResult.mode === "local_contract" ? "local contract" : "fallback preview"}</span>
                 <span>{retrievalResult.queryType}</span>
                 <span>{retrievalResult.tokenEstimate} tokens</span>
                 {retrievalResult.parentCeoThreadId && <span>parent CEO: {retrievalResult.parentCeoThreadId}</span>}
@@ -5266,7 +5381,7 @@ function App() {
             <div className="inspector-metrics">
               <div className="metric-row">
                 <span>Contract</span>
-                <strong>{retrievalResult.mode === "local_contract" ? "local contract" : "fallback preview"}</strong>
+                <strong data-e2e="agent-retrieval-contract">{retrievalResult.readOnly ? "strict read-only" : retrievalResult.mode === "local_contract" ? "local contract" : "fallback preview"}</strong>
               </div>
               <div className="metric-row">
                 <span>Query type</span>
@@ -5781,6 +5896,67 @@ function App() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section className="memory-core-section" aria-label="正式来源验收" data-e2e="authority-lifecycle-review">
+          <div className="memory-core-section-heading">
+            <div>
+              <h4>正式来源验收</h4>
+              <p>本地精选不会改变项目 authority。这里先只读执行 exact scan 与 verify；核对文件 SHA 后，才通过同一 Runtime 生成一次性回执、刷新绑定并重新验证。</p>
+            </div>
+            {renderTonePill(
+              authorityWorkflowView.ready ? "已重新验证" : authorityWorkflowView.canReview ? "待确认" : authorityWorkflowView.busy ? "处理中" : authorityWorkflow.stage === "failed" ? "核验失败" : "未预览",
+              authorityWorkflowView.ready ? "teal" : authorityWorkflow.stage === "failed" ? "red" : "slate",
+            )}
+          </div>
+          <textarea className="path-input" data-e2e="lifecycle-changed-paths" rows={4}
+            value={authorityChangedPathsDraft}
+            onChange={(event) => {
+              setAuthorityChangedPathsDraft(event.target.value);
+              setAuthorityReviewPacket(null);
+              setAuthorityWorkflow(initialRendererWorkflow());
+            }}
+            placeholder={"每行一个项目内相对路径，例如：\nsrc/App.tsx\ntests/app.test.cjs"}
+            disabled={authorityWorkflowView.busy || authorityWorkflowView.ready}
+          />
+          <div className="maintenance-actions">
+            <button data-e2e="lifecycle-review" className="ghost-button" onClick={previewAuthorityLifecycle} disabled={authorityWorkflowView.busy || authorityChangedPaths().length === 0}>
+              <RefreshCw size={15} /> 只读核验
+            </button>
+            <button data-e2e="lifecycle-accept" className="primary-button" onClick={acceptAuthorityLifecycle} disabled={authorityWorkflowView.busy || !authorityWorkflowView.canAccept}>
+              <Database size={15} /> 确认来源并刷新
+            </button>
+          </div>
+          {authorityWorkflow.error ? <div className="inspector-note">核验失败：{authorityWorkflow.error}</div> : null}
+          {authorityReviewPacket?.binding ? (
+            <div className="memory-core-row-list">
+              <div className="memory-core-row">
+                <div>
+                  <strong>Exact scan</strong>
+                  <span>{authorityReviewPacket.binding.scanSha256} · checkpoint {authorityReviewPacket.binding.previousCheckpointId}</span>
+                </div>
+                <span>{authorityReviewPacket.binding.acceptedChangedPaths.length} 文件</span>
+              </div>
+              {(authorityReviewPacket.files || []).map((file) => (
+                <div className="memory-core-row" key={file.relativePath}>
+                  <div><strong>{file.relativePath}</strong><span>{file.sha256}</span></div>
+                  <span>{formatBytes(file.sizeBytes)}</span>
+                </div>
+              ))}
+              {authorityReviewPacket.receipt ? (
+                <div className="memory-core-row" data-e2e="lifecycle-verified-result" data-context-generation={authorityReviewPacket.refresh?.contextGenerationId || ""} data-scan-sha256={authorityReviewPacket.refresh?.scanSha256 || ""} data-checkpoint-id={authorityReviewPacket.refresh?.checkpointId || ""}>
+                  <div><strong>Verified generation</strong><span>{authorityReviewPacket.refresh?.contextGenerationId || "unavailable"} · scan {authorityReviewPacket.refresh?.scanSha256 || "unavailable"}</span></div>
+                  <span>{authorityReviewPacket.refresh?.checkpointId || "unavailable"}</span>
+                </div>
+              ) : null}
+              {authorityReviewPacket.receipt ? (
+                <div className="memory-core-row">
+                  <div><strong>{authorityReviewPacket.receipt.issuer}</strong><span>有效至 {formatDate(authorityReviewPacket.receipt.expiresAt)}</span></div>
+                  <span>{authorityReviewPacket.verification?.current && authorityReviewPacket.verification?.recoveryReady ? "current / ready" : "未就绪"}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <section className="memory-core-section" aria-label="召回原因">
@@ -6481,7 +6657,7 @@ function App() {
             </div>
           ) : null}
           {projectCards.map(({ project, projectDocs, projectMemory, projectKnowledge }) => {
-            const progressStage = inferProjectCompletionFromDocuments(projectDocs);
+            const progressStage = inferProjectDocumentationStage(projectDocs);
             const progressPercent = completionPercentForProjectStage(progressStage);
             const healthTone = project.staleCount > 0 ? "red" : project.reviewCount > 0 ? "amber" : "teal";
             const projectRecordOverride = settings.projectRecordOverrides?.[project.path] || null;
@@ -6497,7 +6673,7 @@ function App() {
                     <span className="section-kicker">项目</span>
                     <h3>{displayName}</h3>
                   </div>
-                  {renderTonePill(projectCompletionLabel(progressStage), healthTone)}
+                  {renderTonePill(`资料：${projectCompletionLabel(progressStage)}`, healthTone)}
                 </div>
                 <p>{intro}</p>
                 <div className="project-progress-row" aria-label={`项目进度 ${progressPercent}%`}>
@@ -6606,7 +6782,7 @@ function App() {
                       <span>
                         {projectRecordOverride
                           ? `${projectRecordStatusLabel(projectRecordOverride.status)} / ${projectCompletionLabel(projectRecordOverride.completion)} / ${projectRecordOverride.completionPercent}%`
-                          : `${healthStatusLabel} / ${projectCompletionLabel(inferProjectCompletionFromDocuments(projectDocuments))} / ${completionPercentForProjectStage(inferProjectCompletionFromDocuments(projectDocuments))}%`}
+                          : `${healthStatusLabel} / 资料阶段：${projectCompletionLabel(inferProjectDocumentationStage(projectDocuments))} / ${completionPercentForProjectStage(inferProjectDocumentationStage(projectDocuments))}%`}
                       </span>
                       <span>
                         {projectRecordOverride
@@ -6621,6 +6797,34 @@ function App() {
                     </div>
                   </div>
                 </div>
+              </section>
+
+              <section className="overview-card" data-e2e="project-release-readiness">
+                <div className="overview-card-header">
+                  <div>
+                    <span className="section-kicker">发布判断</span>
+                    <h3>资料、完成度与发布门分别核验</h3>
+                    <p>发布说明和测试资料只代表资料阶段；发布就绪必须有当前项目身份绑定、来源可核验且未过期的正式 gate receipt。</p>
+                  </div>
+                  {renderTonePill(
+                    projectReleaseReadiness.status === "ready" ? "发布门已通过" : projectReleaseReadiness.status === "blocked" ? "发布门受阻" : "发布门未知",
+                    projectReleaseReadiness.status === "ready" ? "teal" : projectReleaseReadiness.status === "blocked" ? "red" : "slate",
+                  )}
+                </div>
+                <div className="memory-core-overview-metrics">
+                  <div><span>资料阶段</span><strong>{projectCompletionLabel(projectDocumentationStage)}</strong></div>
+                  <div><span>产品完成度</span><strong>{projectReleaseReadiness.productCompletion === "unknown" ? "未知" : projectCompletionLabel(projectReleaseReadiness.productCompletion as ProjectRecordCompletion)}</strong></div>
+                  <div><span>连续性</span><strong>{projectReleaseReadiness.continuityReady ? "满足" : "未满足"}</strong></div>
+                  <div><span>发布证据</span><strong>{projectReleaseReadiness.receipt ? "有效" : projectReleaseEvidence?.status === "invalid" ? "回执无效" : "无有效回执"}</strong></div>
+                </div>
+                {projectReleaseReadiness.receipt ? (
+                  <div className="inspector-note" data-e2e="project-release-receipt">
+                    {projectReleaseReadiness.receipt.issuer} · {projectReleaseReadiness.receipt.gateCount} 项 gate · 有效至 {formatDate(projectReleaseReadiness.receipt.expiresAt)}
+                  </div>
+                ) : null}
+                {projectReleaseReadiness.blockers.length > 0 ? (
+                  <div className="inspector-note">当前限制：{projectReleaseReadiness.blockers.join("、")}</div>
+                ) : null}
               </section>
 
               <section className="overview-card memory-core-overview-card" data-e2e="project-memory-core-overview">
@@ -7357,6 +7561,8 @@ function App() {
   }
 
   function renderOldThreadManager() {
+    const guardianCapability = window.docKnowledge.platformCapabilities.guardian;
+    const guardianUnavailable = !guardianCapability.supported;
     return (
       <section className="overview-card old-thread-manager">
         <div className="overview-card-header">
@@ -7366,14 +7572,19 @@ function App() {
             <p>一次完成运行日志清理、体检、完整历史入库、hash 校验、session 瘦身和归档队列生成；请先关闭 Codex 再点击，避免日志库被占用。</p>
           </div>
           <div className="maintenance-actions">
-            <button className="ghost-button" onClick={loadProjectOldThreads} disabled={historyBusy || !effectiveProjectPath}>
+            <button className="ghost-button" onClick={loadProjectOldThreads} disabled={guardianUnavailable || historyBusy || !effectiveProjectPath}>
               <FolderOpen size={15} /> 当前项目
             </button>
-            <button className="primary-button" onClick={oneClickRelieveOldThreadPressure} disabled={historyBusy}>
+            <button className="primary-button" onClick={oneClickRelieveOldThreadPressure} disabled={guardianUnavailable || historyBusy}>
               <Database size={15} /> 一键安全减负
             </button>
           </div>
         </div>
+        {guardianUnavailable ? (
+          <div className="inspector-note" data-e2e="guardian-platform-unavailable">
+            {guardianCapability.reason}
+          </div>
+        ) : null}
         <div className="one-click-rules">
           <div>
             <strong>先关 Codex</strong>
@@ -7400,13 +7611,14 @@ function App() {
           <input
             className="path-input"
             value={historyQuery}
+            disabled={guardianUnavailable}
             onChange={(event) => setHistoryQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") searchOldThreads();
             }}
             placeholder="搜索旧线程：CEO Flow、知匣、UI 修复、bug 关键词..."
           />
-          <button className="primary-button" onClick={() => searchOldThreads()} disabled={historyBusy}>
+          <button className="primary-button" onClick={() => searchOldThreads()} disabled={guardianUnavailable || historyBusy}>
             <Search size={17} /> 搜索老线程
           </button>
         </div>
@@ -7420,19 +7632,19 @@ function App() {
         <details className="old-thread-advanced-actions">
           <summary>高级操作</summary>
           <div className="maintenance-actions">
-            <button className="ghost-button" data-e2e="archive-candidate-scan" onClick={loadLongThreadCandidates} disabled={historyBusy}>
+            <button className="ghost-button" data-e2e="archive-candidate-scan" onClick={loadLongThreadCandidates} disabled={guardianUnavailable || historyBusy}>
               <RefreshCw size={15} /> 自动体检
             </button>
-            <button className="ghost-button" onClick={oneClickOptimizeOldThreads} disabled={historyBusy}>
+            <button className="ghost-button" onClick={oneClickOptimizeOldThreads} disabled={guardianUnavailable || historyBusy}>
               <Bot size={15} /> 仅整理入库
             </button>
-            <button className="ghost-button" onClick={optimizeVisibleOldThreads} disabled={historyBusy || !historyEnvelope?.items.length}>
+            <button className="ghost-button" onClick={optimizeVisibleOldThreads} disabled={guardianUnavailable || historyBusy || !historyEnvelope?.items.length}>
               <Bot size={15} /> 全部入库
             </button>
-            <button className="ghost-button" onClick={compactVisibleOldThreads} disabled={historyBusy || !historyEnvelope?.items.length}>
+            <button className="ghost-button" onClick={compactVisibleOldThreads} disabled={guardianUnavailable || historyBusy || !historyEnvelope?.items.length}>
               <Database size={15} /> 瘦身全部可见
             </button>
-            <button className="ghost-button" onClick={generateArchiveQueueForVisibleThreads} disabled={historyBusy || !historyEnvelope?.items.length}>
+            <button className="ghost-button" onClick={generateArchiveQueueForVisibleThreads} disabled={guardianUnavailable || historyBusy || !historyEnvelope?.items.length}>
               <Archive size={15} /> 生成归档队列
             </button>
           </div>
@@ -7493,19 +7705,19 @@ function App() {
             <details className="old-thread-advanced-actions">
               <summary>选中线程高级操作</summary>
               <div className="maintenance-actions">
-              <button className="primary-button" onClick={() => loadOldThreadContext()} disabled={historyBusy || !selectedHistoryItem}>
+              <button className="primary-button" onClick={() => loadOldThreadContext()} disabled={guardianUnavailable || historyBusy || !selectedHistoryItem}>
                 <Bot size={17} /> {selectedHistoryItem && optimizedHistoryThreadIds.includes(selectedHistoryItem.threadId) ? "重新入库选中" : "入库选中老线程"}
               </button>
-              <button className="ghost-button" onClick={() => compactSelectedOldThread()} disabled={historyBusy || !selectedHistoryItem}>
+              <button className="ghost-button" onClick={() => compactSelectedOldThread()} disabled={guardianUnavailable || historyBusy || !selectedHistoryItem}>
                 <Database size={17} /> 瘦身本体
               </button>
-              <button className="ghost-button" onClick={optimizeVisibleOldThreads} disabled={historyBusy || !historyEnvelope?.items.length}>
+              <button className="ghost-button" onClick={optimizeVisibleOldThreads} disabled={guardianUnavailable || historyBusy || !historyEnvelope?.items.length}>
                 <Bot size={17} /> 全部入库
               </button>
-              <button className="ghost-button" onClick={compactVisibleOldThreads} disabled={historyBusy || !historyEnvelope?.items.length}>
+              <button className="ghost-button" onClick={compactVisibleOldThreads} disabled={guardianUnavailable || historyBusy || !historyEnvelope?.items.length}>
                 <Database size={17} /> 瘦身全部可见
               </button>
-              <button className="ghost-button" onClick={generateArchiveQueueForVisibleThreads} disabled={historyBusy || !historyEnvelope?.items.length}>
+              <button className="ghost-button" onClick={generateArchiveQueueForVisibleThreads} disabled={guardianUnavailable || historyBusy || !historyEnvelope?.items.length}>
                 <Archive size={17} /> 生成归档队列
               </button>
               </div>
@@ -7813,7 +8025,6 @@ function App() {
                 <p>这里负责释放老线程历史压力，并让 Codex 按项目自动调取历史、知识和记忆。</p>
               </div>
             </div>
-
             <div className="overview-grid single-column">
               {renderOldThreadManager()}
 
@@ -7847,6 +8058,7 @@ function App() {
                     <div>
                       <strong>可信状态</strong>
                       <span>{retrievalResult.freshness === "fresh" ? "当前结果来源较新，Codex 可优先使用。" : "存在待确认或源文件变化，Codex 会提示复核。"}</span>
+                      <span data-e2e="agent-retrieval-contract">读取方式：{retrievalResult.readOnly ? "strict read-only" : retrievalResult.mode === "local_contract" ? "local contract" : "fallback preview"}</span>
                     </div>
                   </div>
                 </div>
@@ -8368,9 +8580,9 @@ function App() {
           >
             <div className="project-item-top">
               <strong>{activeProjectInfo && effectiveProjectPath ? polishedProjectDisplayName(effectiveProjectPath, projectDocuments, 24) : "项目列表"}</strong>
-              {renderTonePill(activeProjectInfo ? `${completionPercentForProjectStage(inferProjectCompletionFromDocuments(projectDocuments))}%` : `${projects.length} 个`, activeProjectInfo ? "teal" : "slate")}
+              {renderTonePill(activeProjectInfo ? `${completionPercentForProjectStage(inferProjectDocumentationStage(projectDocuments))}%` : `${projects.length} 个`, activeProjectInfo ? "teal" : "slate")}
             </div>
-            <span>{activeProjectInfo ? projectCompletionLabel(inferProjectCompletionFromDocuments(projectDocuments)) : "点项目入口查看全部项目卡片"}</span>
+            <span>{activeProjectInfo ? `资料阶段：${projectCompletionLabel(inferProjectDocumentationStage(projectDocuments))}` : "点项目入口查看全部项目卡片"}</span>
             <span>
               {activeProjectInfo
                 ? `${projectDocuments.length} 历史 · ${activeProjectMemory?.knowledgeItems || 0} 知识 · ${activeProjectMemory?.experienceCards || 0} 记忆`

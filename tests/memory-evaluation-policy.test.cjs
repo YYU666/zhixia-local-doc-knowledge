@@ -486,7 +486,7 @@ function main() {
   assert.equal(deterministicA.metrics.authorityPositiveControlCoverage, 1, "all positive control types should execute");
   assert.equal(deterministicA.metrics.authorityPositiveControlFailureRate, 0, "strict policy should allow every legitimate positive control");
   assert.equal(deterministicA.metrics.wrongProjectOrModuleRate, 0, "secure comprehensive fixtures should preserve project and module isolation");
-  assert.match(deterministicA.compactReport, /^PASS \| memory-eval/, "compact report should expose a passing retrieval verdict");
+  assert.match(deterministicA.compactReport, /^EVALUATION_ONLY \| memory-eval/, "non-release evaluation must not expose an unqualified PASS verdict");
   assert.match(deterministicA.compactReport, /strategy=PASS/, "compact report should expose a passing strategy verdict");
 
   const brokenAdapter = createStrictLocalAuthorityAdapter({

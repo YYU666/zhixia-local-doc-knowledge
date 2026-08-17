@@ -3,13 +3,15 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { resolveElectronExecutable } = require("./electron-test-runtime.cjs");
 
 const root = path.resolve(__dirname, "..");
-const electronExe = path.join(root, "node_modules", "electron", "dist", process.platform === "win32" ? "electron.exe" : "electron");
+const electronExe = resolveElectronExecutable(root);
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-electron-visual-e2e-"));
 const userData = path.join(tempRoot, "user-data");
 const codexHome = path.join(tempRoot, "codex-home");
 const projectPath = path.join(tempRoot, "project-alpha");
+const nonreadyProjectPath = path.join(tempRoot, "project-nonready");
 const projectSkillPath = path.join(projectPath, "codex-skills", "e2e-review-skill");
 const projectScriptsPath = path.join(projectPath, "scripts");
 const projectDocsPath = path.join(projectPath, "docs");
@@ -22,6 +24,8 @@ function writeFixture() {
   fs.mkdirSync(projectSkillPath, { recursive: true });
   fs.mkdirSync(projectScriptsPath, { recursive: true });
   fs.mkdirSync(projectDocsPath, { recursive: true });
+  fs.mkdirSync(path.join(nonreadyProjectPath, "docs"), { recursive: true });
+  fs.writeFileSync(path.join(nonreadyProjectPath, "docs", "NONREADY.md"), "# Non-ready authority fixture\n", "utf8");
   fs.mkdirSync(codexSessionsPath, { recursive: true });
   fs.writeFileSync(
     path.join(projectSkillPath, "SKILL.md"),
@@ -157,9 +161,21 @@ function rendererScript() {
   };
 
   if (sessionStorage.getItem(phaseKey) !== "dom") {
-    const setup = await window.docKnowledge.e2eProbe({ projectPath });
+    const nonreadyProjectPath = ${JSON.stringify(nonreadyProjectPath)};
+    const setup = await window.docKnowledge.e2eProbe({ projectPath, nonreadyProjectPath, seedAuthorityBaseline: true });
     if (!setup.ok) throw new Error("setup probe failed");
     if (setup.memoryCardCount < 1) throw new Error("setup probe did not create project memory cards");
+    let nonreadyAuthorityRejected = false;
+    try {
+      await window.docKnowledge.reviewMemoryRuntimeAuthority({ workspace: nonreadyProjectPath, acceptedChangedPaths: ["docs/NONREADY.md"] });
+    } catch (error) {
+      nonreadyAuthorityRejected = /authority_review_(?:app_owned_verification_required|checkpoint_required)/.test(String(error));
+    }
+    if (!nonreadyAuthorityRejected) throw new Error("Non-ready authority review did not fail closed through real Electron IPC");
+    const seededAuthority = setup.seededAuthority;
+    if (seededAuthority.current !== true || seededAuthority.recoveryReady !== true || seededAuthority.scanBinding?.matched !== true) {
+      throw new Error("E2E authority baseline did not become current and recovery-ready");
+    }
     sessionStorage.setItem(phaseKey, "dom");
     window.location.reload();
     return { __zhixiaE2EReload: true };
@@ -200,6 +216,53 @@ function rendererScript() {
   await waitForText("项目身份");
   await waitForText("最近有效检查点");
   await waitForText("待复核内容");
+  await waitForSelector('[data-e2e="authority-lifecycle-review"]');
+  await waitForText("正式来源验收");
+  await waitForText("先只读执行 exact scan 与 verify");
+  const authorityPathInput = document.querySelector('[data-e2e="lifecycle-changed-paths"]');
+  if (!authorityPathInput) throw new Error("Missing authority changed-path input");
+  const inputSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+  inputSetter.call(authorityPathInput, "docs/CEO_FLOW_HANDOFF.md");
+  authorityPathInput.dispatchEvent(new Event("input", { bubbles: true }));
+  await waitFor(() => !document.querySelector('[data-e2e="lifecycle-review"]').disabled, "enabled authority review");
+  const directReview = await window.docKnowledge.reviewMemoryRuntimeAuthority({
+    workspace: projectPath,
+    acceptedChangedPaths: ["docs/CEO_FLOW_HANDOFF.md"],
+  });
+  let tamperedAuthorityRejected = false;
+  try {
+    await window.docKnowledge.acceptMemoryRuntimeAuthority({
+      workspace: projectPath,
+      acceptedChangedPaths: directReview.binding.acceptedChangedPaths,
+      execute: true,
+      userConfirmed: true,
+      decision: "accept",
+      reviewToken: "0".repeat(64),
+      expectedProjectIdentitySha256: directReview.binding.projectIdentitySha256,
+      expectedScanSha256: directReview.binding.scanSha256,
+      previousCheckpointId: directReview.binding.previousCheckpointId,
+      sourceRefs: directReview.files.map((file) => ({ path: file.relativePath, sha256: file.sha256 })),
+      lane: "ordinary-ui-review",
+    });
+  } catch {
+    tamperedAuthorityRejected = true;
+  }
+  if (!tamperedAuthorityRejected) throw new Error("Tampered authority review token was accepted");
+  click('[data-e2e="lifecycle-review"]');
+  await waitFor(() => !document.querySelector('[data-e2e="lifecycle-accept"]').disabled, "reviewed authority acceptance", 30000);
+  click('[data-e2e="lifecycle-accept"]');
+  await waitForSelector('[data-e2e="lifecycle-verified-result"]');
+  await waitForText("已重新验证");
+  const verifiedAuthority = document.querySelector('[data-e2e="lifecycle-verified-result"]');
+  const verifiedGeneration = verifiedAuthority.dataset.contextGeneration || "";
+  const verifiedScan = verifiedAuthority.dataset.scanSha256 || "";
+  const verifiedCheckpoint = verifiedAuthority.dataset.checkpointId || "";
+  if (!/^context-[a-f0-9]{24}$/.test(verifiedGeneration)
+      || verifiedScan !== directReview.binding.scanSha256
+      || !/^checkpoint-[A-Za-z0-9-]+$/.test(verifiedCheckpoint)
+      || verifiedCheckpoint === directReview.binding.previousCheckpointId) {
+    throw new Error("Authority result did not expose an advanced exact generation, scan, and checkpoint: " + JSON.stringify({ verifiedGeneration, verifiedScan, verifiedCheckpoint, review: directReview.binding }));
+  }
   await waitForText("为什么会想起这些内容");
   await waitForText("已有经验记忆");
   const projectLayout = document.querySelector(".project-layout--solo");
@@ -255,6 +318,7 @@ function rendererScript() {
   await waitForText("AI 调取规则");
   await waitForText("记忆运行状态");
   await waitForSelector('[data-e2e="memory-runtime-diagnostics"]');
+  await waitFor(() => document.querySelector('[data-e2e="agent-retrieval-contract"]')?.innerText.includes("strict read-only"), "strict read-only Agent UI contract", 30000);
   clickButtonText("运行记忆检索");
   await waitFor(() => document.querySelector('[data-e2e="memory-runtime-diagnostics"]')?.innerText.includes("FTS5 + BM25F"), "Memory Runtime diagnostics result", 30000);
   assertNoHorizontalOverflow("agent workspace");
@@ -262,34 +326,42 @@ function rendererScript() {
   if (!advancedSummary) throw new Error("Missing old-thread advanced actions summary");
   advancedSummary.click();
   await waitForSelector('[data-e2e="archive-candidate-scan"]');
-  if (!document.querySelector('[data-e2e="archive-candidate-scan"]').disabled) {
+  const guardianSupported = window.docKnowledge.platformCapabilities.guardian.supported;
+  if (!guardianSupported) {
+    await waitForSelector('[data-e2e="guardian-platform-unavailable"]');
+    const unavailableText = document.querySelector('[data-e2e="guardian-platform-unavailable"]').innerText;
+    if (!unavailableText.includes("仅支持 Windows PowerShell")) throw new Error("Guardian platform boundary was not disclosed: " + unavailableText);
+    if (!document.querySelector('[data-e2e="archive-candidate-scan"]').disabled) throw new Error("Guardian scan remained enabled on an unsupported platform");
+    const managerControls = Array.from(document.querySelectorAll(".old-thread-manager button, .old-thread-manager input"));
+    if (managerControls.some((control) => !control.disabled)) throw new Error("A Guardian control remained enabled on an unsupported platform");
+  } else {
     click('[data-e2e="archive-candidate-scan"]');
+    try {
+      await waitFor(() => document.querySelector('[data-e2e="old-thread-row"]'), "old archive thread row", 30000);
+    } catch (error) {
+      const managerText = document.querySelector(".old-thread-manager")?.innerText.replace(/\\s+/g, " ").slice(0, 1400) || "missing old-thread-manager";
+      const directScan = await window.docKnowledge.listLongCodexThreads({
+        limit: 8,
+        tokenBudget: 900,
+        minBytes: 8 * 1024 * 1024,
+        minAgeMinutes: 30,
+      });
+      throw new Error(
+        error.message +
+          ". DirectScan: " +
+          JSON.stringify({ ok: directScan.ok, count: directScan.result?.items?.length || 0, error: directScan.error, warnings: directScan.result?.warnings || [] }).slice(0, 900) +
+          ". OldThreadManager: " +
+          managerText,
+      );
+    }
+    click('[data-e2e="old-thread-row"]');
+    await waitFor(() => document.querySelector('[data-e2e="archive-candidate-panel"]'), "archive candidate panel", 30000);
+    const archiveText = document.querySelector('[data-e2e="archive-candidate-panel"]').innerText.replace(/\\s+/g, " ");
+    if (!archiveText.includes("暂不可归档") && !archiveText.includes("可归档候选")) throw new Error("Archive candidate state was not shown: " + archiveText);
+    if (!archiveText.includes("归档前证据判断")) throw new Error("Archive candidate panel did not state pre-archive evidence policy in product copy: " + archiveText);
+    if (!archiveText.includes("侧栏归档只通过归档队列交给 Codex 宿主执行")) throw new Error("Archive candidate panel did not show host-bridge archive boundary: " + archiveText);
+    assertNoHorizontalOverflow("archive candidate panel");
   }
-  try {
-    await waitFor(() => document.querySelector('[data-e2e="old-thread-row"]'), "old archive thread row", 30000);
-  } catch (error) {
-    const managerText = document.querySelector(".old-thread-manager")?.innerText.replace(/\\s+/g, " ").slice(0, 1400) || "missing old-thread-manager";
-    const directScan = await window.docKnowledge.listLongCodexThreads({
-      limit: 8,
-      tokenBudget: 900,
-      minBytes: 8 * 1024 * 1024,
-      minAgeMinutes: 30,
-    });
-    throw new Error(
-      error.message +
-        ". DirectScan: " +
-        JSON.stringify({ ok: directScan.ok, count: directScan.result?.items?.length || 0, error: directScan.error, warnings: directScan.result?.warnings || [] }).slice(0, 900) +
-        ". OldThreadManager: " +
-        managerText,
-    );
-  }
-  click('[data-e2e="old-thread-row"]');
-  await waitFor(() => document.querySelector('[data-e2e="archive-candidate-panel"]'), "archive candidate panel", 30000);
-  const archiveText = document.querySelector('[data-e2e="archive-candidate-panel"]').innerText.replace(/\\s+/g, " ");
-  if (!archiveText.includes("暂不可归档") && !archiveText.includes("可归档候选")) throw new Error("Archive candidate state was not shown: " + archiveText);
-  if (!archiveText.includes("归档前证据判断")) throw new Error("Archive candidate panel did not state pre-archive evidence policy in product copy: " + archiveText);
-  if (!archiveText.includes("侧栏归档只通过归档队列交给 Codex 宿主执行")) throw new Error("Archive candidate panel did not show host-bridge archive boundary: " + archiveText);
-  assertNoHorizontalOverflow("archive candidate panel");
 
   return {
     ok: true,
@@ -298,7 +370,8 @@ function rendererScript() {
     memoryChecked: true,
     memoryGraphChecked: true,
     agentChecked: true,
-    archiveChecked: true,
+    archiveChecked: guardianSupported,
+    archiveUnavailableChecked: !guardianSupported,
     viewportWidth: window.innerWidth,
     noHorizontalOverflowChecked: true,
     projectPath,
@@ -506,7 +579,12 @@ function cleanupTempRoot() {
       assert.equal(result.memoryChecked, true, "visual probe should check Memory curation UI");
       assert.equal(result.memoryGraphChecked, true, "visual probe should check the on-demand Memory Graph UI");
       assert.equal(result.agentChecked, true, "visual probe should check Agent/runtime monitor UI");
-      assert.equal(result.archiveChecked, true, "visual probe should check archive candidate read-only UI");
+      assert.equal(
+        result.archiveChecked || result.archiveUnavailableChecked,
+        true,
+        "visual probe should check either the real archive journey or the explicit unavailable boundary",
+      );
+      assert.notEqual(result.archiveChecked, result.archiveUnavailableChecked, "archive capability evidence must be exactly one supported state");
       assert.equal(result.noHorizontalOverflowChecked, true, "visual probe should check horizontal overflow");
     }
     assert.ok(results.some((result) => result.viewportWidth <= 1000), "visual probe should cover narrow desktop viewport");

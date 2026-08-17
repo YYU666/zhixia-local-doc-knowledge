@@ -140,6 +140,7 @@ function main() {
       };
     });
     const evaluation = evaluateMemoryBenchmark(benchmarkCases, {
+      profile: "test_fixture",
       k: 5,
       thresholds: {
         minimumCases: 4,
@@ -218,6 +219,7 @@ function main() {
       sourceRefs: sourceRef("architecture"),
     });
     assert.equal(listMemoryRuntimeTriggerReceipts(root, { projectPath: "synthetic-game-studio" }).length, 1);
+    assert.match(evaluation.compactReport, /^TEST_FIXTURE \|/, "four-case fixture must never claim release PASS");
     console.log(`Memory Runtime hybrid lifecycle test passed. ${evaluation.compactReport}`);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

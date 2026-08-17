@@ -12,6 +12,7 @@ function readTextIfExists(...parts) {
 }
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const main = fs.readFileSync(path.join(root, "electron", "main.cjs"), "utf8");
+const sqlJsDurableStore = fs.readFileSync(path.join(root, "electron", "sqlJsDurableStore.cjs"), "utf8");
 const agentRetrievePolicy = fs.readFileSync(path.join(root, "electron", "agentRetrievePolicy.cjs"), "utf8");
 const memoryRuntimePolicy = fs.readFileSync(path.join(root, "electron", "memoryRuntimePolicy.cjs"), "utf8");
 const memoryRuntimeIndexStore = fs.readFileSync(path.join(root, "electron", "memoryRuntimeIndexStore.cjs"), "utf8");
@@ -26,6 +27,8 @@ const projectMemoryBackfillPolicy = fs.readFileSync(path.join(root, "electron", 
 const projectArtifactPolicy = fs.readFileSync(path.join(root, "electron", "projectArtifactPolicy.cjs"), "utf8");
 const agentRuntimeMonitorPolicy = fs.readFileSync(path.join(root, "electron", "agentRuntimeMonitorPolicy.cjs"), "utf8");
 const runtimeMonitorAdapter = fs.readFileSync(path.join(root, "electron", "runtimeMonitorAdapter.cjs"), "utf8");
+const runtimeBoundaryIntegration = fs.readFileSync(path.join(root, "electron", "runtimeBoundaries", "runtimeBoundaryIntegration.cjs"), "utf8");
+const runtimeBoundaryIpcFacade = fs.readFileSync(path.join(root, "electron", "runtimeBoundaries", "ipcFacade.cjs"), "utf8");
 const ceoMemoryRuntimeGuardPolicy = fs.readFileSync(path.join(root, "electron", "ceoMemoryRuntimeGuardPolicy.cjs"), "utf8");
 const preload = fs.readFileSync(path.join(root, "electron", "preload.cjs"), "utf8");
 const viteEnv = fs.readFileSync(path.join(root, "src", "vite-env.d.ts"), "utf8");
@@ -392,8 +395,20 @@ assert.ok(!pkg.dependencies.exceljs, "Do not add exceljs without a security revi
 assert.notEqual(pkg.author, "office_test", "package metadata should not keep a personal placeholder author");
 
 assert.match(main, /knowledge-store\.sqlite/, "main process should persist to SQLite");
-assert.match(main, /dbSaveQueue = Promise\.resolve\(\)/, "database saves must be serialized to avoid temp-file rename races");
-assert.match(main, /crypto\.randomUUID\(\)\}\.tmp/, "database saves must use unique temp files instead of one shared sqlite.tmp path");
+assert.match(main, /createSqlJsDurableStore/, "all sql.js saves must route through the durable store adapter");
+assert.match(main, /return dbDurableStore\.persist\(\)/, "saveDatabase must use the durable store without a legacy write bypass");
+assert.doesNotMatch(main, /async function writeDatabaseFile|dbSaveQueue/, "legacy non-durable save paths must be removed");
+assert.match(sqlJsDurableStore, /crypto\.randomUUID\(\)/, "durable saves must use unique temporary paths");
+assert.match(sqlJsDurableStore, /fsOps\.open\(tempPath, "wx", ownerOnlyMode\)/, "temporary database files must be exclusive and owner-only");
+assert.match(sqlJsDurableStore, /await temp\.sync\(\)/, "durable saves must fsync database bytes before rename");
+assert.match(sqlJsDurableStore, /await fsOps\.rename\(tempPath, target\)/, "durable saves must publish via atomic replacement");
+assert.match(sqlJsDurableStore, /await directory\.sync\(\)/, "durable saves must fsync the parent directory");
+assert.match(sqlJsDurableStore, /restoreMemorySnapshot/, "failed durable saves must restore the last committed sql.js snapshot");
+assert.match(sqlJsDurableStore, /degraded_readonly/, "failed durable saves must fail closed in degraded read-only mode");
+execFileSync(process.execPath, [path.join(root, "tests", "sqljs-durable-store.test.cjs")], {
+  cwd: root,
+  stdio: "pipe",
+});
 assert.match(main, /documents:importFolder/, "folder import IPC must be registered");
 assert.match(main, /scanDirectory/, "recursive folder scanning must exist");
 assert.match(main, /documents:checkChanges/, "file change detection IPC must be registered");
@@ -411,14 +426,12 @@ assert.match(main, /listDocumentMetas/, "watcher and change detection must use m
 assert.match(main, /disableFileWatchAfterFailure/, "watcher must disable itself after database read failures");
 assert.match(main, /codex:scanWorkspace/, "Codex workspace scan IPC must be registered");
 assert.match(main, /codex:exportContext/, "Codex context export IPC must be registered");
-assert.match(main, /codexGuardian:report/, "Codex Guardian report IPC must be registered");
-assert.match(main, /codexGuardian:cleanLogs/, "Codex Guardian clean logs IPC must be registered");
-assert.match(main, /codexGuardian:searchHistory/, "Codex Guardian history search IPC must be registered");
-assert.match(main, /codexGuardian:getThreadContext/, "Codex Guardian thread context IPC must be registered");
-assert.match(main, /codexGuardian:getProjectHistory/, "Codex Guardian project history IPC must be registered");
-assert.match(main, /codexGuardian:listLongThreads/, "Codex Guardian long-thread triage IPC must be registered");
-assert.match(main, /codexGuardian:optimizeThread/, "Codex Guardian old-thread optimization IPC must be registered");
-assert.match(main, /codexGuardian:autoIngestHistory/, "Codex Guardian automatic history ingestion IPC must be registered");
+assert.match(main, /registerRuntimeBoundaryFacade\([\s\S]*ipcRegistrar: ipcMain/, "Electron main must register the Runtime Boundary facade");
+assert.match(runtimeBoundaryIpcFacade, /runtimeBoundary:guardianCapability[\s\S]*runtimeBoundary:guardianInvoke/, "Runtime Boundary facade must own Guardian routes");
+assert.match(preload, /getCodexGuardianReport:[\s\S]*invokeGuardian\("report"\)/, "public Guardian report API must route through the facade");
+assert.match(preload, /cleanCodexHotLogs:[\s\S]*invokeGuardian\("clean_logs"/, "public Guardian mutation API must route through the facade");
+assert.match(preload, /searchCodexHistory:[\s\S]*invokeGuardian\("search_history"/, "public Guardian history API must route through the facade");
+assert.doesNotMatch(main, /ipcMain\.handle\("codexGuardian:/, "legacy Guardian handlers must be removed after facade integration");
 assert.match(main, /STARTUP_AUTO_INGEST_DELAY_MS/, "App startup auto-ingest must be deferred after first paint");
 assert.match(main, /STARTUP_AUTO_INGEST_INTERVAL_MS/, "App startup auto-ingest must be daily cadence gated");
 assert.match(main, /STARTUP_AUTO_INGEST_OPTIONS = \{ limit: 12, startupBounded: true, maxDirectoryReads: 12, maxFileStats: 20 \}/, "App startup auto-ingest must use a tiny bounded preservation-only batch");
@@ -807,7 +820,7 @@ assert.match(main, /scanCodexWorkspacePath\(workspacePath, \{ seedMemoryCore: tr
 assert.match(main, /function refreshFromFileWatch[\s\S]*scanCodexWorkspacePath\(workspacePath\)[\s\S]*function startFileWatchers/, "file watcher refresh must retain the non-seeding scan default");
 assert.match(
   preload,
-  /retrieveAgentContext:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("agent:retrieveContext",\s*options\)/,
+  /retrieveAgentContext:\s*\(options\)\s*=>\s*options\?\.readOnly === true[\s\S]*runtimeBoundary:strictReadonlyMemoryQuery[\s\S]*agent:retrieveContext/,
   "preload must pass retrieval options through so parentCeoThreadId and includeKinds reach main",
 );
 assert.match(preload, /listRetrieveLogs/, "preload must expose retrieval log IPC");
@@ -1026,7 +1039,8 @@ assert.match(publicRepoLayout, /Include[\s\S]*electron\/[\s\S]*src\/[\s\S]*tests
 assert.match(pkg.scripts["prepare:public"], /node scripts\/prepare-public-repo\.cjs/, "package scripts must expose a safe public staging command");
 assert.match(pkg.scripts.test, /prepare-public-repo-policy\.test\.cjs/, "Default npm test must include public staging sanitizer behavior tests");
 assert.match(pkg.scripts.test, /sensitive-settings-policy\.test\.cjs/, "Default npm test must include sensitive settings policy tests");
-assert.match(pkg.scripts["test:electron-security"], /electron-governance-e2e\.test\.cjs/, "A dedicated public CI script must run the real Electron safeStorage migration probe");
+assert.equal(pkg.scripts["test:electron-security"], "npm run test:electron-release", "The public CI security hook must delegate to the complete self-building Electron release gate");
+assert.match(pkg.scripts["test:electron-release"], /^npm run build && [\s\S]*electron-governance-e2e\.test\.cjs[\s\S]*electron-visual-behavior-e2e\.test\.cjs/, "Electron release gate must build before governance and visual behavior E2E");
 assert.match(ciWorkflow, /npm run test:electron-security/, "Windows CI must run the real Electron safeStorage migration probe");
 assert.match(appTsx, /aiProviderApiKeyStatus[\s\S]*hasStoredAiKey[\s\S]*clearAiProviderKey/, "AI settings UI must allow clearing a present but unavailable stored key");
 assert.match(main, /sanitizeSensitiveErrorMessage\(error, \[apiKey\]\)/, "AI provider errors must be redacted with the active key before renderer or persistence use");
@@ -1060,7 +1074,9 @@ if (!isPublicSourceStaging) {
 }
 assert.match(appTsx, /这个项目现在做到哪了/, "Project overview must expose the ProjectRecord confirmation card in product language");
 assert.match(appTsx, /function projectCompletionLabel/, "Project progress UI must map internal completion enums to Chinese labels");
-assert.match(appTsx, /想法[\s\S]*需求[\s\S]*设计[\s\S]*开发中[\s\S]*测试中[\s\S]*打包中[\s\S]*已发布[\s\S]*维护中/, "Project completion labels must be user-facing Chinese stages");
+assert.match(appTsx, /想法[\s\S]*需求[\s\S]*设计[\s\S]*开发中[\s\S]*测试资料[\s\S]*打包中[\s\S]*发布证据已验收[\s\S]*维护中/, "Project documentation and accepted release-evidence labels must remain distinct user-facing stages");
+assert.match(appTsx, /资料、完成度与发布门分别核验[\s\S]*正式 gate receipt/, "Project overview must separate documentation stage, product completion, continuity, and release readiness");
+assert.doesNotMatch(main, /types\.has\("release_notes"\)\) return "released"/, "release notes alone must never infer released state");
 assert.match(appTsx, /projectRecordStatusLabel\(projectRecordOverride\.status\)[\s\S]*projectCompletionLabel\(projectRecordOverride\.completion\)/, "Project overview must not print raw ProjectRecord status/completion enums");
 assert.match(appTsx, /project-card[\s\S]*projectCompletionLabel\(progressStage\)/, "Project card grid must show Chinese progress stage labels");
 assert.match(appTsx, /function readableProjectDisplayName/, "Project cards must derive a readable project name instead of only showing raw folder names");
@@ -1193,7 +1209,8 @@ assert.match(appTsx, /全部入库/, "Agent UI must support batch indexing for v
 assert.match(appTsx, /瘦身本体/, "Agent UI must expose explicit in-place old-thread slimming");
 assert.match(appTsx, /瘦身全部可见/, "Agent UI must support batch in-place slimming for visible long threads");
 assert.match(viteEnv, /compactCodexThread:/, "renderer API must type in-place old-thread slimming");
-assert.match(main, /codexGuardian:compactThread/, "main process must expose in-place old-thread slimming IPC");
+assert.match(main, /compact_thread:\s*compactCodexThread/, "Electron main must inject in-place old-thread slimming into the Guardian facade");
+assert.match(runtimeBoundaryIntegration, /operations\[request\.operation\]/, "Runtime Boundary integration must delegate allowlisted Guardian operations");
 assert.match(main, /compact-session/, "main process must call Guardian compact-session");
 assert.match(main, /validateCompactSessionReceipt/, "main process must validate compact-session receipts before reporting success");
 assert.match(main, /writeZhixiaCompactReceiptEvidence/, "Main process must write Zhixia-owned compact receipt evidence after successful slimming");
@@ -1208,7 +1225,7 @@ assert.match(main, /Math\.min\(1000,\s*Math\.floor\(limit\)\)/, "Guardian comman
 assert.match(main, /safeArray\(options\.items\)\.slice\(0,\s*1000\)/, "Archive queue generation must not clip full backlog queueing to 50 items");
 assert.match(main, /readZhixiaThreadHistoryVaultEvidence/, "Long-thread scans must attach existing Thread History Vault evidence for already-vaulted candidates");
 assert.match(main, /vaultManifestPath:\s*file\.vaultManifestPath/, "Archive queue candidates must receive vault manifest evidence from existing vault records");
-assert.match(main, /codexGuardian:generateArchiveQueue/, "Main process must expose archive queue generation IPC");
+assert.match(main, /generate_archive_queue:[\s\S]*generateCodexArchiveQueue/, "Electron main must inject archive queue generation into the Guardian facade");
 assert.match(preload, /generateCodexArchiveQueue/, "Preload must expose archive queue generation to the renderer");
 assert.match(viteEnv, /CodexThreadArchiveQueue/, "Renderer types must expose Codex thread archive queue results");
 assert.match(main, /runtimeMonitor:getSnapshot/, "main process must expose a read-only runtime monitor snapshot IPC");

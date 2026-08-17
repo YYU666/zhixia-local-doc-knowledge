@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "zhixia.refresh_outcome_cross_component_fixture.v1",
+  "request": {
+    "workspace": "/workspace/project-alpha",
+    "expectedProjectIdentitySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "expectedScanSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "previousCheckpointId": "checkpoint-previous-001",
+    "acceptedEvidenceReceipt": "accepted-evidence-cccccccccccccccccccccccccccccccc",
+    "acceptedEvidenceReceiptDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "acceptedChangedPaths": [
+      "src/a.js",
+      "docs/QA.md"
+    ],
+    "lane": "module-core"
+  },
+  "acceptedPathDigest": "07f93d6a3b29b4fbfb7d1ec8d24c720423e69da8b2bfa9581cc99481d5c6fe4d",
+  "refreshKey": "3f023cc99fe06fcb2b40bc52b1fcda0522d802e0e8a83bad63f5fd63502b42b5"
+}

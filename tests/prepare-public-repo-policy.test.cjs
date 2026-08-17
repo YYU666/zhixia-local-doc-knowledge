@@ -32,6 +32,19 @@ assert.equal(matchesPrivateTerm("wakeup"), false, "private term scan must not ma
 assert.equal(shouldIncludeFile(".github/workflows/ci.yml"), true, "public staging must include the reviewed CI workflow");
 assert.equal(shouldIncludeFile(".github/workflows/private-release.yml"), false, "public staging must not copy unreviewed GitHub workflows");
 assert.equal(shouldIncludeFile(".github/maintainer-evidence.json"), false, "public staging must not copy private GitHub metadata");
+assert.equal(shouldIncludeFile("benchmarks/memory-release-corpus.cjs"), true, "public staging must include the formal raw release corpus");
+assert.equal(shouldIncludeFile("benchmarks/memory-production-fixture-corpus.v1.json"), true, "public staging must include the non-prefilled production-path corpus");
+assert.equal(shouldIncludeFile("benchmarks/memory-production-fixture-executor.cjs"), true, "public staging must include the deterministic production-path executor");
+assert.equal(shouldIncludeFile("benchmarks/memory-production-release-corpus.v2.json"), true, "public staging must include the approved release corpus");
+assert.equal(shouldIncludeFile("benchmarks/memory-production-release-executor.cjs"), true, "public staging must include the release executor");
+assert.equal(shouldIncludeFile("scripts/run-memory-release-benchmark.cjs"), true, "public staging must include the release benchmark runner");
+assert.equal(shouldIncludeFile("scripts/packaged-source-manifest.cjs"), true, "public staging must include packaged source manifest generation");
+assert.equal(shouldIncludeFile("scripts/verify-packaged-app-source.cjs"), true, "public staging must include packaged app equivalence verification");
+assert.equal(shouldIncludeFile("scripts/full-artifact-evidence.cjs"), true, "public staging must include full artifact evidence generation and verification");
+assert.equal(shouldIncludeFile("scripts/candidate-evidence.cjs"), true, "public staging must include content-addressed candidate evidence generation and verification");
+for (const scriptName of ["test:artifact-evidence", "test:candidate-evidence", "release:candidate-manifest", "verify:candidate", "release:artifact-manifest", "verify:artifact", "verify:release-candidate"]) {
+  assert.equal(typeof require("../package.json").scripts[scriptName], "string", `package scripts must expose ${scriptName}`);
+}
 assert.match(
   fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "ci.yml"), "utf8"),
   /npm run test:electron-security/,
@@ -171,13 +184,18 @@ try {
   fs.writeFileSync(path.join(fixtureCheckout, "package.json"), JSON.stringify({
     name: "public-checkout-fixture",
     scripts: {
+      pretest: "npm run test:refresh-outcome",
+      "test:refresh-outcome": "node tests/completed-refresh-outcome-store.test.cjs && node tests/refresh-outcome-cross-component-contract.test.cjs",
       dev: "fixture-dev",
       "dev:renderer": "fixture-renderer",
       "dev:electron": "fixture-electron",
       build: "fixture-build",
       "dist:mac": "fixture-dist-mac",
       test: "node tests/prepare-public-repo-policy.test.cjs",
+      "test:electron-release": "node tests/electron-governance-e2e.test.cjs && node tests/electron-visual-behavior-e2e.test.cjs",
       "prepare:public": "node scripts/prepare-public-repo.cjs",
+      "memory:evaluate:production-fixture": "node scripts/run-memory-release-benchmark.cjs --fixture",
+      "memory:evaluate:synthetic": "node scripts/run-memory-release-benchmark.cjs --synthetic",
     },
   }, null, 2), "utf8");
   fs.writeFileSync(path.join(fixtureCheckout, "electron-builder.mac.json"), "{}\n", "utf8");
@@ -194,6 +212,21 @@ try {
   assert.equal(fs.existsSync(path.join(nestedOutput, "package.json")), true, "public bootstrap must create its nested owned output");
   assert.equal(fs.existsSync(path.join(nestedOutput, "electron-builder.mac.json")), true, "public bootstrap must preserve Mac packaging config");
   assert.equal(JSON.parse(fs.readFileSync(path.join(nestedOutput, "package.json"), "utf8")).scripts["dist:mac"], "fixture-dist-mac", "public bootstrap must preserve the Mac packaging command");
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(nestedOutput, "package.json"), "utf8")).scripts.pretest,
+    "npm run test:refresh-outcome",
+    "public bootstrap must preserve the refresh-outcome pretest gate",
+  );
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(nestedOutput, "package.json"), "utf8")).scripts["memory:evaluate:synthetic"],
+    "node scripts/run-memory-release-benchmark.cjs --synthetic",
+    "public bootstrap must preserve the evaluation-only synthetic command",
+  );
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(nestedOutput, "package.json"), "utf8")).scripts["test:electron-release"],
+    "node tests/electron-governance-e2e.test.cjs && node tests/electron-visual-behavior-e2e.test.cjs",
+    "public bootstrap must preserve the complete Electron release gate",
+  );
   assert.equal(fs.existsSync(path.join(nestedOutput, "scripts", "prepare-public-repo.cjs")), true, "nested output must remain self-bootstrap capable");
 } finally {
   fs.rmSync(fixtureRoot, { recursive: true, force: true });

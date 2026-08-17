@@ -38,9 +38,10 @@ const makeLineageItem = extractFunctionSource(main, "makeAgentRetrieveThreadLine
 
 assert.match(preload, /confirmToolSkillInventory:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("tools:confirmInventory",\s*options\)/, "preload must expose Tool/Skill snapshot confirmation IPC");
 assert.match(preload, /updateToolSkillRecordGovernance:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("tools:updateRecordGovernance",\s*options\)/, "preload must expose per-record Tool/Skill governance IPC");
-assert.match(preload, /retrieveAgentContext:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("agent:retrieveContext",\s*options\)/, "preload must pass retrieval options through to main");
+assert.match(preload, /retrieveAgentContext:\s*\(options\)\s*=>\s*options\?\.readOnly === true[\s\S]*runtimeBoundary:strictReadonlyMemoryQuery[\s\S]*agent:retrieveContext/, "preload must route ordinary read-only Agent retrieval through the strict facade");
 assert.match(preload, /listMemoryFacts:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("memoryRuntime:listFacts",\s*options\)/, "preload must expose temporal MemoryFact listing");
 assert.match(preload, /listMemoryRuntimeTriggerReceipts:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("memoryRuntime:listTriggerReceipts",\s*options\)/, "preload must expose lifecycle trigger receipts");
+assert.match(preload, /loadProjectReleaseEvidence:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\("runtimeBoundary:releaseEvidence",\s*options\)/, "preload must expose release evidence through the Runtime Boundary facade");
 
 assert.match(main, /ipcMain\.handle\("tools:confirmInventory"/, "main must register Tool/Skill snapshot confirmation handler");
 assert.match(main, /ipcMain\.handle\("tools:updateRecordGovernance"/, "main must register per-record Tool/Skill governance handler");
@@ -48,6 +49,7 @@ assert.match(main, /ipcMain\.handle\("agent:retrieveContext"/, "main must regist
 assert.match(main, /ipcMain\.handle\("memoryRuntime:listFacts"/, "main must register MemoryFact list handler");
 assert.match(main, /ipcMain\.handle\("memoryRuntime:listTriggerReceipts"/, "main must register trigger receipt handler");
 assert.match(main, /ipcMain\.handle\("memoryRuntime:evaluateBenchmark"/, "main must register bounded memory evaluation handler");
+assert.doesNotMatch(main, /ipcMain\.handle\("projectRelease:loadEvidence"/, "release evidence must not add a direct main IPC handler outside the facade");
 assert.doesNotMatch(main, /memoryRuntime:listCoreReviewItems|listMemoryCoreReviewItems|\.listReviewItems\(/, "main must not retain the duplicate Memory Core review-items API");
 assert.doesNotMatch(preload, /memoryRuntime:listCoreReviewItems|listMemoryCoreReviewItems/, "preload must not retain the duplicate Memory Core review-items API");
 assert.doesNotMatch(viteEnv, /listMemoryCoreReviewItems/, "renderer types must not retain the duplicate Memory Core review-items API");

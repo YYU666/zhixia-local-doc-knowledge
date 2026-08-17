@@ -1,0 +1,6105 @@
+{
+  "schemaVersion": "zhixia.memory_release_corpus.v1",
+  "corpusId": "zhixia-memory-release-corpus-20260813-v1",
+  "provenance": {
+    "classification": "formal_static_synthetic_release_corpus",
+    "privacy": "no_user_data_no_raw_sessions_no_credentials",
+    "authorityExecution": "recomputed_against_current_memory_authority_policy",
+    "deterministicSeed": 20260813,
+    "generation": "frozen_raw_cases_not_generated_at_gate_runtime"
+  },
+  "cases": [
+    {
+      "id": "release-memory-case-001",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 1.",
+      "expectedIds": [
+        "synthetic-continuity-1-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-1-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-1-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-1-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 89,
+      "tokenEstimate": 552,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-1",
+        "resolvedModule": "synthetic-module-1"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-002",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 2.",
+      "expectedIds": [
+        "synthetic-continuity-2-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-2-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-2-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-2-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 96,
+      "tokenEstimate": 516,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-2",
+        "resolvedModule": "synthetic-module-2"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-003",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 3.",
+      "expectedIds": [
+        "synthetic-continuity-3-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-3-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-3-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-3-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 134,
+      "tokenEstimate": 403,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-3",
+        "resolvedModule": "synthetic-module-3"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-004",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 4.",
+      "expectedIds": [
+        "synthetic-continuity-4-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-4-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-4-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-4-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 133,
+      "tokenEstimate": 469,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-4",
+        "resolvedModule": "synthetic-module-4"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-005",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 5.",
+      "expectedIds": [
+        "synthetic-continuity-5-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-5-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-5-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-5-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 117,
+      "tokenEstimate": 743,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-5",
+        "resolvedModule": "synthetic-module-5"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-006",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 6.",
+      "expectedIds": [
+        "synthetic-continuity-6-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-6-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-6-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-6-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 77,
+      "tokenEstimate": 520,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-1",
+        "resolvedModule": "synthetic-module-1"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-007",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 7.",
+      "expectedIds": [
+        "synthetic-continuity-7-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-7-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-7-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-7-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 94,
+      "tokenEstimate": 632,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-2",
+        "resolvedModule": "synthetic-module-2"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-008",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 8.",
+      "expectedIds": [
+        "synthetic-continuity-8-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-8-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-8-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-8-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 109,
+      "tokenEstimate": 620,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-3",
+        "resolvedModule": "synthetic-module-3"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-009",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 9.",
+      "expectedIds": [
+        "synthetic-continuity-9-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-9-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-9-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-9-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 129,
+      "tokenEstimate": 325,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-4",
+        "resolvedModule": "synthetic-module-4"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-010",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 10.",
+      "expectedIds": [
+        "synthetic-continuity-10-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-10-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-10-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-10-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 130,
+      "tokenEstimate": 760,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-5",
+        "resolvedModule": "synthetic-module-5"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-011",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 11.",
+      "expectedIds": [
+        "synthetic-continuity-11-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-11-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-11-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-11-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 65,
+      "tokenEstimate": 554,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-1",
+        "resolvedModule": "synthetic-module-1"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-012",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 12.",
+      "expectedIds": [
+        "synthetic-continuity-12-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-12-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-12-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-12-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 138,
+      "tokenEstimate": 550,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-2",
+        "resolvedModule": "synthetic-module-2"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-013",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 13.",
+      "expectedIds": [
+        "synthetic-continuity-13-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-13-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-13-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-13-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 101,
+      "tokenEstimate": 781,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-3",
+        "resolvedModule": "synthetic-module-3"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-014",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 14.",
+      "expectedIds": [
+        "synthetic-continuity-14-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-14-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-14-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-14-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 89,
+      "tokenEstimate": 739,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-4",
+        "resolvedModule": "synthetic-module-4"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-015",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 15.",
+      "expectedIds": [
+        "synthetic-continuity-15-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-15-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-15-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-15-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 132,
+      "tokenEstimate": 506,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-5",
+        "resolvedModule": "synthetic-module-5"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-016",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 16.",
+      "expectedIds": [
+        "synthetic-continuity-16-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-16-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-16-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-16-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 99,
+      "tokenEstimate": 536,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-1",
+        "resolvedModule": "synthetic-module-1"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-017",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 17.",
+      "expectedIds": [
+        "synthetic-continuity-17-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-17-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-17-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-17-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 68,
+      "tokenEstimate": 645,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-2",
+        "resolvedModule": "synthetic-module-2"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-018",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 18.",
+      "expectedIds": [
+        "synthetic-continuity-18-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-18-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-18-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-18-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 113,
+      "tokenEstimate": 486,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-3",
+        "resolvedModule": "synthetic-module-3"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-019",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 19.",
+      "expectedIds": [
+        "synthetic-continuity-19-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-19-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-19-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-19-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 121,
+      "tokenEstimate": 650,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-4",
+        "resolvedModule": "synthetic-module-4"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-020",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 20.",
+      "expectedIds": [
+        "synthetic-continuity-20-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-20-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-20-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-20-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 77,
+      "tokenEstimate": 686,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "takeoverSuccessful": true,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-5",
+        "resolvedModule": "synthetic-module-5"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-021",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 21.",
+      "expectedIds": [
+        "synthetic-continuity-21-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-21-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-21-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-21-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 103,
+      "tokenEstimate": 634,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-1",
+        "resolvedModule": "synthetic-module-1"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-022",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 22.",
+      "expectedIds": [
+        "synthetic-continuity-22-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-22-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-22-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-22-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 112,
+      "tokenEstimate": 492,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-2",
+        "resolvedModule": "synthetic-module-2"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-023",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 23.",
+      "expectedIds": [
+        "synthetic-continuity-23-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-23-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-23-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-23-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 113,
+      "tokenEstimate": 586,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-3",
+        "resolvedModule": "synthetic-module-3"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-024",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 24.",
+      "expectedIds": [
+        "synthetic-continuity-24-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-24-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-24-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-24-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 92,
+      "tokenEstimate": 773,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-4",
+        "resolvedModule": "synthetic-module-4"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-025",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 25.",
+      "expectedIds": [
+        "synthetic-continuity-25-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-25-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-25-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-25-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 122,
+      "tokenEstimate": 393,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-5",
+        "resolvedModule": "synthetic-module-5"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-026",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 26.",
+      "expectedIds": [
+        "synthetic-continuity-26-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-26-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-26-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-26-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 67,
+      "tokenEstimate": 723,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-1",
+        "resolvedModule": "synthetic-module-1"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-027",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 27.",
+      "expectedIds": [
+        "synthetic-continuity-27-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-27-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-27-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-27-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 135,
+      "tokenEstimate": 688,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-2",
+        "resolvedModule": "synthetic-module-2"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-028",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 28.",
+      "expectedIds": [
+        "synthetic-continuity-28-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-28-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-28-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-28-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 103,
+      "tokenEstimate": 584,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-3",
+        "resolvedModule": "synthetic-module-3"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-029",
+      "project": "synthetic-project-alpha",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 29.",
+      "expectedIds": [
+        "synthetic-continuity-29-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-29-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-29-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-29-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 77,
+      "tokenEstimate": 325,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-4",
+        "resolvedModule": "synthetic-module-4"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-030",
+      "project": "synthetic-project-beta",
+      "queryType": "cross_wording",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Continue the synthetic work from an equivalent phrasing sample 30.",
+      "expectedIds": [
+        "synthetic-continuity-30-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-30-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-30-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-30-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 64,
+      "tokenEstimate": 624,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-5",
+        "resolvedModule": "synthetic-module-5"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-031",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 31.",
+      "expectedIds": [
+        "synthetic-continuity-31-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-31-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-31-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-31-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 91,
+      "tokenEstimate": 335,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-1",
+        "resolvedModule": "synthetic-module-1"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-032",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 32.",
+      "expectedIds": [
+        "synthetic-continuity-32-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-32-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-32-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-32-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 104,
+      "tokenEstimate": 769,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-2",
+        "resolvedModule": "synthetic-module-2"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-033",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 33.",
+      "expectedIds": [
+        "synthetic-continuity-33-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-33-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-33-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-33-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 123,
+      "tokenEstimate": 321,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-3",
+        "resolvedModule": "synthetic-module-3"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-034",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 34.",
+      "expectedIds": [
+        "synthetic-continuity-34-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-34-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-34-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-34-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 108,
+      "tokenEstimate": 582,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-4",
+        "resolvedModule": "synthetic-module-4"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-035",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 35.",
+      "expectedIds": [
+        "synthetic-continuity-35-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-35-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-35-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-35-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 61,
+      "tokenEstimate": 746,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-5",
+        "resolvedModule": "synthetic-module-5"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-036",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 36.",
+      "expectedIds": [
+        "synthetic-continuity-36-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-36-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-36-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-36-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 100,
+      "tokenEstimate": 377,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-1",
+        "resolvedModule": "synthetic-module-1"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-037",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 37.",
+      "expectedIds": [
+        "synthetic-continuity-37-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-37-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-37-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-37-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 67,
+      "tokenEstimate": 684,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-2",
+        "resolvedModule": "synthetic-module-2"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-038",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 38.",
+      "expectedIds": [
+        "synthetic-continuity-38-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-38-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-38-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-38-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 128,
+      "tokenEstimate": 556,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-3",
+        "resolvedModule": "synthetic-module-3"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-039",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 39.",
+      "expectedIds": [
+        "synthetic-continuity-39-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-39-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-39-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-39-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 115,
+      "tokenEstimate": 392,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-4",
+        "resolvedModule": "synthetic-module-4"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-040",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 40.",
+      "expectedIds": [
+        "synthetic-continuity-40-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-40-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-40-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-40-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 94,
+      "tokenEstimate": 644,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-5",
+        "resolvedModule": "synthetic-module-5"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-041",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 41.",
+      "expectedIds": [
+        "synthetic-continuity-41-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-41-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-41-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-41-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 63,
+      "tokenEstimate": 443,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-1",
+        "resolvedModule": "synthetic-module-1"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-042",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 42.",
+      "expectedIds": [
+        "synthetic-continuity-42-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-42-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-42-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-42-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 75,
+      "tokenEstimate": 641,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-2",
+        "resolvedModule": "synthetic-module-2"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-043",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 43.",
+      "expectedIds": [
+        "synthetic-continuity-43-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-43-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-43-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-43-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 116,
+      "tokenEstimate": 771,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-3",
+        "resolvedModule": "synthetic-module-3"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-044",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 44.",
+      "expectedIds": [
+        "synthetic-continuity-44-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-44-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-44-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-44-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 110,
+      "tokenEstimate": 660,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-4",
+        "resolvedModule": "synthetic-module-4"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-045",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 45.",
+      "expectedIds": [
+        "synthetic-continuity-45-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-45-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-45-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-45-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 109,
+      "tokenEstimate": 736,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-5",
+        "resolvedModule": "synthetic-module-5"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-046",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 46.",
+      "expectedIds": [
+        "synthetic-continuity-46-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-46-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-46-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-46-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 61,
+      "tokenEstimate": 715,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-1",
+        "resolvedModule": "synthetic-module-1"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-047",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 47.",
+      "expectedIds": [
+        "synthetic-continuity-47-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-47-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-47-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-47-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 131,
+      "tokenEstimate": 440,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-alpha",
+        "resolvedProject": "synthetic-project-alpha",
+        "expectedModule": "synthetic-module-2",
+        "resolvedModule": "synthetic-module-2"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-048",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume the synthetic project checkpoint 48.",
+      "expectedIds": [
+        "synthetic-continuity-48-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-current"
+      ],
+      "staleIds": [
+        "synthetic-continuity-48-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-continuity-48-anchor",
+          "tags": [
+            "synthetic-current"
+          ]
+        },
+        {
+          "id": "synthetic-continuity-48-support",
+          "tags": [
+            "synthetic-support"
+          ]
+        }
+      ],
+      "latencyMs": 73,
+      "tokenEstimate": 749,
+      "continuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "filledSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "takeoverSuccessful": false,
+        "expectedProject": "synthetic-project-beta",
+        "resolvedProject": "synthetic-project-beta",
+        "expectedModule": "synthetic-module-3",
+        "resolvedModule": "synthetic-module-3"
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-049",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat unauthorized_acceptance sample 1.",
+      "expectedIds": [
+        "synthetic-authority-1-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-1-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-1-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 41,
+      "tokenEstimate": 182,
+      "authority": {
+        "threatType": "unauthorized_acceptance",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "worker",
+          "requestedStatus": "accepted"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-050",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat unauthorized_acceptance sample 2.",
+      "expectedIds": [
+        "synthetic-authority-2-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-2-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-2-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 59,
+      "tokenEstimate": 179,
+      "authority": {
+        "threatType": "unauthorized_acceptance",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "worker",
+          "requestedStatus": "accepted"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-051",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat unauthorized_acceptance sample 3.",
+      "expectedIds": [
+        "synthetic-authority-3-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-3-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-3-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 37,
+      "tokenEstimate": 188,
+      "authority": {
+        "threatType": "unauthorized_acceptance",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "worker",
+          "requestedStatus": "accepted"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-052",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat revoked_leakage sample 1.",
+      "expectedIds": [
+        "synthetic-authority-4-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-4-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-4-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 46,
+      "tokenEstimate": 183,
+      "authority": {
+        "threatType": "revoked_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-053",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat revoked_leakage sample 2.",
+      "expectedIds": [
+        "synthetic-authority-5-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-5-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-5-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 34,
+      "tokenEstimate": 251,
+      "authority": {
+        "threatType": "revoked_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-054",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat revoked_leakage sample 3.",
+      "expectedIds": [
+        "synthetic-authority-6-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-6-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-6-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 59,
+      "tokenEstimate": 237,
+      "authority": {
+        "threatType": "revoked_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-055",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat expired_leakage sample 1.",
+      "expectedIds": [
+        "synthetic-authority-7-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-7-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-7-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 45,
+      "tokenEstimate": 231,
+      "authority": {
+        "threatType": "expired_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-056",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat expired_leakage sample 2.",
+      "expectedIds": [
+        "synthetic-authority-8-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-8-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-8-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 42,
+      "tokenEstimate": 145,
+      "authority": {
+        "threatType": "expired_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-057",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat expired_leakage sample 3.",
+      "expectedIds": [
+        "synthetic-authority-9-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-9-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-9-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 57,
+      "tokenEstimate": 279,
+      "authority": {
+        "threatType": "expired_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-058",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat superseded_leakage sample 1.",
+      "expectedIds": [
+        "synthetic-authority-10-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-10-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-10-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 51,
+      "tokenEstimate": 124,
+      "authority": {
+        "threatType": "superseded_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-059",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat superseded_leakage sample 2.",
+      "expectedIds": [
+        "synthetic-authority-11-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-11-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-11-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 41,
+      "tokenEstimate": 268,
+      "authority": {
+        "threatType": "superseded_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-060",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat superseded_leakage sample 3.",
+      "expectedIds": [
+        "synthetic-authority-12-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-12-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-12-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 38,
+      "tokenEstimate": 185,
+      "authority": {
+        "threatType": "superseded_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-061",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat self_approval sample 1.",
+      "expectedIds": [
+        "synthetic-authority-13-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-13-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-13-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 43,
+      "tokenEstimate": 203,
+      "authority": {
+        "threatType": "self_approval",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorType": "agent",
+          "action": "approve",
+          "ownsTarget": true
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-062",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat self_approval sample 2.",
+      "expectedIds": [
+        "synthetic-authority-14-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-14-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-14-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 59,
+      "tokenEstimate": 137,
+      "authority": {
+        "threatType": "self_approval",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorType": "agent",
+          "action": "approve",
+          "ownsTarget": true
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-063",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat self_approval sample 3.",
+      "expectedIds": [
+        "synthetic-authority-15-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-15-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-15-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 29,
+      "tokenEstimate": 243,
+      "authority": {
+        "threatType": "self_approval",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorType": "agent",
+          "action": "approve",
+          "ownsTarget": true
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-064",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat standing_rule_violation sample 1.",
+      "expectedIds": [
+        "synthetic-authority-16-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-16-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-16-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 65,
+      "tokenEstimate": 167,
+      "authority": {
+        "threatType": "standing_rule_violation",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "reviewer",
+          "action": "revoke",
+          "ownerApproved": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-065",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat standing_rule_violation sample 2.",
+      "expectedIds": [
+        "synthetic-authority-17-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-17-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-17-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 31,
+      "tokenEstimate": 131,
+      "authority": {
+        "threatType": "standing_rule_violation",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "reviewer",
+          "action": "revoke",
+          "ownerApproved": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-066",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat standing_rule_violation sample 3.",
+      "expectedIds": [
+        "synthetic-authority-18-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-18-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-18-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 37,
+      "tokenEstimate": 187,
+      "authority": {
+        "threatType": "standing_rule_violation",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "reviewer",
+          "action": "revoke",
+          "ownerApproved": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-067",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat identity_forgery sample 1.",
+      "expectedIds": [
+        "synthetic-authority-19-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-19-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-19-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 66,
+      "tokenEstimate": 258,
+      "authority": {
+        "threatType": "identity_forgery",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaIdentity": true,
+          "claimedRole": "owner",
+          "action": "approve"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-068",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat identity_forgery sample 2.",
+      "expectedIds": [
+        "synthetic-authority-20-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-20-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-20-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 39,
+      "tokenEstimate": 218,
+      "authority": {
+        "threatType": "identity_forgery",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaIdentity": true,
+          "claimedRole": "owner",
+          "action": "approve"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-069",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat identity_forgery sample 3.",
+      "expectedIds": [
+        "synthetic-authority-21-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-21-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-21-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 61,
+      "tokenEstimate": 242,
+      "authority": {
+        "threatType": "identity_forgery",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaIdentity": true,
+          "claimedRole": "owner",
+          "action": "approve"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-070",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat forged_accepted_envelope sample 1.",
+      "expectedIds": [
+        "synthetic-authority-22-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-22-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-22-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 29,
+      "tokenEstimate": 248,
+      "authority": {
+        "threatType": "forged_accepted_envelope",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-071",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat forged_accepted_envelope sample 2.",
+      "expectedIds": [
+        "synthetic-authority-23-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-23-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-23-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 27,
+      "tokenEstimate": 209,
+      "authority": {
+        "threatType": "forged_accepted_envelope",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-072",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat forged_accepted_envelope sample 3.",
+      "expectedIds": [
+        "synthetic-authority-24-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-24-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-24-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 25,
+      "tokenEstimate": 152,
+      "authority": {
+        "threatType": "forged_accepted_envelope",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-073",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat unapproved_standing_rule sample 1.",
+      "expectedIds": [
+        "synthetic-authority-25-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-25-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-25-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 46,
+      "tokenEstimate": 247,
+      "authority": {
+        "threatType": "unapproved_standing_rule",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaRule": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-074",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat unapproved_standing_rule sample 2.",
+      "expectedIds": [
+        "synthetic-authority-26-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-26-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-26-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 65,
+      "tokenEstimate": 277,
+      "authority": {
+        "threatType": "unapproved_standing_rule",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaRule": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-075",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat unapproved_standing_rule sample 3.",
+      "expectedIds": [
+        "synthetic-authority-27-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-27-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-27-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 65,
+      "tokenEstimate": 277,
+      "authority": {
+        "threatType": "unapproved_standing_rule",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaRule": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-076",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat project_id_scope_masquerade sample 1.",
+      "expectedIds": [
+        "synthetic-authority-28-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-28-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-28-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 58,
+      "tokenEstimate": 142,
+      "authority": {
+        "threatType": "project_id_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectId": "synthetic-project-alpha",
+          "targetProjectId": "synthetic-project-beta",
+          "forgedScopeProjectId": "synthetic-project-alpha"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-077",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat project_id_scope_masquerade sample 2.",
+      "expectedIds": [
+        "synthetic-authority-29-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-29-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-29-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 36,
+      "tokenEstimate": 191,
+      "authority": {
+        "threatType": "project_id_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectId": "synthetic-project-alpha",
+          "targetProjectId": "synthetic-project-beta",
+          "forgedScopeProjectId": "synthetic-project-alpha"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-078",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat project_id_scope_masquerade sample 3.",
+      "expectedIds": [
+        "synthetic-authority-30-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-30-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-30-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 58,
+      "tokenEstimate": 278,
+      "authority": {
+        "threatType": "project_id_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectId": "synthetic-project-alpha",
+          "targetProjectId": "synthetic-project-beta",
+          "forgedScopeProjectId": "synthetic-project-alpha"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-079",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat project_path_scope_masquerade sample 1.",
+      "expectedIds": [
+        "synthetic-authority-31-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-31-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-31-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 58,
+      "tokenEstimate": 195,
+      "authority": {
+        "threatType": "project_path_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectPath": "synthetic/projects/alpha",
+          "targetProjectPath": "synthetic/projects/beta",
+          "forgedScopeProjectPath": "synthetic/projects/alpha"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-080",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat project_path_scope_masquerade sample 2.",
+      "expectedIds": [
+        "synthetic-authority-32-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-32-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-32-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 50,
+      "tokenEstimate": 245,
+      "authority": {
+        "threatType": "project_path_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectPath": "synthetic/projects/alpha",
+          "targetProjectPath": "synthetic/projects/beta",
+          "forgedScopeProjectPath": "synthetic/projects/alpha"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-081",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat project_path_scope_masquerade sample 3.",
+      "expectedIds": [
+        "synthetic-authority-33-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-33-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-33-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 46,
+      "tokenEstimate": 175,
+      "authority": {
+        "threatType": "project_path_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectPath": "synthetic/projects/alpha",
+          "targetProjectPath": "synthetic/projects/beta",
+          "forgedScopeProjectPath": "synthetic/projects/alpha"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-082",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat unsafe_payload_bypass sample 1.",
+      "expectedIds": [
+        "synthetic-authority-34-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-34-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-34-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 64,
+      "tokenEstimate": 170,
+      "authority": {
+        "threatType": "unsafe_payload_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "unsafePayloadType": "base64",
+          "requestedStatus": "accepted"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-083",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat unsafe_payload_bypass sample 2.",
+      "expectedIds": [
+        "synthetic-authority-35-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-35-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-35-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 35,
+      "tokenEstimate": 154,
+      "authority": {
+        "threatType": "unsafe_payload_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "unsafePayloadType": "base64",
+          "requestedStatus": "accepted"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-084",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat unsafe_payload_bypass sample 3.",
+      "expectedIds": [
+        "synthetic-authority-36-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-36-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-36-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 62,
+      "tokenEstimate": 216,
+      "authority": {
+        "threatType": "unsafe_payload_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "unsafePayloadType": "base64",
+          "requestedStatus": "accepted"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-085",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat authority_receipt_tampering sample 1.",
+      "expectedIds": [
+        "synthetic-authority-37-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-37-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-37-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 58,
+      "tokenEstimate": 134,
+      "authority": {
+        "threatType": "authority_receipt_tampering",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptIntegrityValid": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-086",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat authority_receipt_tampering sample 2.",
+      "expectedIds": [
+        "synthetic-authority-38-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-38-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-38-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 51,
+      "tokenEstimate": 268,
+      "authority": {
+        "threatType": "authority_receipt_tampering",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptIntegrityValid": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-087",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat authority_receipt_tampering sample 3.",
+      "expectedIds": [
+        "synthetic-authority-39-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-39-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-39-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 35,
+      "tokenEstimate": 167,
+      "authority": {
+        "threatType": "authority_receipt_tampering",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptIntegrityValid": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-088",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat authority_receipt_replay sample 1.",
+      "expectedIds": [
+        "synthetic-authority-40-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-40-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-40-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 44,
+      "tokenEstimate": 255,
+      "authority": {
+        "threatType": "authority_receipt_replay",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptReused": true
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-089",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat authority_receipt_replay sample 2.",
+      "expectedIds": [
+        "synthetic-authority-41-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-41-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-41-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 37,
+      "tokenEstimate": 148,
+      "authority": {
+        "threatType": "authority_receipt_replay",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptReused": true
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-090",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat authority_receipt_replay sample 3.",
+      "expectedIds": [
+        "synthetic-authority-42-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-42-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-42-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 28,
+      "tokenEstimate": 126,
+      "authority": {
+        "threatType": "authority_receipt_replay",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptReused": true
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-091",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat revoked_recall sample 1.",
+      "expectedIds": [
+        "synthetic-authority-43-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-43-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-43-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 39,
+      "tokenEstimate": 279,
+      "authority": {
+        "threatType": "revoked_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-092",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat revoked_recall sample 2.",
+      "expectedIds": [
+        "synthetic-authority-44-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-44-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-44-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 64,
+      "tokenEstimate": 275,
+      "authority": {
+        "threatType": "revoked_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-093",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat revoked_recall sample 3.",
+      "expectedIds": [
+        "synthetic-authority-45-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-45-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-45-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 25,
+      "tokenEstimate": 150,
+      "authority": {
+        "threatType": "revoked_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-094",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat expired_recall sample 1.",
+      "expectedIds": [
+        "synthetic-authority-46-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-46-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-46-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 45,
+      "tokenEstimate": 244,
+      "authority": {
+        "threatType": "expired_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-095",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat expired_recall sample 2.",
+      "expectedIds": [
+        "synthetic-authority-47-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-47-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-47-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 62,
+      "tokenEstimate": 192,
+      "authority": {
+        "threatType": "expired_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-096",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat expired_recall sample 3.",
+      "expectedIds": [
+        "synthetic-authority-48-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-48-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-48-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 52,
+      "tokenEstimate": 271,
+      "authority": {
+        "threatType": "expired_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-097",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat superseded_recall sample 1.",
+      "expectedIds": [
+        "synthetic-authority-49-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-49-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-49-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 29,
+      "tokenEstimate": 181,
+      "authority": {
+        "threatType": "superseded_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-098",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat superseded_recall sample 2.",
+      "expectedIds": [
+        "synthetic-authority-50-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-50-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-50-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 60,
+      "tokenEstimate": 212,
+      "authority": {
+        "threatType": "superseded_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-099",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat superseded_recall sample 3.",
+      "expectedIds": [
+        "synthetic-authority-51-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-51-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-51-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 47,
+      "tokenEstimate": 213,
+      "authority": {
+        "threatType": "superseded_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-100",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat legacy_compatibility_bypass sample 1.",
+      "expectedIds": [
+        "synthetic-authority-52-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-52-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-52-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 38,
+      "tokenEstimate": 173,
+      "authority": {
+        "threatType": "legacy_compatibility_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "legacyObject": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-101",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat legacy_compatibility_bypass sample 2.",
+      "expectedIds": [
+        "synthetic-authority-53-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-53-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-53-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 28,
+      "tokenEstimate": 200,
+      "authority": {
+        "threatType": "legacy_compatibility_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "legacyObject": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-102",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority threat legacy_compatibility_bypass sample 3.",
+      "expectedIds": [
+        "synthetic-authority-54-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized"
+      ],
+      "staleIds": [
+        "synthetic-authority-54-retired"
+      ],
+      "results": [
+        {
+          "id": "synthetic-authority-54-current",
+          "tags": [
+            "synthetic-authorized"
+          ]
+        }
+      ],
+      "latencyMs": 32,
+      "tokenEstimate": 188,
+      "authority": {
+        "threatType": "legacy_compatibility_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "legacyObject": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-103",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_positive_control",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority positive control trusted_owner_approve sample 1.",
+      "expectedIds": [
+        "synthetic-authority-control-1-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized-control"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-authority-control-1-current",
+          "tags": [
+            "synthetic-authorized-control"
+          ]
+        }
+      ],
+      "latencyMs": 54,
+      "tokenEstimate": 176,
+      "authority": {
+        "threatType": "trusted_owner_approve",
+        "expectedAllowed": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "owner",
+          "trustedIdentity": true,
+          "action": "approve",
+          "targetStatus": "review"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-104",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_positive_control",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority positive control persisted_receipt_rehydration sample 1.",
+      "expectedIds": [
+        "synthetic-authority-control-2-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized-control"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-authority-control-2-current",
+          "tags": [
+            "synthetic-authorized-control"
+          ]
+        }
+      ],
+      "latencyMs": 35,
+      "tokenEstimate": 148,
+      "authority": {
+        "threatType": "persisted_receipt_rehydration",
+        "expectedAllowed": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "persistedRecord": true,
+          "receiptTargetMatches": true,
+          "receiptTrusted": true
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-105",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_positive_control",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority positive control authorized_normal_recall sample 1.",
+      "expectedIds": [
+        "synthetic-authority-control-3-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized-control"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-authority-control-3-current",
+          "tags": [
+            "synthetic-authorized-control"
+          ]
+        }
+      ],
+      "latencyMs": 54,
+      "tokenEstimate": 274,
+      "authority": {
+        "threatType": "authorized_normal_recall",
+        "expectedAllowed": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "worker",
+          "trustedIdentity": true,
+          "recallView": "normal",
+          "lifecycleStatus": "accepted"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-106",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_positive_control",
+      "scenario": "authority",
+      "query": "Evaluate synthetic authority positive control reviewer_review_recall sample 1.",
+      "expectedIds": [
+        "synthetic-authority-control-4-current"
+      ],
+      "expectedTags": [
+        "synthetic-authorized-control"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-authority-control-4-current",
+          "tags": [
+            "synthetic-authorized-control"
+          ]
+        }
+      ],
+      "latencyMs": 65,
+      "tokenEstimate": 273,
+      "authority": {
+        "threatType": "reviewer_review_recall",
+        "expectedAllowed": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "reviewer",
+          "trustedIdentity": true,
+          "recallView": "review",
+          "lifecycleStatus": "review"
+        }
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-107",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 1.",
+      "expectedIds": [
+        "synthetic-compound-1-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-1-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 58,
+      "tokenEstimate": 298,
+      "compound": {
+        "reuseCount": 1,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 440,
+        "estimatedMinutesSaved": 7,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-108",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 2.",
+      "expectedIds": [
+        "synthetic-compound-2-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-2-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 74,
+      "tokenEstimate": 381,
+      "compound": {
+        "reuseCount": 2,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 573,
+        "estimatedMinutesSaved": 5,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-109",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 3.",
+      "expectedIds": [
+        "synthetic-compound-3-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-3-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 49,
+      "tokenEstimate": 385,
+      "compound": {
+        "reuseCount": 3,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 787,
+        "estimatedMinutesSaved": 3,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-110",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 4.",
+      "expectedIds": [
+        "synthetic-compound-4-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-4-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 61,
+      "tokenEstimate": 304,
+      "compound": {
+        "reuseCount": 4,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 900,
+        "estimatedMinutesSaved": 3,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-111",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 5.",
+      "expectedIds": [
+        "synthetic-compound-5-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-5-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 36,
+      "tokenEstimate": 166,
+      "compound": {
+        "reuseCount": 1,
+        "outcome": "revised",
+        "corrected": false,
+        "estimatedTokensSaved": 466,
+        "estimatedMinutesSaved": 10,
+        "staleCost": 0.05,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-112",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 6.",
+      "expectedIds": [
+        "synthetic-compound-6-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-6-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 84,
+      "tokenEstimate": 172,
+      "compound": {
+        "reuseCount": 2,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 773,
+        "estimatedMinutesSaved": 7,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-113",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 7.",
+      "expectedIds": [
+        "synthetic-compound-7-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-7-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 76,
+      "tokenEstimate": 256,
+      "compound": {
+        "reuseCount": 3,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 975,
+        "estimatedMinutesSaved": 8,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-114",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 8.",
+      "expectedIds": [
+        "synthetic-compound-8-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-8-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 81,
+      "tokenEstimate": 161,
+      "compound": {
+        "reuseCount": 4,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 404,
+        "estimatedMinutesSaved": 8,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-115",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 9.",
+      "expectedIds": [
+        "synthetic-compound-9-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-9-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 39,
+      "tokenEstimate": 228,
+      "compound": {
+        "reuseCount": 1,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 393,
+        "estimatedMinutesSaved": 5,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-116",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 10.",
+      "expectedIds": [
+        "synthetic-compound-10-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-10-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 75,
+      "tokenEstimate": 282,
+      "compound": {
+        "reuseCount": 2,
+        "outcome": "revised",
+        "corrected": false,
+        "estimatedTokensSaved": 425,
+        "estimatedMinutesSaved": 11,
+        "staleCost": 0.05,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-117",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 11.",
+      "expectedIds": [
+        "synthetic-compound-11-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-11-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 52,
+      "tokenEstimate": 290,
+      "compound": {
+        "reuseCount": 3,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 490,
+        "estimatedMinutesSaved": 11,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-118",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 12.",
+      "expectedIds": [
+        "synthetic-compound-12-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-12-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 52,
+      "tokenEstimate": 293,
+      "compound": {
+        "reuseCount": 4,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 874,
+        "estimatedMinutesSaved": 9,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-119",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 13.",
+      "expectedIds": [
+        "synthetic-compound-13-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-13-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 40,
+      "tokenEstimate": 281,
+      "compound": {
+        "reuseCount": 1,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 534,
+        "estimatedMinutesSaved": 9,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    },
+    {
+      "id": "release-memory-case-120",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Measure synthetic memory reuse value sample 14.",
+      "expectedIds": [
+        "synthetic-compound-14-anchor"
+      ],
+      "expectedTags": [
+        "synthetic-reusable"
+      ],
+      "staleIds": [],
+      "results": [
+        {
+          "id": "synthetic-compound-14-anchor",
+          "tags": [
+            "synthetic-reusable"
+          ]
+        }
+      ],
+      "latencyMs": 99,
+      "tokenEstimate": 291,
+      "compound": {
+        "reuseCount": 2,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 565,
+        "estimatedMinutesSaved": 11,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      },
+      "corpusClass": "formal_static_synthetic_release_case"
+    }
+  ]
+}

@@ -4,7 +4,11 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const { execute } = require("../electron/memoryRuntimeCli.cjs");
+const {
+  execute,
+  issueAcceptedEvidenceReceiptFromApp,
+  verifyTakeoverHostRequirements,
+} = require("../electron/memoryRuntimeCli.cjs");
 const { bindExactProjectIdentity, deriveProjectIdentity } = require("../electron/memoryCoreRuntime.cjs");
 const {
   listAuthorityReceipts,
@@ -78,6 +82,23 @@ function seedRequest(workspace, storeRoot, scan) {
       threadLineage: ["example_project-ceo-current"],
     },
   };
+}
+
+function issueAcceptedEvidenceReceipt({ workspace, storeRoot, scan, previousCheckpointId, acceptedChangedPaths, lane }) {
+  const now = Date.now();
+  return issueAcceptedEvidenceReceiptFromApp({
+    workspace,
+    storeRoot,
+    execute: true,
+    expectedProjectIdentitySha256: scan.projectIdentity.projectIdentitySha256,
+    expectedScanSha256: scan.scanSha256,
+    previousCheckpointId,
+    acceptedChangedPaths,
+    lane,
+    decision: "accept",
+    now: new Date(now).toISOString(),
+    expiresAt: new Date(now + 10 * 60_000).toISOString(),
+  });
 }
 
 function assertSafeBounded(packet, limit) {
@@ -179,7 +200,9 @@ function main() {
     const unreadyTakeover = runStrictCli({ operation: "prepare_takeover", workspace, storeRoot, taskGoal: "EXAMPLE_PROJECT current engine checkpoint", tokenBudget: 3000 });
     assert.equal(unreadyTakeover.operation, "prepare_takeover");
     assert.equal(unreadyTakeover.takeover.shouldInject, false);
+    assert.equal(unreadyTakeover.takeover.schemaVersion, "zhixia.takeover_control.v2");
     assert.equal(unreadyTakeover.takeover.injectionMode, "blocked_fail_closed");
+    assert.equal(verifyTakeoverHostRequirements(unreadyTakeover.takeover.hostRequirements), true);
     assert.match(unreadyTakeover.contextGenerationId, /^context-[a-f0-9]{24}$/);
     assert.equal(unreadyTakeover.head, baselineHead);
     assert.equal(unreadyTakeover.scanHash, scan.scanSha256);
@@ -267,8 +290,35 @@ function main() {
     const prepared = runStrictCli({ ...retrieveRequest, operation: "prepare_takeover" });
     assert.equal(prepared.operation, "prepare_takeover");
     assert.equal(prepared.takeover.shouldInject, true);
+    assert.equal(prepared.takeover.schemaVersion, "zhixia.takeover_control.v2");
     assert.equal(prepared.takeover.injectionMode, "replace_long_thread_context");
     assert.equal(prepared.takeover.maxInjectionsPerTask, 1);
+    assert.equal(prepared.takeover.hostRequirements.packetRole, "clean_task_recovery_context");
+    assert.equal(prepared.takeover.hostRequirements.requiresCleanReplacementTask, true);
+    assert.equal(prepared.takeover.hostRequirements.requiresDistinctTaskFromSource, true);
+    assert.equal(prepared.takeover.hostRequirements.contextDisposition, "replace_not_append");
+    assert.equal(prepared.takeover.hostRequirements.fullHistoryForkAllowed, false);
+    assert.equal(prepared.takeover.hostRequirements.oldTaskExecutionAfterFreezeAllowed, false);
+    assert.equal(prepared.takeover.hostRequirements.oldTaskWakeupsAfterFreezeAllowed, false);
+    assert.equal(prepared.takeover.hostRequirements.threadRecoveryPacketRequired, true);
+    assert.equal(prepared.takeover.hostRequirements.harvestDriverPolicy, "unbind_old_then_bind_one_replacement");
+    assert.equal(prepared.takeover.hostRequirements.callbackRelayPolicy, "compact_decision_hash_diff_refs_only");
+    assert.equal(prepared.takeover.hostRequirements.existingTaskHistoryTrimmableByMemoryRuntime, false);
+    assert.match(prepared.takeover.hostRequirements.requirementsSha256, /^[a-f0-9]{64}$/);
+    assert.equal(verifyTakeoverHostRequirements(prepared.takeover.hostRequirements), true);
+    assert.deepEqual(
+      prepared.takeover.hostRequirements,
+      JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "takeover-host-requirements-v1.json"), "utf8")),
+      "the Runtime contract must remain byte-reviewable through the frozen cross-component fixture",
+    );
+    assert.equal(verifyTakeoverHostRequirements({
+      ...prepared.takeover.hostRequirements,
+      fullHistoryForkAllowed: true,
+    }), false, "a weakened no-fork boundary must invalidate the Host contract");
+    assert.equal(verifyTakeoverHostRequirements({
+      ...prepared.takeover.hostRequirements,
+      unrecognizedHostControl: true,
+    }), false, "unknown Host controls must invalidate the exact contract");
     assert.match(prepared.contextGenerationId, /^context-[a-f0-9]{24}$/);
     assert.equal(prepared.head, baselineHead);
     assert.equal(prepared.scanHash, scan.scanSha256);
@@ -276,6 +326,11 @@ function main() {
     assert.ok(prepared.tokenEstimate <= 3000);
     const repeatedPrepared = runStrictCli({ ...retrieveRequest, operation: "prepare_takeover" });
     assert.equal(repeatedPrepared.contextGenerationId, prepared.contextGenerationId, "unchanged verified state must keep one stable takeover generation");
+    assert.equal(
+      repeatedPrepared.takeover.hostRequirements.requirementsSha256,
+      prepared.takeover.hostRequirements.requirementsSha256,
+      "the clean-replacement host contract must be deterministic",
+    );
     const secondRetrieved = runStrictCli(retrieveRequest);
     assert.equal(secondRetrieved.current, true);
     assert.equal(secondRetrieved.recoveryReady, true);
@@ -501,6 +556,14 @@ function main() {
     };
     const previousCheckpointId = postimageWrite.writes.find((write) => write.kind === "projectCheckpoint")?.id
       || execute({ operation: "verify", workspace, storeRoot }).scanBinding.authorizedCheckpointId;
+    const refreshAuthority = issueAcceptedEvidenceReceipt({
+      workspace,
+      storeRoot,
+      scan: hashScan,
+      previousCheckpointId,
+      acceptedChangedPaths: refreshRelativePaths,
+      lane: "example_project-engine-core",
+    });
     const refreshRequest = {
       operation: "refresh_binding",
       workspace,
@@ -510,7 +573,7 @@ function main() {
       expectedScanSha256: hashScan.scanSha256,
       relativePaths: refreshRelativePaths,
       previousCheckpointId,
-      acceptedEvidenceReceipt: "qa-accept-current-checkpoint-001",
+      acceptedEvidenceReceipt: refreshAuthority.receiptId,
       acceptedChangedPaths: refreshRelativePaths,
       lane: "example_project-engine-core",
       evidence: {
@@ -529,9 +592,13 @@ function main() {
           }),
       },
     };
-    assert.throws(() => execute({ ...refreshRequest, acceptedEvidenceReceipt: "" }), /accepted_evidence_receipt_required/);
+    assert.throws(() => execute({ ...refreshRequest, acceptedEvidenceReceipt: "" }), /accepted_evidence_receipt_invalid/);
     assert.throws(() => execute({ ...refreshRequest, previousCheckpointId: "checkpoint-wrong" }), /previous_checkpoint_mismatch/);
-    assert.throws(() => execute({ ...refreshRequest, acceptedChangedPaths: ["src/current-feature.js"] }), /changed_path_not_source_backed/);
+    assert.throws(
+      () => execute({ ...refreshRequest, acceptedChangedPaths: ["src/current-feature.js"] }),
+      /refresh_binding_target_scan_required|accepted_evidence_receipt_binding_mismatch/,
+      "a different source-backed changed path must require its own exact scan and receipt binding",
+    );
     assert.throws(() => execute({
       ...refreshRequest,
       evidence: { ...refreshRequest.evidence, sourceRefs: [{ kind: "workspace_scan_receipt", path: "https://example.invalid/scan", hash: hashScan.scanSha256 }, ...refreshRequest.evidence.sourceRefs.slice(1)] },
@@ -635,6 +702,14 @@ function main() {
       saturatedHeadScan.scanSha256,
       "default scan and accepted-path scan must resolve to one deterministic target SHA",
     );
+    const saturatedRefreshAuthority = issueAcceptedEvidenceReceipt({
+      workspace,
+      storeRoot,
+      scan: saturatedHeadScan,
+      previousCheckpointId: preSaturationCheckpointId,
+      acceptedChangedPaths: saturatedAcceptedPaths,
+      lane: "example_project-two-commit-source-lane",
+    });
     const saturatedRefresh = execute({
       operation: "refresh_binding",
       workspace,
@@ -643,7 +718,7 @@ function main() {
       expectedProjectIdentitySha256: saturatedHeadScan.projectIdentity.projectIdentitySha256,
       expectedScanSha256: saturatedHeadScan.scanSha256,
       previousCheckpointId: preSaturationCheckpointId,
-      acceptedEvidenceReceipt: "qa-accept-two-commit-source-lane-001",
+      acceptedEvidenceReceipt: saturatedRefreshAuthority.receiptId,
       acceptedChangedPaths: saturatedAcceptedPaths,
       lane: "example_project-two-commit-source-lane",
       evidence: {

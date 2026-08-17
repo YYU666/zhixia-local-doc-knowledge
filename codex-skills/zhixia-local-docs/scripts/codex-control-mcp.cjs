@@ -8,14 +8,17 @@ const { spawnSync } = require("node:child_process");
 const { invoke } = require("./invoke-app-memory-runtime.cjs");
 
 const SERVER_NAME = "zhixia-control";
-const SERVER_VERSION = "1.2.0";
+const SERVER_VERSION = "1.4.0";
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 const MAX_MESSAGE_BYTES = 128 * 1024;
+const MAX_PORTFOLIO_WORKSPACES = 6;
+const MAX_PORTFOLIO_TOKEN_BUDGET = 10_000;
+const MAX_PORTFOLIO_PACKET_BYTES = 64 * 1024;
 
 const sourceRefsSchema = {
   type: "array",
   minItems: 1,
-  maxItems: 48,
+  maxItems: 128,
   items: {
     type: "object",
     properties: {
@@ -32,6 +35,13 @@ const sourceRefsSchema = {
 };
 
 const workspaceProperty = { type: "string", minLength: 1, maxLength: 1200 };
+const workspacesProperty = {
+  type: "array",
+  minItems: 2,
+  maxItems: MAX_PORTFOLIO_WORKSPACES,
+  items: workspaceProperty,
+  description: "Explicit ordered canonical project roots. The current cwd or artifact root is never inferred as a project.",
+};
 const relativePathsProperty = {
   type: "array",
   maxItems: 48,
@@ -130,12 +140,59 @@ const tools = [
     annotations: { readOnlyHint: true, idempotentHint: true },
   },
   {
+    name: "portfolio_context",
+    description: "Retrieve bounded read-only context for explicit ordered project roots. Each project keeps an independent identity, authority state, generation, items, and source refs; no cross-project write authority is created.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaces: workspacesProperty,
+        taskGoal: { type: "string", minLength: 1, maxLength: 600 },
+        queryType: { type: "string", maxLength: 80 },
+        limitPerProject: { type: "integer", minimum: 1, maximum: 8 },
+        perProjectTokenBudget: { type: "integer", minimum: 800, maximum: 5000 },
+        maxTotalTokenBudget: { type: "integer", minimum: 1600, maximum: MAX_PORTFOLIO_TOKEN_BUDGET },
+        showApp: showAppProperty,
+      },
+      required: ["workspaces", "taskGoal"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
     name: "prepare_takeover",
     description: "Prepare a verified compact replacement packet for a clean Codex task. Inject a returned contextGenerationId at most once per task.",
     inputSchema: {
       type: "object",
       properties: retrievalProperties,
       required: ["workspace", "taskGoal"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "stage_accepted_slice",
+    description: "Stage one content-addressed accepted candidate Slice in the non-authoritative incremental ledger. Candidate postimages and receipt digest are verified; no checkpoint or write authority is advanced.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: workspaceProperty,
+        execute: { type: "boolean", const: true },
+        expectedProjectIdentitySha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+        receiptPath: { type: "string", minLength: 1, maxLength: 1200 },
+        expectedReceiptSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+        showApp: showAppProperty,
+      },
+      required: ["workspace", "execute", "expectedProjectIdentitySha256", "receiptPath", "expectedReceiptSha256"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "reconcile_accepted_slices",
+    description: "Read and verify the incremental accepted-Slice ledger against the current workspace delta. This never grants authority or refreshes a checkpoint.",
+    inputSchema: {
+      type: "object",
+      properties: { workspace: workspaceProperty, showApp: showAppProperty },
+      required: ["workspace"],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
@@ -187,7 +244,7 @@ const tools = [
         acceptedChangedPaths: {
           type: "array",
           minItems: 1,
-          maxItems: 24,
+          maxItems: 128,
           items: { type: "string", minLength: 1, maxLength: 500 },
         },
         lane: { type: "string", minLength: 1, maxLength: 180 },
@@ -265,6 +322,24 @@ function resolveWorkspace(value) {
     throw new Error("zhixia_control_workspace_directory_required");
   }
   return workspace;
+}
+
+function resolvePortfolioWorkspaces(values) {
+  if (!Array.isArray(values) || values.length < 2 || values.length > MAX_PORTFOLIO_WORKSPACES) {
+    throw new Error("zhixia_control_portfolio_workspaces_bounded_array_required");
+  }
+  if (values.some((value) => typeof value !== "string" || !value.trim())) {
+    throw new Error("zhixia_control_portfolio_workspace_string_required");
+  }
+  const resolved = values.map((value) => fs.realpathSync(resolveWorkspace(value)));
+  if (new Set(resolved).size !== resolved.length) throw new Error("zhixia_control_portfolio_workspace_duplicate");
+  return resolved;
+}
+
+function boundedPortfolioInteger(value, fallback, minimum, maximum, errorCode) {
+  if (value === undefined) return fallback;
+  if (!Number.isInteger(value) || value < minimum || value > maximum) throw new Error(errorCode);
+  return value;
 }
 
 function installedAppCandidates(env = process.env) {
@@ -350,6 +425,8 @@ function compactContentReceipt(output) {
     scanSha256: output.scanSha256 || output.scanBinding?.currentScanSha256 || null,
     contextGenerationId: output.contextGenerationId || null,
     returnedCount: output.returnedCount ?? null,
+    projectCount: output.projectCount ?? null,
+    readyProjectCount: output.readyProjectCount ?? null,
   });
 }
 
@@ -375,8 +452,249 @@ function lifecycleEvidence(args) {
   return evidence;
 }
 
+function compactPortfolioIdentity(identity = {}) {
+  return {
+    projectId: identity.projectId || null,
+    canonicalRepoId: identity.canonicalRepoId || null,
+    canonicalRoot: identity.canonicalRoot || null,
+    worktreeRoot: identity.worktreeRoot || null,
+    baselineHead: identity.baselineHead || null,
+    projectIdentitySha256: identity.projectIdentitySha256 || null,
+  };
+}
+
+function compactPortfolioSourceRefs(refs, projectId) {
+  return (Array.isArray(refs) ? refs : [])
+    .filter((ref) => ref?.projectId && ref.projectId === projectId)
+    .slice(0, 4)
+    .map((ref) => ({
+      kind: ref.kind || null,
+      path: ref.path || ref.uri || null,
+      title: ref.title || null,
+      hash: ref.hash || ref.sha256 || null,
+      projectId,
+    }));
+}
+
+function compactPortfolioItems(items, projectId, limit) {
+  return (Array.isArray(items) ? items : []).slice(0, limit).map((item) => ({
+    id: item.id || null,
+    projectId,
+    layer: item.layer || item.memoryLayer || null,
+    kind: item.kind || null,
+    category: item.category || null,
+    title: item.title || null,
+    summary: item.summary || item.excerpt || null,
+    status: item.status || null,
+    freshness: item.freshness || null,
+    tokenEstimate: Math.max(0, Number(item.tokenEstimate || 0)),
+    sourceRefs: compactPortfolioSourceRefs(item.sourceRefs, projectId),
+  }));
+}
+
+function portfolioProjectStatus(verified) {
+  return verified?.memoryMode === "app_owned_memory_core"
+    && verified?.authorityVerification === "app_owned_verified"
+    && verified?.current === true
+    && verified?.recoveryReady === true
+    && verified?.scanBinding?.matched === true
+    ? "ready"
+    : "stale";
+}
+
+function compactPortfolioVerification(workspace, verified, status) {
+  return {
+    workspace,
+    status,
+    memoryMode: verified?.memoryMode || "fallback_stale",
+    authorityVerification: verified?.authorityVerification || "unavailable",
+    current: verified?.current === true,
+    recoveryReady: verified?.recoveryReady === true,
+    projectIdentity: compactPortfolioIdentity(verified?.projectIdentity),
+    scanBinding: {
+      matched: verified?.scanBinding?.matched === true,
+      currentScanSha256: verified?.scanBinding?.currentScanSha256 || null,
+      authorizedCheckpointId: verified?.scanBinding?.authorizedCheckpointId || null,
+    },
+    contextGenerationId: null,
+    returnedCount: 0,
+    tokenEstimate: 0,
+    items: [],
+    sourceRefs: [],
+    warnings: (verified?.warnings || []).slice(0, 8),
+  };
+}
+
+function portfolioContext(args) {
+  const workspaces = resolvePortfolioWorkspaces(args.workspaces);
+  if (typeof args.taskGoal !== "string" || !args.taskGoal.trim() || args.taskGoal.length > 600) {
+    throw new Error("zhixia_control_portfolio_task_goal_required");
+  }
+  const app = args.showApp === true ? openApp() : null;
+  const perProjectTokenBudget = boundedPortfolioInteger(
+    args.perProjectTokenBudget,
+    3000,
+    800,
+    5000,
+    "zhixia_control_portfolio_per_project_token_budget_invalid",
+  );
+  const maxTotalTokenBudget = boundedPortfolioInteger(
+    args.maxTotalTokenBudget,
+    Math.min(6000, perProjectTokenBudget * workspaces.length),
+    1600,
+    MAX_PORTFOLIO_TOKEN_BUDGET,
+    "zhixia_control_portfolio_total_token_budget_invalid",
+  );
+  const limitPerProject = boundedPortfolioInteger(
+    args.limitPerProject,
+    4,
+    1,
+    8,
+    "zhixia_control_portfolio_limit_invalid",
+  );
+  const projects = [];
+  let consumedTokenBudget = 0;
+  let allocatedTokenBudget = 0;
+
+  for (const workspace of workspaces) {
+    let verified;
+    try {
+      verified = invokeRuntime({
+        operation: "verify",
+        workspace,
+        taskGoal: args.taskGoal,
+      });
+    } catch (error) {
+      projects.push({
+        workspace,
+        status: "error",
+        memoryMode: "fallback_stale",
+        authorityVerification: "unavailable",
+        current: false,
+        recoveryReady: false,
+        projectIdentity: null,
+        scanBinding: { matched: false, currentScanSha256: null, authorizedCheckpointId: null },
+        contextGenerationId: null,
+        returnedCount: 0,
+        tokenEstimate: 0,
+        items: [],
+        sourceRefs: [],
+        warnings: [compactError(error)],
+      });
+      continue;
+    }
+
+    const status = portfolioProjectStatus(verified);
+    const project = compactPortfolioVerification(workspace, verified, status);
+    const remainingBudget = maxTotalTokenBudget - allocatedTokenBudget;
+    if (status !== "ready") {
+      projects.push(project);
+      continue;
+    }
+    if (remainingBudget < 800) {
+      projects.push({ ...project, status: "budget_deferred", warnings: ["portfolio_total_token_budget_exhausted"] });
+      continue;
+    }
+
+    const effectiveBudget = Math.min(perProjectTokenBudget, remainingBudget);
+    let retrieved;
+    try {
+      retrieved = invokeRuntime({
+        operation: "retrieve",
+        workspace,
+        taskGoal: args.taskGoal,
+        queryType: args.queryType || "portfolio_context",
+        limit: limitPerProject,
+        tokenBudget: effectiveBudget,
+        maxTokenBudget: effectiveBudget,
+        strictTokenBudget: true,
+        readOnly: true,
+      });
+    } catch (error) {
+      projects.push({
+        ...project,
+        status: "error",
+        warnings: [...new Set([...(project.warnings || []), `portfolio_retrieve_failed:${compactError(error)}`])].slice(0, 8),
+      });
+      continue;
+    }
+    const projectId = retrieved?.projectIdentity?.projectId || verified?.projectIdentity?.projectId || null;
+    const tokenEstimate = Math.max(0, Number(retrieved?.tokenEstimate || 0));
+    const returnedCount = Math.max(0, Number(retrieved?.returnedCount || 0));
+    const retrievalStillAuthoritative = retrieved?.memoryMode === "app_owned_memory_core"
+      && retrieved?.authorityVerification === "app_owned_verified"
+      && retrieved?.current === true
+      && retrieved?.recoveryReady === true
+      && retrieved?.scanHash === verified?.scanBinding?.currentScanSha256
+      && projectId === verified?.projectIdentity?.projectId
+      && typeof retrieved?.contextGenerationId === "string"
+      && retrieved.contextGenerationId.startsWith("context-")
+      && returnedCount > 0
+      && tokenEstimate <= effectiveBudget;
+    if (!retrievalStillAuthoritative) {
+      projects.push({
+        ...project,
+        status: "stale",
+        warnings: [...new Set([...(project.warnings || []), "portfolio_retrieve_authority_mismatch"])]
+          .slice(0, 8),
+      });
+      continue;
+    }
+    allocatedTokenBudget += effectiveBudget;
+    consumedTokenBudget += tokenEstimate;
+    projects.push({
+      ...project,
+      status: "ready",
+      contextGenerationId: retrieved?.contextGenerationId || null,
+      returnedCount,
+      tokenEstimate,
+      items: compactPortfolioItems(retrieved?.items, projectId, limitPerProject),
+      sourceRefs: compactPortfolioSourceRefs(retrieved?.sourceRefs, projectId),
+      warnings: [...new Set([...(project.warnings || []), ...(retrieved?.warnings || [])])].slice(0, 8),
+    });
+  }
+
+  const output = {
+    schemaVersion: "zhixia.portfolio_context.v1",
+    operation: "portfolio_context",
+    status: projects.some((project) => project.status === "ready") ? "partial_or_ready" : "not_ready",
+    readOnly: true,
+    writeAuthority: false,
+    authorityIsolation: "per_project",
+    combinedContextGenerationId: null,
+    projectCount: projects.length,
+    readyProjectCount: projects.filter((project) => project.status === "ready").length,
+    staleProjectCount: projects.filter((project) => project.status === "stale").length,
+    errorProjectCount: projects.filter((project) => project.status === "error").length,
+    budgetDeferredProjectCount: projects.filter((project) => project.status === "budget_deferred").length,
+    budget: {
+      perProjectTokenBudget,
+      maxTotalTokenBudget,
+      allocatedTokenBudget,
+      consumedTokenBudget,
+      strictPerProjectBudget: true,
+    },
+    projects,
+    safety: {
+      explicitWorkspacesOnly: true,
+      cwdInference: false,
+      rawSessionBodyRead: false,
+      sidecarLifecycleWrites: false,
+      crossProjectSourceRefMerge: false,
+      crossProjectCheckpointMerge: false,
+      lifecycleWrites: false,
+    },
+    ...(app ? { app } : {}),
+  };
+  if (Buffer.byteLength(JSON.stringify(output), "utf8") > MAX_PORTFOLIO_PACKET_BYTES) {
+    throw new Error("zhixia_control_portfolio_packet_too_large");
+  }
+  return output;
+}
+
 function callTool(name, args) {
   if (name === "open_app") return openApp(args.workspace);
+  if (name === "portfolio_context") return portfolioContext(args);
   const workspace = resolveWorkspace(args.workspace);
   if (name === "scan_workspace") {
     const app = maybeOpenApp({ ...args, workspace }, true);
@@ -428,6 +746,27 @@ function callTool(name, args) {
         evidence: lifecycleEvidence(args),
       }),
       app,
+    };
+  }
+  if (name === "stage_accepted_slice") {
+    const app = maybeOpenApp({ ...args, workspace }, true);
+    return {
+      ...invokeRuntime({
+        operation: "stage_accepted_slice",
+        workspace,
+        execute: args.execute,
+        expectedProjectIdentitySha256: args.expectedProjectIdentitySha256,
+        receiptPath: args.receiptPath,
+        expectedReceiptSha256: args.expectedReceiptSha256,
+      }),
+      app,
+    };
+  }
+  if (name === "reconcile_accepted_slices") {
+    const app = maybeOpenApp({ ...args, workspace }, false);
+    return {
+      ...invokeRuntime({ operation: "reconcile_accepted_slices", workspace }),
+      ...(app ? { app } : {}),
     };
   }
   if (name === "refresh_binding") {

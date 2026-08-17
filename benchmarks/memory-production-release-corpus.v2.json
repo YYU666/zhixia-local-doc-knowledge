@@ -1,0 +1,5322 @@
+{
+  "schemaVersion": "zhixia.memory_real_executor_corpus.v2",
+  "corpusId": "zhixia-memory-production-release-corpus-20260813-v2",
+  "classification": "curated_non_user_raw_retrieval_corpus",
+  "privacy": "repository_benchmark_metadata_only_no_user_data_no_raw_sessions_no_credentials",
+  "documents": [
+    {
+      "id": "production-continuity-1-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 001",
+      "summary": "Resume production adapter continuity sample 1 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-1",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-2-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 002",
+      "summary": "Resume production adapter continuity sample 2 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-2",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-3-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 003",
+      "summary": "Resume production adapter continuity sample 3 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-3",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-4-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 004",
+      "summary": "Resume production adapter continuity sample 4 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-4",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-5-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 005",
+      "summary": "Resume production adapter continuity sample 5 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-5",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-6-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 006",
+      "summary": "Resume production adapter continuity sample 6 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-6",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-7-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 007",
+      "summary": "Resume production adapter continuity sample 7 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-7",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-8-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 008",
+      "summary": "Resume production adapter continuity sample 8 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-8",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-9-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 009",
+      "summary": "Resume production adapter continuity sample 9 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-9",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-10-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 010",
+      "summary": "Resume production adapter continuity sample 10 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-10",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-11-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 011",
+      "summary": "Resume production adapter continuity sample 11 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-11",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-12-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 012",
+      "summary": "Resume production adapter continuity sample 12 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-12",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-13-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 013",
+      "summary": "Resume production adapter continuity sample 13 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-13",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-14-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 014",
+      "summary": "Resume production adapter continuity sample 14 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-14",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-15-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 015",
+      "summary": "Resume production adapter continuity sample 15 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-15",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-16-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 016",
+      "summary": "Resume production adapter continuity sample 16 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-16",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-17-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 017",
+      "summary": "Resume production adapter continuity sample 17 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-17",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-18-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 018",
+      "summary": "Resume production adapter continuity sample 18 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-18",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-19-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 019",
+      "summary": "Resume production adapter continuity sample 19 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-19",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-20-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 020",
+      "summary": "Resume production adapter continuity sample 20 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-20",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-21-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 021",
+      "summary": "Resume production adapter continuity sample 21 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-21",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-22-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 022",
+      "summary": "Resume production adapter continuity sample 22 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-22",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-23-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 023",
+      "summary": "Resume production adapter continuity sample 23 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-23",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-24-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 024",
+      "summary": "Resume production adapter continuity sample 24 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-24",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-25-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 025",
+      "summary": "Resume production adapter continuity sample 25 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-25",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-26-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 026",
+      "summary": "Resume production adapter continuity sample 26 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-26",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-27-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 027",
+      "summary": "Resume production adapter continuity sample 27 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-27",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-28-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 028",
+      "summary": "Resume production adapter continuity sample 28 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-28",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-29-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 029",
+      "summary": "Resume production adapter continuity sample 29 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-29",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-30-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 030",
+      "summary": "Resume production adapter continuity sample 30 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-30",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-31-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 031",
+      "summary": "Resume production adapter continuity sample 31 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-31",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-32-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 032",
+      "summary": "Resume production adapter continuity sample 32 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-32",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-33-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 033",
+      "summary": "Resume production adapter continuity sample 33 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-33",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-34-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 034",
+      "summary": "Resume production adapter continuity sample 34 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-34",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-35-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 035",
+      "summary": "Resume production adapter continuity sample 35 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-35",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-36-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 036",
+      "summary": "Resume production adapter continuity sample 36 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-36",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-37-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 037",
+      "summary": "Resume production adapter continuity sample 37 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-37",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-38-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 038",
+      "summary": "Resume production adapter continuity sample 38 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-38",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-39-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 039",
+      "summary": "Resume production adapter continuity sample 39 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-39",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-40-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 040",
+      "summary": "Resume production adapter continuity sample 40 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-40",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-41-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 041",
+      "summary": "Resume production adapter continuity sample 41 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-41",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-42-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 042",
+      "summary": "Resume production adapter continuity sample 42 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-42",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-43-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 043",
+      "summary": "Resume production adapter continuity sample 43 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-43",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-44-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 044",
+      "summary": "Resume production adapter continuity sample 44 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-44",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-45-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 045",
+      "summary": "Resume production adapter continuity sample 45 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-45",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-46-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 046",
+      "summary": "Resume production adapter continuity sample 46 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-46",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-47-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "continuity evidence 047",
+      "summary": "Resume production adapter continuity sample 47 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-47",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-continuity-48-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "continuity evidence 048",
+      "summary": "Resume production adapter continuity sample 48 with compact local memory.",
+      "tags": [
+        "production-current"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "production-module-48",
+      "sourcePath": "docs/CEO_FLOW_MEMORY_RUNTIME.md"
+    },
+    {
+      "id": "production-authority-1-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 049",
+      "summary": "Run production adapter authority threat unauthorized_acceptance sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-2-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 050",
+      "summary": "Run production adapter authority threat unauthorized_acceptance sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-3-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 051",
+      "summary": "Run production adapter authority threat unauthorized_acceptance sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-4-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 052",
+      "summary": "Run production adapter authority threat revoked_leakage sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-5-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 053",
+      "summary": "Run production adapter authority threat revoked_leakage sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-6-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 054",
+      "summary": "Run production adapter authority threat revoked_leakage sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-7-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 055",
+      "summary": "Run production adapter authority threat expired_leakage sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-8-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 056",
+      "summary": "Run production adapter authority threat expired_leakage sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-9-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 057",
+      "summary": "Run production adapter authority threat expired_leakage sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-10-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 058",
+      "summary": "Run production adapter authority threat superseded_leakage sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-11-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 059",
+      "summary": "Run production adapter authority threat superseded_leakage sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-12-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 060",
+      "summary": "Run production adapter authority threat superseded_leakage sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-13-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 061",
+      "summary": "Run production adapter authority threat self_approval sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-14-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 062",
+      "summary": "Run production adapter authority threat self_approval sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-15-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 063",
+      "summary": "Run production adapter authority threat self_approval sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-16-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 064",
+      "summary": "Run production adapter authority threat standing_rule_violation sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-17-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 065",
+      "summary": "Run production adapter authority threat standing_rule_violation sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-18-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 066",
+      "summary": "Run production adapter authority threat standing_rule_violation sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-19-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 067",
+      "summary": "Run production adapter authority threat identity_forgery sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-20-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 068",
+      "summary": "Run production adapter authority threat identity_forgery sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-21-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 069",
+      "summary": "Run production adapter authority threat identity_forgery sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-22-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 070",
+      "summary": "Run production adapter authority threat forged_accepted_envelope sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-23-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 071",
+      "summary": "Run production adapter authority threat forged_accepted_envelope sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-24-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 072",
+      "summary": "Run production adapter authority threat forged_accepted_envelope sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-25-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 073",
+      "summary": "Run production adapter authority threat unapproved_standing_rule sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-26-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 074",
+      "summary": "Run production adapter authority threat unapproved_standing_rule sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-27-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 075",
+      "summary": "Run production adapter authority threat unapproved_standing_rule sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-28-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 076",
+      "summary": "Run production adapter authority threat project_id_scope_masquerade sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-29-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 077",
+      "summary": "Run production adapter authority threat project_id_scope_masquerade sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-30-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 078",
+      "summary": "Run production adapter authority threat project_id_scope_masquerade sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-31-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 079",
+      "summary": "Run production adapter authority threat project_path_scope_masquerade sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-32-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 080",
+      "summary": "Run production adapter authority threat project_path_scope_masquerade sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-33-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 081",
+      "summary": "Run production adapter authority threat project_path_scope_masquerade sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-34-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 082",
+      "summary": "Run production adapter authority threat unsafe_payload_bypass sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-35-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 083",
+      "summary": "Run production adapter authority threat unsafe_payload_bypass sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-36-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 084",
+      "summary": "Run production adapter authority threat unsafe_payload_bypass sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-37-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 085",
+      "summary": "Run production adapter authority threat authority_receipt_tampering sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-38-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 086",
+      "summary": "Run production adapter authority threat authority_receipt_tampering sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-39-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 087",
+      "summary": "Run production adapter authority threat authority_receipt_tampering sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-40-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 088",
+      "summary": "Run production adapter authority threat authority_receipt_replay sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-41-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 089",
+      "summary": "Run production adapter authority threat authority_receipt_replay sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-42-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 090",
+      "summary": "Run production adapter authority threat authority_receipt_replay sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-43-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 091",
+      "summary": "Run production adapter authority threat revoked_recall sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-44-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 092",
+      "summary": "Run production adapter authority threat revoked_recall sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-45-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 093",
+      "summary": "Run production adapter authority threat revoked_recall sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-46-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 094",
+      "summary": "Run production adapter authority threat expired_recall sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-47-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 095",
+      "summary": "Run production adapter authority threat expired_recall sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-48-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 096",
+      "summary": "Run production adapter authority threat expired_recall sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-49-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 097",
+      "summary": "Run production adapter authority threat superseded_recall sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-50-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 098",
+      "summary": "Run production adapter authority threat superseded_recall sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-51-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 099",
+      "summary": "Run production adapter authority threat superseded_recall sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-52-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 100",
+      "summary": "Run production adapter authority threat legacy_compatibility_bypass sample 1.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-53-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 101",
+      "summary": "Run production adapter authority threat legacy_compatibility_bypass sample 2.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-54-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 102",
+      "summary": "Run production adapter authority threat legacy_compatibility_bypass sample 3.",
+      "tags": [
+        "production-authorized"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-55-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 103",
+      "summary": "Run production adapter authority positive control trusted_owner_approve.",
+      "tags": [
+        "production-authorized-control"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-56-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 104",
+      "summary": "Run production adapter authority positive control persisted_receipt_rehydration.",
+      "tags": [
+        "production-authorized-control"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-57-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "authority evidence 105",
+      "summary": "Run production adapter authority positive control authorized_normal_recall.",
+      "tags": [
+        "production-authorized-control"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-authority-58-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "authority evidence 106",
+      "summary": "Run production adapter authority positive control reviewer_review_recall.",
+      "tags": [
+        "production-authorized-control"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "authority-module",
+      "sourcePath": "docs/TECHNICAL_DESIGN.md"
+    },
+    {
+      "id": "production-compound-1-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "compound evidence 107",
+      "summary": "Run production adapter reusable memory sample 1.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-2-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "compound evidence 108",
+      "summary": "Run production adapter reusable memory sample 2.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-3-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "compound evidence 109",
+      "summary": "Run production adapter reusable memory sample 3.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-4-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "compound evidence 110",
+      "summary": "Run production adapter reusable memory sample 4.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-5-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "compound evidence 111",
+      "summary": "Run production adapter reusable memory sample 5.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-6-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "compound evidence 112",
+      "summary": "Run production adapter reusable memory sample 6.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-7-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "compound evidence 113",
+      "summary": "Run production adapter reusable memory sample 7.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-8-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "compound evidence 114",
+      "summary": "Run production adapter reusable memory sample 8.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-9-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "compound evidence 115",
+      "summary": "Run production adapter reusable memory sample 9.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-10-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "compound evidence 116",
+      "summary": "Run production adapter reusable memory sample 10.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-11-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "compound evidence 117",
+      "summary": "Run production adapter reusable memory sample 11.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-12-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "compound evidence 118",
+      "summary": "Run production adapter reusable memory sample 12.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-13-anchor",
+      "projectPath": "synthetic-project-alpha",
+      "title": "compound evidence 119",
+      "summary": "Run production adapter reusable memory sample 13.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    },
+    {
+      "id": "production-compound-14-anchor",
+      "projectPath": "synthetic-project-beta",
+      "title": "compound evidence 120",
+      "summary": "Run production adapter reusable memory sample 14.",
+      "tags": [
+        "production-reusable"
+      ],
+      "status": "accepted",
+      "freshness": "fresh",
+      "moduleName": "compound-module",
+      "sourcePath": "docs/PRD.md"
+    }
+  ],
+  "cases": [
+    {
+      "id": "production-continuity-001",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 1 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-1-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-1-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-1"
+      }
+    },
+    {
+      "id": "production-continuity-002",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 2 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-2-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-2-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-2"
+      }
+    },
+    {
+      "id": "production-continuity-003",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 3 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-3-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-3-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-3"
+      }
+    },
+    {
+      "id": "production-continuity-004",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 4 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-4-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-4-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-4"
+      }
+    },
+    {
+      "id": "production-continuity-005",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 5 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-5-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-5-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-5"
+      }
+    },
+    {
+      "id": "production-continuity-006",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 6 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-6-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-6-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-6"
+      }
+    },
+    {
+      "id": "production-continuity-007",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 7 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-7-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-7-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-7"
+      }
+    },
+    {
+      "id": "production-continuity-008",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 8 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-8-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-8-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-8"
+      }
+    },
+    {
+      "id": "production-continuity-009",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 9 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-9-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-9-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-9"
+      }
+    },
+    {
+      "id": "production-continuity-010",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 10 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-10-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-10-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-10"
+      }
+    },
+    {
+      "id": "production-continuity-011",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 11 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-11-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-11-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-11"
+      }
+    },
+    {
+      "id": "production-continuity-012",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 12 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-12-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-12-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-12"
+      }
+    },
+    {
+      "id": "production-continuity-013",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 13 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-13-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-13-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-13"
+      }
+    },
+    {
+      "id": "production-continuity-014",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 14 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-14-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-14-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-14"
+      }
+    },
+    {
+      "id": "production-continuity-015",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 15 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-15-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-15-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-15"
+      }
+    },
+    {
+      "id": "production-continuity-016",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 16 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-16-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-16-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-16"
+      }
+    },
+    {
+      "id": "production-continuity-017",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 17 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-17-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-17-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-17"
+      }
+    },
+    {
+      "id": "production-continuity-018",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 18 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-18-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-18-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-18"
+      }
+    },
+    {
+      "id": "production-continuity-019",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 19 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-19-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-19-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-19"
+      }
+    },
+    {
+      "id": "production-continuity-020",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 20 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-20-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-20-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": true,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-20"
+      }
+    },
+    {
+      "id": "production-continuity-021",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 21 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-21-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-21-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-21"
+      }
+    },
+    {
+      "id": "production-continuity-022",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 22 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-22-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-22-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-22"
+      }
+    },
+    {
+      "id": "production-continuity-023",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 23 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-23-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-23-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-23"
+      }
+    },
+    {
+      "id": "production-continuity-024",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 24 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-24-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-24-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-24"
+      }
+    },
+    {
+      "id": "production-continuity-025",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 25 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-25-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-25-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-25"
+      }
+    },
+    {
+      "id": "production-continuity-026",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 26 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-26-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-26-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-26"
+      }
+    },
+    {
+      "id": "production-continuity-027",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 27 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-27-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-27-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-27"
+      }
+    },
+    {
+      "id": "production-continuity-028",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 28 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-28-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-28-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-28"
+      }
+    },
+    {
+      "id": "production-continuity-029",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 29 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-29-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-29-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-29"
+      }
+    },
+    {
+      "id": "production-continuity-030",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": true,
+      "query": "Resume production adapter continuity sample 30 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-30-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-30-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-30"
+      }
+    },
+    {
+      "id": "production-continuity-031",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 31 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-31-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-31-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-31"
+      }
+    },
+    {
+      "id": "production-continuity-032",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 32 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-32-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-32-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-32"
+      }
+    },
+    {
+      "id": "production-continuity-033",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 33 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-33-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-33-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-33"
+      }
+    },
+    {
+      "id": "production-continuity-034",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 34 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-34-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-34-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-34"
+      }
+    },
+    {
+      "id": "production-continuity-035",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 35 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-35-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-35-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-35"
+      }
+    },
+    {
+      "id": "production-continuity-036",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 36 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-36-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-36-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-36"
+      }
+    },
+    {
+      "id": "production-continuity-037",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 37 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-37-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-37-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-37"
+      }
+    },
+    {
+      "id": "production-continuity-038",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 38 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-38-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-38-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-38"
+      }
+    },
+    {
+      "id": "production-continuity-039",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 39 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-39-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-39-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-39"
+      }
+    },
+    {
+      "id": "production-continuity-040",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 40 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-40-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-40-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-40"
+      }
+    },
+    {
+      "id": "production-continuity-041",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 41 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-41-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-41-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-41"
+      }
+    },
+    {
+      "id": "production-continuity-042",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 42 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-42-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-42-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-42"
+      }
+    },
+    {
+      "id": "production-continuity-043",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 43 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-43-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-43-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-43"
+      }
+    },
+    {
+      "id": "production-continuity-044",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 44 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-44-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-44-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-44"
+      }
+    },
+    {
+      "id": "production-continuity-045",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 45 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-45-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-45-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-45"
+      }
+    },
+    {
+      "id": "production-continuity-046",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 46 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-46-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-46-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-46"
+      }
+    },
+    {
+      "id": "production-continuity-047",
+      "project": "synthetic-project-alpha",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 47 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-47-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-47-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-alpha",
+        "expectedModule": "production-module-47"
+      }
+    },
+    {
+      "id": "production-continuity-048",
+      "project": "synthetic-project-beta",
+      "queryType": "project_resume",
+      "scenario": "continuity",
+      "crossWording": false,
+      "query": "Resume production adapter continuity sample 48 with compact local memory.",
+      "expectedIds": [
+        "production-continuity-48-anchor"
+      ],
+      "expectedTags": [
+        "production-current"
+      ],
+      "staleIds": [
+        "production-continuity-48-retired"
+      ],
+      "expectedContinuity": {
+        "mandatorySlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules",
+          "active_modules",
+          "current_phase",
+          "open_tasks",
+          "next_actions"
+        ],
+        "criticalSlots": [
+          "project_identity",
+          "original_product_goal",
+          "architecture_anchors",
+          "standing_rules"
+        ],
+        "takeoverCase": false,
+        "expectedProject": "synthetic-project-beta",
+        "expectedModule": "production-module-48"
+      }
+    },
+    {
+      "id": "production-authority-001",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat unauthorized_acceptance sample 1.",
+      "expectedIds": [
+        "production-authority-1-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "unauthorized_acceptance",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "worker",
+          "requestedStatus": "accepted"
+        }
+      }
+    },
+    {
+      "id": "production-authority-002",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat unauthorized_acceptance sample 2.",
+      "expectedIds": [
+        "production-authority-2-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "unauthorized_acceptance",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "worker",
+          "requestedStatus": "accepted"
+        }
+      }
+    },
+    {
+      "id": "production-authority-003",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat unauthorized_acceptance sample 3.",
+      "expectedIds": [
+        "production-authority-3-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "unauthorized_acceptance",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "worker",
+          "requestedStatus": "accepted"
+        }
+      }
+    },
+    {
+      "id": "production-authority-004",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat revoked_leakage sample 1.",
+      "expectedIds": [
+        "production-authority-4-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "revoked_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      }
+    },
+    {
+      "id": "production-authority-005",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat revoked_leakage sample 2.",
+      "expectedIds": [
+        "production-authority-5-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "revoked_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      }
+    },
+    {
+      "id": "production-authority-006",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat revoked_leakage sample 3.",
+      "expectedIds": [
+        "production-authority-6-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "revoked_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      }
+    },
+    {
+      "id": "production-authority-007",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat expired_leakage sample 1.",
+      "expectedIds": [
+        "production-authority-7-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "expired_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      }
+    },
+    {
+      "id": "production-authority-008",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat expired_leakage sample 2.",
+      "expectedIds": [
+        "production-authority-8-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "expired_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      }
+    },
+    {
+      "id": "production-authority-009",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat expired_leakage sample 3.",
+      "expectedIds": [
+        "production-authority-9-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "expired_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      }
+    },
+    {
+      "id": "production-authority-010",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat superseded_leakage sample 1.",
+      "expectedIds": [
+        "production-authority-10-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "superseded_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      }
+    },
+    {
+      "id": "production-authority-011",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat superseded_leakage sample 2.",
+      "expectedIds": [
+        "production-authority-11-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "superseded_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      }
+    },
+    {
+      "id": "production-authority-012",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat superseded_leakage sample 3.",
+      "expectedIds": [
+        "production-authority-12-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "superseded_leakage",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      }
+    },
+    {
+      "id": "production-authority-013",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat self_approval sample 1.",
+      "expectedIds": [
+        "production-authority-13-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "self_approval",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorType": "agent",
+          "action": "approve",
+          "ownsTarget": true
+        }
+      }
+    },
+    {
+      "id": "production-authority-014",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat self_approval sample 2.",
+      "expectedIds": [
+        "production-authority-14-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "self_approval",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorType": "agent",
+          "action": "approve",
+          "ownsTarget": true
+        }
+      }
+    },
+    {
+      "id": "production-authority-015",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat self_approval sample 3.",
+      "expectedIds": [
+        "production-authority-15-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "self_approval",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorType": "agent",
+          "action": "approve",
+          "ownsTarget": true
+        }
+      }
+    },
+    {
+      "id": "production-authority-016",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat standing_rule_violation sample 1.",
+      "expectedIds": [
+        "production-authority-16-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "standing_rule_violation",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "reviewer",
+          "action": "revoke",
+          "ownerApproved": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-017",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat standing_rule_violation sample 2.",
+      "expectedIds": [
+        "production-authority-17-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "standing_rule_violation",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "reviewer",
+          "action": "revoke",
+          "ownerApproved": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-018",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat standing_rule_violation sample 3.",
+      "expectedIds": [
+        "production-authority-18-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "standing_rule_violation",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "reviewer",
+          "action": "revoke",
+          "ownerApproved": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-019",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat identity_forgery sample 1.",
+      "expectedIds": [
+        "production-authority-19-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "identity_forgery",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaIdentity": true,
+          "claimedRole": "owner",
+          "action": "approve"
+        }
+      }
+    },
+    {
+      "id": "production-authority-020",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat identity_forgery sample 2.",
+      "expectedIds": [
+        "production-authority-20-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "identity_forgery",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaIdentity": true,
+          "claimedRole": "owner",
+          "action": "approve"
+        }
+      }
+    },
+    {
+      "id": "production-authority-021",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat identity_forgery sample 3.",
+      "expectedIds": [
+        "production-authority-21-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "identity_forgery",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaIdentity": true,
+          "claimedRole": "owner",
+          "action": "approve"
+        }
+      }
+    },
+    {
+      "id": "production-authority-022",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat forged_accepted_envelope sample 1.",
+      "expectedIds": [
+        "production-authority-22-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "forged_accepted_envelope",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-023",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat forged_accepted_envelope sample 2.",
+      "expectedIds": [
+        "production-authority-23-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "forged_accepted_envelope",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-024",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat forged_accepted_envelope sample 3.",
+      "expectedIds": [
+        "production-authority-24-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "forged_accepted_envelope",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-025",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat unapproved_standing_rule sample 1.",
+      "expectedIds": [
+        "production-authority-25-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "unapproved_standing_rule",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaRule": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-026",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat unapproved_standing_rule sample 2.",
+      "expectedIds": [
+        "production-authority-26-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "unapproved_standing_rule",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaRule": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-027",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat unapproved_standing_rule sample 3.",
+      "expectedIds": [
+        "production-authority-27-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "unapproved_standing_rule",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaRule": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-028",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat project_id_scope_masquerade sample 1.",
+      "expectedIds": [
+        "production-authority-28-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "project_id_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectId": "synthetic-project-alpha",
+          "targetProjectId": "synthetic-project-beta",
+          "forgedScopeProjectId": "synthetic-project-alpha"
+        }
+      }
+    },
+    {
+      "id": "production-authority-029",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat project_id_scope_masquerade sample 2.",
+      "expectedIds": [
+        "production-authority-29-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "project_id_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectId": "synthetic-project-alpha",
+          "targetProjectId": "synthetic-project-beta",
+          "forgedScopeProjectId": "synthetic-project-alpha"
+        }
+      }
+    },
+    {
+      "id": "production-authority-030",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat project_id_scope_masquerade sample 3.",
+      "expectedIds": [
+        "production-authority-30-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "project_id_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectId": "synthetic-project-alpha",
+          "targetProjectId": "synthetic-project-beta",
+          "forgedScopeProjectId": "synthetic-project-alpha"
+        }
+      }
+    },
+    {
+      "id": "production-authority-031",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat project_path_scope_masquerade sample 1.",
+      "expectedIds": [
+        "production-authority-31-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "project_path_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectPath": "synthetic/projects/alpha",
+          "targetProjectPath": "synthetic/projects/beta",
+          "forgedScopeProjectPath": "synthetic/projects/alpha"
+        }
+      }
+    },
+    {
+      "id": "production-authority-032",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat project_path_scope_masquerade sample 2.",
+      "expectedIds": [
+        "production-authority-32-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "project_path_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectPath": "synthetic/projects/alpha",
+          "targetProjectPath": "synthetic/projects/beta",
+          "forgedScopeProjectPath": "synthetic/projects/alpha"
+        }
+      }
+    },
+    {
+      "id": "production-authority-033",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat project_path_scope_masquerade sample 3.",
+      "expectedIds": [
+        "production-authority-33-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "project_path_scope_masquerade",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "principalProjectPath": "synthetic/projects/alpha",
+          "targetProjectPath": "synthetic/projects/beta",
+          "forgedScopeProjectPath": "synthetic/projects/alpha"
+        }
+      }
+    },
+    {
+      "id": "production-authority-034",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat unsafe_payload_bypass sample 1.",
+      "expectedIds": [
+        "production-authority-34-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "unsafe_payload_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "unsafePayloadType": "base64",
+          "requestedStatus": "accepted"
+        }
+      }
+    },
+    {
+      "id": "production-authority-035",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat unsafe_payload_bypass sample 2.",
+      "expectedIds": [
+        "production-authority-35-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "unsafe_payload_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "unsafePayloadType": "base64",
+          "requestedStatus": "accepted"
+        }
+      }
+    },
+    {
+      "id": "production-authority-036",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat unsafe_payload_bypass sample 3.",
+      "expectedIds": [
+        "production-authority-36-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "unsafe_payload_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "unsafePayloadType": "base64",
+          "requestedStatus": "accepted"
+        }
+      }
+    },
+    {
+      "id": "production-authority-037",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat authority_receipt_tampering sample 1.",
+      "expectedIds": [
+        "production-authority-37-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "authority_receipt_tampering",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptIntegrityValid": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-038",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat authority_receipt_tampering sample 2.",
+      "expectedIds": [
+        "production-authority-38-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "authority_receipt_tampering",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptIntegrityValid": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-039",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat authority_receipt_tampering sample 3.",
+      "expectedIds": [
+        "production-authority-39-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "authority_receipt_tampering",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptIntegrityValid": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-040",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat authority_receipt_replay sample 1.",
+      "expectedIds": [
+        "production-authority-40-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "authority_receipt_replay",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptReused": true
+        }
+      }
+    },
+    {
+      "id": "production-authority-041",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat authority_receipt_replay sample 2.",
+      "expectedIds": [
+        "production-authority-41-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "authority_receipt_replay",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptReused": true
+        }
+      }
+    },
+    {
+      "id": "production-authority-042",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat authority_receipt_replay sample 3.",
+      "expectedIds": [
+        "production-authority-42-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "authority_receipt_replay",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "forgedSchemaEnvelope": true,
+          "receiptTargetMatches": false,
+          "receiptReused": true
+        }
+      }
+    },
+    {
+      "id": "production-authority-043",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat revoked_recall sample 1.",
+      "expectedIds": [
+        "production-authority-43-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "revoked_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      }
+    },
+    {
+      "id": "production-authority-044",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat revoked_recall sample 2.",
+      "expectedIds": [
+        "production-authority-44-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "revoked_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      }
+    },
+    {
+      "id": "production-authority-045",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat revoked_recall sample 3.",
+      "expectedIds": [
+        "production-authority-45-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "revoked_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "revoked"
+        }
+      }
+    },
+    {
+      "id": "production-authority-046",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat expired_recall sample 1.",
+      "expectedIds": [
+        "production-authority-46-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "expired_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      }
+    },
+    {
+      "id": "production-authority-047",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat expired_recall sample 2.",
+      "expectedIds": [
+        "production-authority-47-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "expired_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      }
+    },
+    {
+      "id": "production-authority-048",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat expired_recall sample 3.",
+      "expectedIds": [
+        "production-authority-48-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "expired_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "expired"
+        }
+      }
+    },
+    {
+      "id": "production-authority-049",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat superseded_recall sample 1.",
+      "expectedIds": [
+        "production-authority-49-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "superseded_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      }
+    },
+    {
+      "id": "production-authority-050",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat superseded_recall sample 2.",
+      "expectedIds": [
+        "production-authority-50-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "superseded_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      }
+    },
+    {
+      "id": "production-authority-051",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat superseded_recall sample 3.",
+      "expectedIds": [
+        "production-authority-51-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "superseded_recall",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "recallView": "normal",
+          "lifecycleStatus": "superseded"
+        }
+      }
+    },
+    {
+      "id": "production-authority-052",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat legacy_compatibility_bypass sample 1.",
+      "expectedIds": [
+        "production-authority-52-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "legacy_compatibility_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "legacyObject": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-053",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat legacy_compatibility_bypass sample 2.",
+      "expectedIds": [
+        "production-authority-53-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "legacy_compatibility_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 2,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "legacyObject": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-054",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_threat",
+      "scenario": "authority",
+      "query": "Run production adapter authority threat legacy_compatibility_bypass sample 3.",
+      "expectedIds": [
+        "production-authority-54-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "legacy_compatibility_bypass",
+        "expectedBlocked": true,
+        "testVector": {
+          "variant": 3,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "legacyObject": true,
+          "requestedStatus": "accepted",
+          "approvalProof": false
+        }
+      }
+    },
+    {
+      "id": "production-authority-055",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_positive_control",
+      "scenario": "authority",
+      "query": "Run production adapter authority positive control trusted_owner_approve.",
+      "expectedIds": [
+        "production-authority-55-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized-control"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "trusted_owner_approve",
+        "expectedAllowed": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "owner",
+          "trustedIdentity": true,
+          "action": "approve",
+          "targetStatus": "review"
+        }
+      }
+    },
+    {
+      "id": "production-authority-056",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_positive_control",
+      "scenario": "authority",
+      "query": "Run production adapter authority positive control persisted_receipt_rehydration.",
+      "expectedIds": [
+        "production-authority-56-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized-control"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "persisted_receipt_rehydration",
+        "expectedAllowed": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "persistedRecord": true,
+          "receiptTargetMatches": true,
+          "receiptTrusted": true
+        }
+      }
+    },
+    {
+      "id": "production-authority-057",
+      "project": "synthetic-project-alpha",
+      "queryType": "authority_positive_control",
+      "scenario": "authority",
+      "query": "Run production adapter authority positive control authorized_normal_recall.",
+      "expectedIds": [
+        "production-authority-57-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized-control"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "authorized_normal_recall",
+        "expectedAllowed": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "worker",
+          "trustedIdentity": true,
+          "recallView": "normal",
+          "lifecycleStatus": "accepted"
+        }
+      }
+    },
+    {
+      "id": "production-authority-058",
+      "project": "synthetic-project-beta",
+      "queryType": "authority_positive_control",
+      "scenario": "authority",
+      "query": "Run production adapter authority positive control reviewer_review_recall.",
+      "expectedIds": [
+        "production-authority-58-anchor"
+      ],
+      "expectedTags": [
+        "production-authorized-control"
+      ],
+      "staleIds": [],
+      "authority": {
+        "threatType": "reviewer_review_recall",
+        "expectedAllowed": true,
+        "testVector": {
+          "variant": 1,
+          "projectAlpha": "synthetic-project-alpha",
+          "projectBeta": "synthetic-project-beta",
+          "projectPathAlpha": "synthetic/projects/alpha",
+          "projectPathBeta": "synthetic/projects/beta",
+          "actorRole": "reviewer",
+          "trustedIdentity": true,
+          "recallView": "review",
+          "lifecycleStatus": "review"
+        }
+      }
+    },
+    {
+      "id": "production-compound-001",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 1.",
+      "expectedIds": [
+        "production-compound-1-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 2,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 510,
+        "estimatedMinutesSaved": 6,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-002",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 2.",
+      "expectedIds": [
+        "production-compound-2-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 3,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 520,
+        "estimatedMinutesSaved": 7,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-003",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 3.",
+      "expectedIds": [
+        "production-compound-3-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 4,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 530,
+        "estimatedMinutesSaved": 8,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-004",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 4.",
+      "expectedIds": [
+        "production-compound-4-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 1,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 540,
+        "estimatedMinutesSaved": 9,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-005",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 5.",
+      "expectedIds": [
+        "production-compound-5-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 2,
+        "outcome": "revised",
+        "corrected": false,
+        "estimatedTokensSaved": 550,
+        "estimatedMinutesSaved": 10,
+        "staleCost": 0.05,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-006",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 6.",
+      "expectedIds": [
+        "production-compound-6-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 3,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 560,
+        "estimatedMinutesSaved": 5,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-007",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 7.",
+      "expectedIds": [
+        "production-compound-7-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 4,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 570,
+        "estimatedMinutesSaved": 6,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-008",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 8.",
+      "expectedIds": [
+        "production-compound-8-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 1,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 580,
+        "estimatedMinutesSaved": 7,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-009",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 9.",
+      "expectedIds": [
+        "production-compound-9-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 2,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 590,
+        "estimatedMinutesSaved": 8,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-010",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 10.",
+      "expectedIds": [
+        "production-compound-10-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 3,
+        "outcome": "revised",
+        "corrected": false,
+        "estimatedTokensSaved": 600,
+        "estimatedMinutesSaved": 9,
+        "staleCost": 0.05,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-011",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 11.",
+      "expectedIds": [
+        "production-compound-11-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 4,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 610,
+        "estimatedMinutesSaved": 10,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-012",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 12.",
+      "expectedIds": [
+        "production-compound-12-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 1,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 620,
+        "estimatedMinutesSaved": 5,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-013",
+      "project": "synthetic-project-alpha",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 13.",
+      "expectedIds": [
+        "production-compound-13-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 2,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 630,
+        "estimatedMinutesSaved": 6,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    },
+    {
+      "id": "production-compound-014",
+      "project": "synthetic-project-beta",
+      "queryType": "compound_value",
+      "scenario": "compound",
+      "query": "Run production adapter reusable memory sample 14.",
+      "expectedIds": [
+        "production-compound-14-anchor"
+      ],
+      "expectedTags": [
+        "production-reusable"
+      ],
+      "staleIds": [],
+      "expectedCompound": {
+        "reuseCount": 3,
+        "outcome": "accepted",
+        "corrected": false,
+        "estimatedTokensSaved": 640,
+        "estimatedMinutesSaved": 7,
+        "staleCost": 0,
+        "maintenanceCost": 0.05
+      }
+    }
+  ]
+}

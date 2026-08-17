@@ -50,6 +50,16 @@ const {
   rowToDocument,
 } = require("./documentMetadataPolicy.cjs");
 const { openKnowledgeDatabaseFromFile } = require("./databaseStartupPolicy.cjs");
+const { createSqlJsDurableStore } = require("./sqlJsDurableStore.cjs");
+const { authorityLifecycleReview } = require("./memoryAuthorityLifecycleAdapter.cjs");
+const { execute: executeMemoryRuntimeCli, issueAcceptedEvidenceReceiptFromApp } = require("./memoryRuntimeCli.cjs");
+const { inspectSkillReleaseParity } = require("./skillReleaseManifest.cjs");
+const { loadProjectReleaseEvidence } = require("./projectReleaseEvidenceReceipt.cjs");
+const { createPersistenceTransactionPort } = require("./runtimeBoundaries/persistenceTransactionPort.cjs");
+const { registerRuntimeBoundaryFacade } = require("./runtimeBoundaries/runtimeBoundaryIntegration.cjs");
+const { createStrictReadonlyMemoryProductQuery } = require("./strictReadonlyMemoryProductQuery.cjs");
+const { copyPrivateSqliteBackup } = require("../codex-skills/zhixia-local-docs/scripts/private-sqlite-storage.cjs");
+const { seedE2EAuthorityBaseline } = require("./e2eAuthorityFixture.cjs");
 const {
   createSensitiveSettingsProtector,
   isProtectedSensitiveSetting,
@@ -222,12 +232,16 @@ const STALE_UNKNOWN_THREAD_DAYS = 3;
 const MASKED_SETTING_VALUE = "••••••••";
 const CODEX_HISTORY_VAULT_SCHEMA_VERSION = "zhixia.codex_thread_vault.v1";
 const E2E_PROBE_ENABLED = process.env.ZHIXIA_E2E_PROBE === "1";
+const E2E_USER_DATA_DIR = E2E_PROBE_ENABLED && process.env.ZHIXIA_E2E_USER_DATA_DIR
+  ? path.resolve(process.env.ZHIXIA_E2E_USER_DATA_DIR)
+  : null;
 const SEMANTIC_GRAPH_VIEW_DEFAULT_NODES = 72;
 const SEMANTIC_GRAPH_VIEW_MAX_NODES = 72;
 const SEMANTIC_GRAPH_VIEW_DEFAULT_EDGES = 180;
 const SEMANTIC_GRAPH_VIEW_MAX_EDGES = 180;
 
 app.setName("知匣 Local Doc Knowledge");
+if (E2E_USER_DATA_DIR) app.setPath("userData", E2E_USER_DATA_DIR);
 if (process.platform === "win32") {
   app.setAppUserModelId("local.doc.knowledge");
 }
@@ -244,7 +258,8 @@ let mainWindow = null;
 let SQL = null;
 let db = null;
 let dbReady = null;
-let dbSaveQueue = Promise.resolve();
+let dbDurableStore = null;
+let skillCandidateTransactionFailure = null;
 let sensitiveSettingsProtector = null;
 const sensitiveSettingsWarnings = new Set();
 let fileWatchers = new Map();
@@ -2287,6 +2302,14 @@ async function ensureDatabase() {
       backupUnreadableDatabaseFile,
     });
     db = opened.db;
+    dbDurableStore = createSqlJsDurableStore({
+      Runtime,
+      filePath: file,
+      getDatabase: () => db,
+      setDatabase: (nextDatabase) => {
+        db = nextDatabase;
+      },
+    });
     migrateSchema();
     await migrateLegacyJson();
     await compactLegacyDocumentContentStore();
@@ -2298,19 +2321,16 @@ async function ensureDatabase() {
 
 async function backupUnreadableDatabaseFile(source, error) {
   if (!(await pathExists(source))) return null;
-  const backupDir = path.join(app.getPath("userData"), "backups");
-  await fs.mkdir(backupDir, { recursive: true });
+  const trustedRoot = app.getPath("userData");
+  const backupDir = path.join(trustedRoot, "backups");
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
   const target = path.join(backupDir, `knowledge-store-unreadable-${stamp}-${crypto.randomUUID()}.sqlite`);
   try {
-    await fs.copyFile(source, target);
+    copyPrivateSqliteBackup(source, target, { trustedRoot });
     return target;
-  } catch (backupError) {
-    const originalReason = error?.message || String(error || "unknown database open error");
-    const backupReason = backupError?.message || String(backupError || "unknown backup error");
+  } catch {
     throw new Error(
-      `Zhixia refused to open an unreadable knowledge-store.sqlite and also could not create a backup. ` +
-        `Original error: ${originalReason}; backup error: ${backupReason}`,
+      "Zhixia refused to open an unreadable knowledge-store.sqlite and also could not create an owner-only backup.",
     );
   }
 }
@@ -2801,11 +2821,11 @@ function getSettingValue(key, fallback = null) {
 async function backupDatabaseBeforeCompaction() {
   const source = dbPath();
   if (!(await pathExists(source))) return null;
-  const backupDir = path.join(app.getPath("userData"), "backups");
-  await fs.mkdir(backupDir, { recursive: true });
+  const trustedRoot = app.getPath("userData");
+  const backupDir = path.join(trustedRoot, "backups");
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
-  const target = path.join(backupDir, `knowledge-store-before-content-compact-${stamp}.sqlite`);
-  await fs.copyFile(source, target);
+  const target = path.join(backupDir, `knowledge-store-before-content-compact-${stamp}-${crypto.randomUUID()}.sqlite`);
+  copyPrivateSqliteBackup(source, target, { trustedRoot });
   return target;
 }
 
@@ -2891,14 +2911,6 @@ async function migrateLegacyJson() {
   }
 }
 
-async function writeDatabaseFile() {
-  const bytes = db.export();
-  const targetPath = dbPath();
-  const tempPath = `${targetPath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`;
-  await fs.writeFile(tempPath, Buffer.from(bytes));
-  await fs.rename(tempPath, targetPath);
-}
-
 async function databaseFileSizeBytes() {
   try {
     const stat = await fs.stat(dbPath());
@@ -2919,9 +2931,22 @@ async function shouldBypassSqliteHistoryWrite() {
 }
 
 async function saveDatabase() {
-  const runSave = () => writeDatabaseFile();
-  dbSaveQueue = dbSaveQueue.then(runSave, runSave);
-  return dbSaveQueue;
+  if (!dbDurableStore) throw new Error("Zhixia durable database store is not initialized.");
+  return dbDurableStore.persist();
+}
+
+function restoreSqlJsMutationSnapshot(snapshot) {
+  const current = Buffer.from(db.export());
+  if (current.equals(snapshot) || dbDurableStore?.getStatus().degradedReadonly) return;
+  const previous = db;
+  db = new SQL.Database(snapshot);
+  dbDurableStore = createSqlJsDurableStore({
+    Runtime: SQL,
+    filePath: dbPath(),
+    getDatabase: () => db,
+    setDatabase: (nextDatabase) => { db = nextDatabase; },
+  });
+  previous?.close?.();
 }
 
 async function pathExists(filePath) {
@@ -2977,28 +3002,26 @@ async function hashFileIfExists(filePath) {
   }
 }
 
-async function readSkillFingerprint(skillDir) {
-  const files = [
-    "SKILL.md",
-    path.join("agents", "openai.yaml"),
-    path.join("references", "context-bundle.md"),
-    path.join("scripts", "read-project-knowledge.cjs"),
-  ];
-  const hash = crypto.createHash("sha256");
-  for (const file of files) {
-    hash.update(file);
-    hash.update(await hashFileIfExists(path.join(skillDir, file)));
-  }
-  return hash.digest("hex");
-}
-
 async function getSkillStatus() {
   const sourcePath = bundledSkillPath();
   const targetPath = installedSkillPath();
   const sourceExists = await pathExists(path.join(sourcePath, "SKILL.md"));
   const installed = await pathExists(path.join(targetPath, "SKILL.md"));
-  const sourceFingerprint = sourceExists ? await readSkillFingerprint(sourcePath) : null;
-  const installedFingerprint = installed ? await readSkillFingerprint(targetPath) : null;
+  let releaseParity = null;
+  let releaseParityError = null;
+  if (sourceExists) {
+    try {
+      releaseParity = inspectSkillReleaseParity({
+        repoPath: sourcePath,
+        bundledPath: sourcePath,
+        installedPath: installed ? targetPath : null,
+      });
+    } catch (error) {
+      releaseParityError = String(error?.message || error);
+    }
+  }
+  const sourceFingerprint = releaseParity?.releaseGeneration || null;
+  const installedFingerprint = releaseParity?.trees?.installed?.verified ? releaseParity.releaseGeneration : null;
   return {
     name: ZHIXIA_SKILL_NAME,
     sourcePath,
@@ -3011,7 +3034,17 @@ async function getSkillStatus() {
     installedVersion: installed ? await readSkillVersion(targetPath) : null,
     sourceFingerprint,
     installedFingerprint,
-    updateAvailable: Boolean(sourceExists && (!installed || sourceFingerprint !== installedFingerprint)),
+    releaseGeneration: releaseParity?.releaseGeneration || null,
+    releaseEntryCount: releaseParity?.entryCount || 0,
+    releaseParity: releaseParity ? {
+      readOnly: releaseParity.readOnly,
+      verified: releaseParity.verified,
+      bundled: releaseParity.trees.bundled.state,
+      installed: releaseParity.trees.installed.state,
+      upgradePlan: releaseParity.upgradePlan,
+    } : null,
+    releaseParityError,
+    updateAvailable: Boolean(sourceExists && (!installed || !releaseParity?.trees?.installed?.verified)),
   };
 }
 
@@ -6343,6 +6376,21 @@ function uniqCompact(items, limit = 12) {
   return result;
 }
 
+function uniqExactStrings(items, limit = 12, maxChars = 4096) {
+  const seen = new Set();
+  const result = [];
+  for (const value of safeArray(items).flat()) {
+    const item = String(value || "").trim();
+    if (!item || item.length > maxChars || item.includes("\0")) continue;
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+    if (result.length >= limit) break;
+  }
+  return result;
+}
+
 function normalizeStatus(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }
@@ -7120,8 +7168,7 @@ function stableShortId(prefix, value) {
 
 function inferProjectCompletion(artifactTypes) {
   const types = new Set(safeArray(artifactTypes).filter(Boolean));
-  if (types.has("release_notes")) return "released";
-  if (types.has("test_plan")) return "testing";
+  if (types.has("release_notes") || types.has("test_plan")) return "testing";
   if (types.has("technical_design")) return "design";
   if (types.has("prd")) return "prd";
   if (types.has("readme") || types.has("context")) return "idea";
@@ -7440,7 +7487,7 @@ function buildCEOFlowRecords(projectRecords = buildProjectRecords()) {
   return Array.from(records.values()).map((record) => ({
     ...record,
     projectIds: uniqCompact(record.projectIds, 20),
-    workspacePaths: uniqCompact(record.workspacePaths, 20),
+    workspacePaths: uniqExactStrings(record.workspacePaths, 20),
     childThreadIds: uniqCompact(record.childThreadIds, 40),
     hotThreadIds: uniqCompact(record.hotThreadIds, 20),
     workerThreadIds: uniqCompact(record.workerThreadIds, 40),
@@ -8354,7 +8401,13 @@ function listMemoryGraphSeed(options = {}) {
 }
 
 function activateMemoryRuntimeGraph(options = {}) {
-  const sync = syncMemoryGraphFromSources({
+  const sync = options.readOnly === true ? {
+    insertedNodes: 0,
+    updatedNodes: 0,
+    insertedEdges: 0,
+    updatedEdges: 0,
+    skippedReason: "strict_read_only",
+  } : syncMemoryGraphFromSources({
     projectPath: options.projectPath || null,
     threadId: options.threadId || null,
     limit: options.seedLimit || 220,
@@ -8830,12 +8883,13 @@ function cloneAgentRetrieveResult(result) {
 
 function retrieveAgentContext(options = {}) {
   const request = normalizeAgentRetrieveRequest(options);
-  if (request.allowedKinds.has("thread_lineage_index")) {
+  const strictReadOnly = options.readOnly === true;
+  if (!strictReadOnly && request.allowedKinds.has("thread_lineage_index")) {
     refreshThreadLineageIndex();
   }
   const cacheKey = buildAgentRetrieveCacheKey(request);
-  const cached = agentRetrieveCache.get(cacheKey);
-  if (options.includeCandidatePool !== true && cached && Date.now() - cached.createdAt <= AGENT_RETRIEVE_CACHE_TTL_MS) {
+  const cached = strictReadOnly ? null : agentRetrieveCache.get(cacheKey);
+  if (!strictReadOnly && options.includeCandidatePool !== true && cached && Date.now() - cached.createdAt <= AGENT_RETRIEVE_CACHE_TTL_MS) {
     return {
       ...cloneAgentRetrieveResult(cached.result),
       cache: {
@@ -8893,7 +8947,7 @@ function retrieveAgentContext(options = {}) {
     items: trimmed.items,
     ...(candidateItems ? { candidateItems } : {}),
   };
-  if (options.includeCandidatePool !== true) {
+  if (!strictReadOnly && options.includeCandidatePool !== true) {
     agentRetrieveCache.set(cacheKey, { createdAt: Date.now(), result: cloneAgentRetrieveResult(result) });
   }
   return result;
@@ -8942,6 +8996,32 @@ function bestEffortMemoryRuntimeTriggerReceipt(entry = {}) {
       storageUnavailable: true,
     };
   }
+}
+
+function captureMemoryRuntimeWriteState() {
+  const root = memoryRuntimeRoot();
+  const storageTree = {};
+  const walk = (currentPath, relativePath = "") => {
+    const stat = fsNative.lstatSync(currentPath);
+    const key = relativePath || ".";
+    storageTree[key] = {
+      type: stat.isDirectory() ? "directory" : stat.isFile() ? "file" : stat.isSymbolicLink() ? "symlink" : "other",
+      mode: stat.mode & 0o777,
+      size: stat.size,
+      sha256: stat.isFile() ? crypto.createHash("sha256").update(fsNative.readFileSync(currentPath)).digest("hex") : null,
+    };
+    if (stat.isDirectory()) {
+      for (const name of fsNative.readdirSync(currentPath).sort()) {
+        walk(path.join(currentPath, name), relativePath ? `${relativePath}/${name}` : name);
+      }
+    }
+  };
+  if (fsNative.existsSync(root)) walk(root);
+  return {
+    storageTree,
+    graph: buildMemoryGraphCacheState(),
+    retrieveLogCount: agentRetrieveLogs.length,
+  };
 }
 
 function normalizeAuthorityPath(value) {
@@ -9061,6 +9141,7 @@ function runHybridMemoryRetrieval(options = {}, routerPlan, extraItems = []) {
   let indexSync = { indexed: 0, unchanged: 0, skipped: 0 };
   let indexSearch = { items: [], queryTerms: [], durationMs: 0 };
   try {
+    if (options.readOnly === true) throw Object.assign(new Error("strict_read_only"), { strictReadOnlySkip: true });
     indexSync = reconcileMemorySearchItems(
       memoryRuntimeRoot(),
       currentCandidates.filter((item) => item.kind !== "runtime_event").slice(0, 600),
@@ -9071,7 +9152,11 @@ function runHybridMemoryRetrieval(options = {}, routerPlan, extraItems = []) {
     );
     indexSearch = { items: [], queryTerms: [], durationMs: 0, skippedReason: "authority_scoped_hybrid_ranking" };
   } catch (error) {
-    warnings.push(`memory_runtime_sidecar_index_fallback:${sanitizeAgentRetrieveErrorMessage(error)}`);
+    if (error?.strictReadOnlySkip) {
+      indexSync = { indexed: 0, unchanged: 0, skipped: currentCandidates.length, skippedReason: "strict_read_only" };
+    } else {
+      warnings.push(`memory_runtime_sidecar_index_fallback:${sanitizeAgentRetrieveErrorMessage(error)}`);
+    }
   }
   const authorityResult = initialAuthority;
   const hybrid = retrieveHybridMemory(
@@ -9124,6 +9209,7 @@ function runHybridMemoryRetrieval(options = {}, routerPlan, extraItems = []) {
 
 async function retrieveMemoryRuntimeContext(options = {}) {
   const startedAt = Date.now();
+  const strictReadOnly = options.readOnly === true;
   const taskGoal = options.taskGoal || options.task_goal || options.query || "";
   const routerPlan = buildMemoryRouterPlan({ ...options, taskGoal });
   const [runtimeEvents, workingMemory] = await Promise.all([
@@ -9191,7 +9277,7 @@ async function retrieveMemoryRuntimeContext(options = {}) {
   semanticGraphIdentityWarnings.push(...safeArray(semanticGraphScope.warnings));
   const semanticGraphSeedStartedAt = Date.now();
   let semanticGraphSeed = {
-    attempted: true,
+    attempted: !strictReadOnly,
     candidatesConsidered: 0,
     eligibleCandidates: 0,
     rejectedCandidates: 0,
@@ -9212,6 +9298,7 @@ async function retrieveMemoryRuntimeContext(options = {}) {
     warnings: semanticGraphIdentityWarnings.slice(0, 20),
   };
   try {
+    if (strictReadOnly) throw Object.assign(new Error("strict_read_only"), { strictReadOnlySkip: true });
     const seedGraph = buildSemanticGraphSeedFromRuntimeItems(packet.items, {
       projectPath: semanticGraphProjectPath,
       projectId: semanticGraphScope.projectId,
@@ -9234,7 +9321,9 @@ async function retrieveMemoryRuntimeContext(options = {}) {
       warnings: [...new Set([...semanticGraphIdentityWarnings, ...safeArray(seedGraph.warnings), ...safeArray(writeback.warnings)])].slice(0, 20),
     };
   } catch (error) {
-    semanticGraphSeed.warnings = [`semantic_graph_seed_failed_closed:${sanitizeAgentRetrieveErrorMessage(error)}`];
+    semanticGraphSeed.warnings = error?.strictReadOnlySkip
+      ? ["semantic_graph_seed_skipped_strict_read_only"]
+      : [`semantic_graph_seed_failed_closed:${sanitizeAgentRetrieveErrorMessage(error)}`];
   }
   semanticGraphSeed.durationMs = Date.now() - semanticGraphSeedStartedAt;
   let semanticGraph;
@@ -9296,7 +9385,11 @@ async function retrieveMemoryRuntimeContext(options = {}) {
       seedFullTextBodyReads: 0,
     },
   };
-  const semanticGraphTriggerReceipt = bestEffortMemoryRuntimeTriggerReceipt({
+  const semanticGraphTriggerReceipt = strictReadOnly ? {
+    hook: "semantic_graph_recall",
+    persisted: false,
+    warnings: ["semantic_graph_receipt_skipped_strict_read_only"],
+  } : bestEffortMemoryRuntimeTriggerReceipt({
     hook: "semantic_graph_recall",
     queryType: routerPlan.queryType || options.queryType || "task_dispatch",
     projectPath: semanticGraphProjectPath,
@@ -9376,7 +9469,11 @@ async function retrieveMemoryRuntimeContext(options = {}) {
     compactPacket: true,
     whyRecalledIncluded: true,
   });
-  const triggerReceipt = bestEffortMemoryRuntimeTriggerReceipt({
+  const triggerReceipt = strictReadOnly ? {
+    hook: "retrieve_context",
+    persisted: false,
+    warnings: ["retrieve_context_receipt_skipped_strict_read_only"],
+  } : bestEffortMemoryRuntimeTriggerReceipt({
     hook: "retrieve_context",
     queryType: result.request.queryType,
     projectPath: result.request.projectPath,
@@ -9390,10 +9487,13 @@ async function retrieveMemoryRuntimeContext(options = {}) {
   });
   return {
     ...result,
+    readOnly: strictReadOnly,
     triggerReceipt,
     memoryCore: {
       ...(result.memoryCore || {}),
-      triggerReceiptCounts: { retrieveContext: 1, semanticGraphRecall: 1, returnedCount: result.items.length, semanticGraphHitCount: semanticGraph.hitCount },
+      triggerReceiptCounts: { retrieveContext: strictReadOnly ? 0 : 1, semanticGraphRecall: strictReadOnly ? 0 : 1, returnedCount: result.items.length, semanticGraphHitCount: semanticGraph.hitCount },
+      strictReadOnly,
+      writes: strictReadOnly ? 0 : undefined,
     },
   };
 }
@@ -10421,6 +10521,7 @@ function evaluateMemoryRuntimeBenchmark(options = {}) {
   const cases = safeArray(options.cases);
   const evaluation = evaluateMemoryBenchmark(cases, {
     k: options.k || 5,
+    profile: "evaluation",
     thresholds: options.thresholds || undefined,
   });
   return {
@@ -10828,13 +10929,9 @@ async function startFileWatchers(options = {}) {
 }
 
 async function runE2EGovernanceProbe(options = {}) {
-  if (!E2E_PROBE_ENABLED) {
-    throw new Error("E2E probe is disabled.");
-  }
+  if (!E2E_PROBE_ENABLED) throw new Error("E2E probe is disabled.");
   const projectPath = path.resolve(String(options.projectPath || "").trim());
-  if (!projectPath || !(await pathExists(projectPath))) {
-    throw new Error("A valid projectPath is required for the E2E governance probe.");
-  }
+  if (!projectPath || !(await pathExists(projectPath))) throw new Error("A valid projectPath is required for the E2E governance probe.");
   await ensureDatabase();
   const expectedLegacyApiKey = String(options.expectedLegacyApiKey || "");
   const migratedApiKeyResult = db.exec("SELECT value FROM settings WHERE key = $key", { $key: "aiProviderApiKey" });
@@ -10851,25 +10948,31 @@ async function runE2EGovernanceProbe(options = {}) {
 
   const candidateDocs = [
     path.join(projectPath, "docs", "CEO_FLOW_HANDOFF.md"),
+    path.join(projectPath, "docs", "CEO_HANDOFF_11111111-2222-7333-8444-555555555555.md"),
     path.join(projectPath, "docs", "RELEASE_NOTES.md"),
     path.join(projectPath, "codex-skills", "e2e-review-skill", "SKILL.md"),
   ];
   const existingDocs = [];
-  for (const filePath of candidateDocs) {
-    if (await pathExists(filePath)) existingDocs.push(filePath);
-  }
+  for (const filePath of candidateDocs) if (await pathExists(filePath)) existingDocs.push(filePath);
   const importResult = await importPaths(existingDocs, {
     workspacePath: projectPath,
     sourceType: "codex_output",
     artifactType: "report",
   });
   const memoryFiles = await writeProjectMemoryFiles([projectPath]);
+  const nonreadyProjectPath = options.nonreadyProjectPath ? path.resolve(String(options.nonreadyProjectPath)) : null;
+  if (nonreadyProjectPath) {
+    const nonreadyDoc = path.join(nonreadyProjectPath, "docs", "NONREADY.md");
+    if (!(await pathExists(nonreadyDoc))) throw new Error("E2E non-ready project fixture is missing.");
+    await importPaths([nonreadyDoc], { workspacePath: nonreadyProjectPath, sourceType: "codex_output", artifactType: "report" });
+  }
+  const seededAuthority = options.seedAuthorityBaseline === true
+    ? seedE2EAuthorityBaseline({ executeRuntime: executeMemoryRuntimeCli, projectPath, storeRoot: memoryRuntimeRoot() })
+    : null;
   refreshThreadLineageIndex();
 
   const inventory = await getToolSkillInventoryForProject(projectPath);
-  if (!inventory.records.length) {
-    throw new Error("E2E fixture did not produce Tool/Skill inventory records.");
-  }
+  if (!inventory.records.length) throw new Error("E2E fixture did not produce Tool/Skill inventory records.");
   let staleSnapshotRejected = false;
   try {
     await confirmToolSkillInventorySnapshot({ projectPath, snapshotHash: "stale-e2e-hash" });
@@ -11012,6 +11115,29 @@ async function runE2EGovernanceProbe(options = {}) {
     maxResults: 8,
     reviewMode: true,
   });
+  const sidecarFileDigest = async () => {
+    const root = memoryRuntimeRoot();
+    const entries = await fs.readdir(root).catch(() => []);
+    const files = entries.filter((name) => /memory-runtime-index\.sqlite(?:-wal|-shm)?$/.test(name)).sort();
+    return Object.fromEntries(await Promise.all(files.map(async (name) => {
+      const bytes = await fs.readFile(path.join(root, name));
+      return [name, crypto.createHash("sha256").update(bytes).digest("hex")];
+    })));
+  };
+  const readOnlySidecarBefore = await sidecarFileDigest();
+  const readOnlyLogCountBefore = listAgentRetrieveLogs({ limit: AGENT_RETRIEVE_LOG_LIMIT }).length;
+  const readOnlyMemoryContext = await retrieveMemoryRuntimeContext({
+    taskGoal: "Read-only project continuity preview",
+    queryType: "project_resume",
+    projectPath,
+    tokenBudget: 700,
+    maxResults: 4,
+    readOnly: true,
+  });
+  retrieveAgentContext({ query: "Read-only project preview", queryType: "project_resume", projectPath, tokenBudget: 700, maxResults: 4, readOnly: true });
+  getSemanticMemoryGraphView({ projectPath, taskGoal: "Read-only graph preview", readOnly: true });
+  const readOnlySidecarAfter = await sidecarFileDigest();
+  const readOnlyLogCountAfter = listAgentRetrieveLogs({ limit: AGENT_RETRIEVE_LOG_LIMIT }).length;
   const memoryFacts = listMemoryFacts(memoryRuntimeRoot(), { projectPath, view: "current", limit: 40 });
   const unsafeE2eToken = "ghp_1234567890ABCDEFGHIJKLMN";
   const rejectedWriteback = await writebackMemoryRuntimeEvidence({
@@ -11103,6 +11229,7 @@ async function runE2EGovernanceProbe(options = {}) {
     importedCount: importResult.imported.length,
     memoryCardCount: listExperienceCards(projectPath, { includeGlobal: false, limit: 80 }).length,
     memoryFiles,
+    seededAuthority,
     secretStorage: {
       status: getSensitiveSettingsProtector().status,
       legacyMigrated: expectedLegacyApiKey
@@ -11151,6 +11278,10 @@ async function runE2EGovernanceProbe(options = {}) {
       contextReturnedCount: safeArray(memoryContext.items).length,
       authorityBypassExcluded: !safeArray(memoryContext.items).some((item) => ["e2e-global-draft-authority-bypass", "e2e-project-ready-review-authority-bypass", "e2e-global-scope-project-masquerade"].includes(item.id)),
       reviewModeCandidateReturned: safeArray(reviewMemoryContext.items).some((item) => item.id === "e2e-project-ready-review-authority-bypass"),
+      readOnlySidecarBytesUnchanged: JSON.stringify(readOnlySidecarAfter) === JSON.stringify(readOnlySidecarBefore),
+      readOnlyLogCountUnchanged: readOnlyLogCountAfter === readOnlyLogCountBefore,
+      readOnlyWritesZero: readOnlyMemoryContext.memoryCore?.strictReadOnly === true && readOnlyMemoryContext.memoryCore?.writes === 0,
+      readOnlyReceiptsSkipped: readOnlyMemoryContext.memoryCore?.triggerReceiptCounts?.retrieveContext === 0 && readOnlyMemoryContext.memoryCore?.triggerReceiptCounts?.semanticGraphRecall === 0,
       explicitGlobalScopeTruthful: safeArray(explicitGlobalScopeSearch.items).some((item) => item.id === "e2e-global-scope-project-masquerade" && item.scope === "global" && item.projectPath == null && item.status === "review"),
       contextMode: memoryContext.hybridRetrieval?.strategy || null,
       sidecarWholeDatabaseExport: memoryContext.performance?.sidecarIndexWholeDatabaseExport,
@@ -11159,6 +11290,7 @@ async function runE2EGovernanceProbe(options = {}) {
       benchmarkPassed: memoryEvaluation.gate?.passed === true,
       benchmarkRecallAtK: memoryEvaluation.metrics?.recallAtK || 0,
       benchmarkMetrics: memoryEvaluation.metrics || null,
+      benchmarkVerdict: String(memoryEvaluation.compactReport || "").split(" | ")[0] || null,
       benchmarkFailedChecks: safeArray(memoryEvaluation.gate?.failedThresholds),
       rejectedWritebackStatus: rejectedWriteback.status,
       rejectedWritebackFactCountUnchanged: memoryFactsAfterRejected.length === memoryFacts.length,
@@ -11352,45 +11484,44 @@ ipcMain.handle("codex:scanWorkspace", async () => {
 
 ipcMain.handle("codex:exportContext", async (_event, documentId) => exportCodexContext(documentId));
 
-ipcMain.handle("codexGuardian:report", async () => runCodexGuardian("report"));
-
-ipcMain.handle("codexGuardian:cleanLogs", async (_event, options = {}) => {
-  if (!isDestructiveGuardianConfirmation(options)) {
-    return { ok: false, error: "需要显式确认后才能清理 Codex 运行日志。", refused: true };
-  }
-  return runCodexGuardian("clean-logs");
-});
-
-ipcMain.handle("codexGuardian:searchHistory", async (_event, options = {}) => runCodexGuardian("search-history", options));
-
-ipcMain.handle("codexGuardian:getThreadContext", async (_event, options = {}) => runCodexGuardian("get-thread-context", options));
-
-ipcMain.handle("codexGuardian:getProjectHistory", async (_event, options = {}) => runCodexGuardian("get-project-history", options));
-
-ipcMain.handle("codexGuardian:listLongThreads", async (_event, options = {}) => listLongCodexThreads(options));
-
-ipcMain.handle("codexGuardian:optimizeThread", async (_event, options = {}) => {
-  if (!isDestructiveGuardianConfirmation(options)) {
-    return { ok: false, error: "需要显式确认后才能执行线程入库/瘦身。", refused: true };
-  }
-  return optimizeCodexThread(options);
-});
-
-ipcMain.handle("codexGuardian:compactThread", async (_event, options = {}) => {
-  if (!isDestructiveGuardianConfirmation(options)) {
-    return { ok: false, error: "需要显式确认后才能瘦身 Codex 线程。", refused: true };
-  }
-  return compactCodexThread(options);
-});
-
-ipcMain.handle("codexGuardian:autoIngestHistory", async (_event, options = {}) => autoIngestCodexThreadHistory(options));
-
-ipcMain.handle("codexGuardian:generateArchiveQueue", async (_event, options = {}) => {
-  if (!isDestructiveGuardianConfirmation(options)) {
-    return { ok: false, error: "需要显式确认后才能生成侧栏归档队列。", refused: true };
-  }
-  const queue = await generateCodexArchiveQueue(options);
-  return { ok: true, result: queue };
+const runtimeBoundaryIntegration = registerRuntimeBoundaryFacade({
+  ipcRegistrar: ipcMain,
+  platform: process.platform,
+  guardianCapability: process.platform === "win32" ? undefined : {
+    supported: false,
+    adapter: "unavailable",
+    reason: "旧线程整理目前仅支持 Windows PowerShell；此设备不会执行扫描、入库、瘦身或归档操作。",
+  },
+  guardianConfirmationMessages: {
+    clean_logs: "需要显式确认后才能清理 Codex 运行日志。",
+    optimize_thread: "需要显式确认后才能执行线程入库/瘦身。",
+    compact_thread: "需要显式确认后才能瘦身 Codex 线程。",
+    generate_archive_queue: "需要显式确认后才能生成侧栏归档队列。",
+  },
+  isGuardianMutationConfirmed: isDestructiveGuardianConfirmation,
+  guardianOperations: {
+    report: (options) => runCodexGuardian("report", options),
+    search_history: (options) => runCodexGuardian("search-history", options),
+    get_thread_context: (options) => runCodexGuardian("get-thread-context", options),
+    get_project_history: (options) => runCodexGuardian("get-project-history", options),
+    list_long_threads: listLongCodexThreads,
+    clean_logs: (options) => runCodexGuardian("clean-logs", options),
+    optimize_thread: optimizeCodexThread,
+    compact_thread: compactCodexThread,
+    auto_ingest_history: autoIngestCodexThreadHistory,
+    generate_archive_queue: async (options) => ({ ok: true, result: await generateCodexArchiveQueue(options) }),
+  },
+  reviewAuthority: async (options) => {
+    const workspace = path.resolve(String(options.workspace || ""));
+    if (!workspace || !listRegisteredWorkspacePaths().includes(workspace)) throw new Error("authority_review_registered_workspace_required");
+    return authorityLifecycleReview(
+      { ...options, workspace, storeRoot: memoryRuntimeRoot() },
+      { issueAcceptedEvidenceReceipt: issueAcceptedEvidenceReceiptFromApp },
+    );
+  },
+  captureMemoryWriteState: captureMemoryRuntimeWriteState,
+  retrieveReadonlyMemory: createStrictReadonlyMemoryProductQuery({ userDataPath: app.getPath("userData"), activeReadonlyQuery: (request) => retrieveAgentContext({ ...request, readOnly: true }) }),
+  loadReleaseEvidence: loadProjectReleaseEvidence,
 });
 
 ipcMain.handle("runtimeMonitor:getSnapshot", async (_event, options = {}) => getRuntimeMonitorSnapshot(options));
@@ -11507,37 +11638,49 @@ ipcMain.handle("memory:updateExperienceCardStatus", async (_event, id, status, o
 
 ipcMain.handle("memory:updateSkillCandidateStatus", async (_event, id, status) => {
   await ensureDatabase();
-  const candidate = updateSkillCandidateStatus(id, status);
-  await saveDatabase();
+  const transaction = createPersistenceTransactionPort({
+    captureSnapshot: async () => Buffer.from(db.export()),
+    applyMutation: async () => updateSkillCandidateStatus(id, status),
+    persist: saveDatabase,
+    restoreSnapshot: async (snapshot) => restoreSqlJsMutationSnapshot(snapshot),
+    enterDegradedReadonly: async (details) => { skillCandidateTransactionFailure = details; },
+    shouldDegradeReadonly: ({ phase }) => phase !== "mutate",
+  });
+  const { value: candidate } = await transaction.transact({ operation: "memory.update_skill_candidate_status" });
   return { ok: true, candidate, overview: getMemoryOverview() };
 });
 
 ipcMain.handle("agent:retrieveContext", async (_event, options = {}) => {
+  if (options.readOnly === true) return runtimeBoundaryIntegration.strictReadonlyMemoryQuery.query(options);
   await ensureDatabase();
   const startedAt = Date.now();
   try {
     const result = retrieveAgentContext(options);
-    appendAgentRetrieveLog(
-      buildAgentRetrieveLogEntry(result, {
-        status: "success",
-        durationMs: Date.now() - startedAt,
-      }),
-    );
+    if (options.readOnly !== true) {
+      appendAgentRetrieveLog(
+        buildAgentRetrieveLogEntry(result, {
+          status: "success",
+          durationMs: Date.now() - startedAt,
+        }),
+      );
+    }
     return result;
   } catch (error) {
-    appendAgentRetrieveLog(
-      buildAgentRetrieveErrorLogEntry({
-        request: options,
-        status: "error",
-        durationMs: Date.now() - startedAt,
-        errorMessage: error,
-      }),
-    );
+    if (options.readOnly !== true) {
+      appendAgentRetrieveLog(
+        buildAgentRetrieveErrorLogEntry({
+          request: options,
+          status: "error",
+          durationMs: Date.now() - startedAt,
+          errorMessage: error,
+        }),
+      );
+    }
     throw error;
   }
 });
-
 ipcMain.handle("memoryRuntime:retrieveContext", async (_event, options = {}) => {
+  if (options.readOnly === true) return runtimeBoundaryIntegration.strictReadonlyMemoryQuery.query(options);
   await ensureDatabase();
   return retrieveMemoryRuntimeContext(options);
 });

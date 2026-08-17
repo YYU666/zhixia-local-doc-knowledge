@@ -3,7 +3,7 @@ const crypto = require("node:crypto");
 const MEMORY_EVALUATION_SCHEMA = "zhixia.memory_evaluation.v1";
 
 const DEFAULT_MEMORY_EVALUATION_THRESHOLDS = Object.freeze({
-  minimumCases: 1,
+  minimumCases: 100,
   recallAtK: 0.8,
   precisionAtK: 0.5,
   mrr: 0.75,
@@ -14,6 +14,17 @@ const DEFAULT_MEMORY_EVALUATION_THRESHOLDS = Object.freeze({
   p95LatencyMs: 500,
   averageTokenEstimate: 1200,
   p95TokenEstimate: 1800,
+});
+
+const RELEASE_MEMORY_EVALUATION_THRESHOLDS = Object.freeze({
+  ...DEFAULT_MEMORY_EVALUATION_THRESHOLDS,
+  minimumCases: 100,
+  recallAtK: 0.95,
+  precisionAtK: 0.5,
+  mrr: 0.95,
+  ndcgAtK: 0.95,
+  missingAnchorRate: 0.05,
+  staleHitRate: 0,
 });
 
 const AUTHORITY_THREAT_TYPES = Object.freeze([
@@ -988,8 +999,14 @@ function buildCompactMemoryEvaluationReport(evaluation) {
   const strategyFailed = evaluation.strategyGate.failedThresholds.length > 0
     ? evaluation.strategyGate.failedThresholds.join(",")
     : "none";
+  const gatesPassed = evaluation.gate.passed && evaluation.strategyGate.passed;
+  const verdict = evaluation.profile === "test_fixture"
+    ? "TEST_FIXTURE"
+    : evaluation.profile === "release" && evaluation.releaseEligible
+      ? gatesPassed ? "PASS" : "FAIL"
+      : gatesPassed ? "EVALUATION_ONLY" : "FAIL";
   return [
-    evaluation.gate.passed ? "PASS" : "FAIL",
+    verdict,
     `memory-eval k=${metrics.k} cases=${metrics.caseCount}`,
     `recall=${formatMetric(metrics.recallAtK)}`,
     `precision=${formatMetric(metrics.precisionAtK)}`,
@@ -1037,6 +1054,9 @@ function evaluateMemoryBenchmark(benchmarkCases, options = {}) {
       byScenario: buildGroupedMetrics(cases, "scenario", k, thresholds, strategyThresholds),
     },
     cases,
+    profile: normalizeText(options.profile, "evaluation"),
+    releaseEligible: options.profile === "release"
+      && metrics.caseCount >= RELEASE_MEMORY_EVALUATION_THRESHOLDS.minimumCases,
   };
   return {
     ...evaluation,
@@ -1735,6 +1755,7 @@ module.exports = {
   AUTHORITY_POSITIVE_CONTROL_TYPES,
   AUTHORITY_THREAT_TYPES,
   DEFAULT_MEMORY_EVALUATION_THRESHOLDS,
+  RELEASE_MEMORY_EVALUATION_THRESHOLDS,
   MEMORY_EVALUATION_SCHEMA,
   MEMORY_EVALUATION_STRATEGY_THRESHOLDS,
   buildCompactMemoryEvaluationReport,

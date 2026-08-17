@@ -143,6 +143,7 @@ async function main() {
     const projectA = path.join(tempRoot, "project-a");
     const projectB = path.join(tempRoot, "project-b");
     const legacyProject = path.join(tempRoot, "legacy-project");
+    fs.mkdirSync(userDataPath, { mode: 0o700 });
     fs.mkdirSync(path.join(projectA, "docs"), { recursive: true });
     fs.mkdirSync(path.join(projectB, "docs"), { recursive: true });
     fs.mkdirSync(path.join(legacyProject, "docs"), { recursive: true });

@@ -84,12 +84,25 @@ function runtimeFailureCode(result) {
   return String(result.stderr || result.error?.message || "invalid_json").slice(0, 500);
 }
 
+function terminalRuntimePolicyError(result) {
+  const parsed = parseStrictJson(result.stdout);
+  return result.status !== 0 && parsed?.status === "error" && typeof parsed.error === "string";
+}
+
+function throwTerminalRuntimePolicyError(result, route, runtimePath) {
+  const parsed = parseStrictJson(result.stdout);
+  const error = new Error(parsed.error.slice(0, 300));
+  error.diagnostics = [{ route, path: runtimePath, status: result.status, error: parsed.error.slice(0, 300) }];
+  throw error;
+}
+
 function invoke(raw, env = process.env) {
   const diagnostics = [];
   for (const cliPath of sourceCandidates(env)) {
     if (!fs.existsSync(cliPath) || !fs.statSync(cliPath).isFile()) continue;
     const result = run(process.execPath, [cliPath], raw, env);
     if (result.status === 0 && validStrictJson(result.stdout)) return result.stdout.trim();
+    if (terminalRuntimePolicyError(result)) throwTerminalRuntimePolicyError(result, "source", cliPath);
     diagnostics.push({ route: "source", path: cliPath, status: result.status, error: runtimeFailureCode(result) });
   }
   for (const candidate of packagedCandidates(env)) {
@@ -97,6 +110,7 @@ function invoke(raw, env = process.env) {
     const cliPath = path.join(candidate.asar, "electron", "memoryRuntimeCli.cjs");
     const result = run(candidate.executable, [cliPath], raw, { ...env, ELECTRON_RUN_AS_NODE: "1" });
     if (result.status === 0 && validStrictJson(result.stdout)) return result.stdout.trim();
+    if (terminalRuntimePolicyError(result)) throwTerminalRuntimePolicyError(result, "packaged", candidate.asar);
     diagnostics.push({ route: "packaged", path: candidate.asar, status: result.status, error: runtimeFailureCode(result) });
   }
   const error = new Error("verified_app_owned_memory_runtime_cli_unavailable");

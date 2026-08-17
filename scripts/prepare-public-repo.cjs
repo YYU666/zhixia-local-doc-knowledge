@@ -52,16 +52,26 @@ const publicDocs = new Set([
   "TEST_PLAN.md",
   "NATIVE_SQLITE_MIGRATION_PLAN.md",
   "MINIMAX_CODE_MEMORY_BRIDGE.md",
+  "RUNTIME_BOUNDARY_EXTRACTION.md",
+  "SKILL_RELEASE_LIFECYCLE.md",
 ]);
 
 const publicScripts = new Set([
   "audit-openclaw-memory-index.py",
   "clear-openclaw-memory-index.py",
+  "candidate-evidence.cjs",
+  "check-runtime-boundaries.cjs",
   "enforce-memory-benchmark-gate.cjs",
+  "full-artifact-evidence.cjs",
+  "packaged-source-manifest.cjs",
   "plan-native-document-migration.cjs",
   "prepare-public-repo.cjs",
   "preserve-openclaw-memory.ps1",
   "remove-verified-openclaw-memory.ps1",
+  "run-memory-release-benchmark.cjs",
+  "skill-release-manifest.cjs",
+  "verify-packaged-app-source.cjs",
+  "verify-skill-release.cjs",
 ]);
 
 const publicGitHubFiles = new Set([
@@ -70,6 +80,7 @@ const publicGitHubFiles = new Set([
 
 const publicDirs = new Set([
   "assets",
+  "benchmarks",
   "codex-skills",
   "electron",
   "samples",
@@ -392,6 +403,18 @@ function writePublicReleaseNotes() {
     "",
     "This public staging copy intentionally contains a short release summary instead of private operational runlogs.",
     "",
+    "## 0.10.0 - Audited Memory Authority And Recovery",
+    "",
+    "- Added authenticated, one-time accepted-evidence receipts bound to canonical workspace identity, checkpoint, exact scan, changed-path digest, lane, issuer, nonce, and expiry.",
+    "- Added immutable completed-refresh outcome publication and a strict zero-write `query_refresh_outcome` contract for deterministic CEO Flow crash recovery without replaying refresh side effects.",
+    "- Hardened exact workspace scanning, private SQLite storage, sql.js durability, and stale-writer fencing against symlink escape, post-replace ambiguity, failed persistence, and held-reference mutation.",
+    "- Added a genuine strict read-only product-query path that performs no first-use initialization, migration, permission repair, key creation, graph seeding, receipt write, or logging side effect.",
+    "- Added the ordinary authority UI lifecycle for verify, explicit source-backed review, receipt issuance, refresh, and re-verification, with Electron governance and visual behavior coverage.",
+    "- Added bounded incremental accepted-Slice staging and reconciliation so accepted source postimages can be accumulated without granting authority until the full exact-scan delta is complete.",
+    "- Replaced synthetic release claims with a 120-case production-path benchmark and fail-closed corpus, executor, authority, and metric verification.",
+    "- Added complete local artifact evidence, selected-source equivalence, Skill release generation parity, runtime boundary budgets, and public-source privacy checks.",
+    "- Retrieval budgets remain adaptive and bounded, with a hard maximum of 10000 estimated tokens; raw sessions, credentials, images/base64, SQLite, and complete logs remain excluded.",
+    "",
     "## 0.9.1 - Verified Long-Thread Recovery",
     "",
     "- Memory Core 0.9.1 adds an app-owned strict-JSON recovery CLI with exact project identity, baseline HEAD, canonical source hashes, signed receipts, and non-empty continuity-first retrieval.",
@@ -459,6 +482,8 @@ function writePublicPackageJson() {
   const publicPackage = {
     ...sourcePackage,
     scripts: {
+      pretest: sourcePackage.scripts.pretest,
+      "test:refresh-outcome": sourcePackage.scripts["test:refresh-outcome"],
       dev: sourcePackage.scripts.dev,
       "dev:renderer": sourcePackage.scripts["dev:renderer"],
       "dev:electron": sourcePackage.scripts["dev:electron"],
@@ -470,8 +495,22 @@ function writePublicPackageJson() {
       ...(sourcePackage.scripts["test:electron-security"]
         ? { "test:electron-security": sourcePackage.scripts["test:electron-security"] }
         : {}),
+      ...(sourcePackage.scripts["test:electron-release"]
+        ? { "test:electron-release": sourcePackage.scripts["test:electron-release"] }
+        : {}),
       "prepare:public": sourcePackage.scripts["prepare:public"],
       "memory:gate": sourcePackage.scripts["memory:gate"],
+      "memory:evaluate:production-fixture": sourcePackage.scripts["memory:evaluate:production-fixture"],
+      "memory:evaluate:synthetic": sourcePackage.scripts["memory:evaluate:synthetic"],
+      "release:manifest": sourcePackage.scripts["release:manifest"],
+      "verify:app-source": sourcePackage.scripts["verify:app-source"],
+      "test:artifact-evidence": sourcePackage.scripts["test:artifact-evidence"],
+      "test:candidate-evidence": sourcePackage.scripts["test:candidate-evidence"],
+      "release:candidate-manifest": sourcePackage.scripts["release:candidate-manifest"],
+      "verify:candidate": sourcePackage.scripts["verify:candidate"],
+      "release:artifact-manifest": sourcePackage.scripts["release:artifact-manifest"],
+      "verify:artifact": sourcePackage.scripts["verify:artifact"],
+      "verify:release-candidate": sourcePackage.scripts["verify:release-candidate"],
       "memory:migration:plan": sourcePackage.scripts["memory:migration:plan"],
     },
   };

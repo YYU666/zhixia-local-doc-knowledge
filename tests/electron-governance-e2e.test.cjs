@@ -4,9 +4,10 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const initSqlJs = require("sql.js");
+const { resolveElectronExecutable } = require("./electron-test-runtime.cjs");
 
 const root = path.resolve(__dirname, "..");
-const electronExe = path.join(root, "node_modules", "electron", "dist", process.platform === "win32" ? "electron.exe" : "electron");
+const electronExe = resolveElectronExecutable(root);
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-electron-e2e-"));
 const userData = path.join(tempRoot, "user-data");
 const codexHome = path.join(tempRoot, "codex-home");
@@ -52,6 +53,16 @@ async function writeFixture() {
     "# Release Notes\n\nGovernance e2e fixture for project release verification.\n",
     "utf8",
   );
+  fs.writeFileSync(
+    path.join(projectDocsPath, "CEO_HANDOFF_11111111-2222-7333-8444-555555555555.md"),
+    [
+      "# CEO Flow Handoff",
+      "",
+      "Synthetic metadata-only handoff for CEO task 11111111-2222-7333-8444-555555555555.",
+      "Worker and reviewer evidence is accepted for the local governance E2E fixture.",
+    ].join("\n"),
+    "utf8",
+  );
   fs.mkdirSync(userData, { recursive: true });
   const SQL = await initSqlJs({ locateFile: (file) => require.resolve(`sql.js/dist/${file}`) });
   const legacyDb = new SQL.Database();
@@ -83,6 +94,7 @@ function runElectronProbe() {
         ELECTRON_DISABLE_GPU: "1",
         ELECTRON_ENABLE_LOGGING: "1",
         ZHIXIA_E2E_PROBE: "1",
+        ZHIXIA_E2E_USER_DATA_DIR: userData,
         ZHIXIA_E2E_PROJECT_PATH: projectPath,
         ZHIXIA_E2E_RENDERER_SCRIPT: probeScript,
       },
@@ -137,11 +149,12 @@ function cleanupTempRoot() {
 
 (async () => {
   try {
+    assert.equal(fs.existsSync(electronExe), true, `Electron E2E executable must exist: ${electronExe}`);
     await writeFixture();
     const result = await runElectronProbe();
     assert.equal(result.ok, true, "Electron governance probe should complete");
     assert.equal(isPathInside(userData, result.storePath), true, "probe storePath must stay under isolated userData");
-    assert.equal(result.secretStorage.status, "encrypted", "real Electron safeStorage must be available in the supported Windows test environment");
+    assert.equal(result.secretStorage.status, "encrypted", "real Electron safeStorage must be available in the supported host test environment");
     assert.equal(result.secretStorage.legacyMigrated, true, "startup must replace a legacy plaintext API key with ciphertext");
     assert.equal(result.secretStorage.legacyRuntimeRoundTrip, true, "migrated API key must remain usable in the main process");
     assert.equal(result.secretStorage.storedEncrypted, true, "SQLite must persist a versioned ciphertext envelope");
@@ -179,6 +192,10 @@ function cleanupTempRoot() {
     assert.equal(result.memoryRuntime.contextFactCount >= 1, true, "retrieve_context should recall MemoryFact through the hybrid path");
     assert.equal(result.memoryRuntime.authorityBypassExcluded, true, "normal project retrieval must exclude global draft and review-required ready candidates");
     assert.equal(result.memoryRuntime.reviewModeCandidateReturned, true, "explicit review mode should be able to retrieve project review candidates");
+    assert.equal(result.memoryRuntime.readOnlySidecarBytesUnchanged, true, "strict read-only retrieval and graph views must leave sidecar bytes unchanged");
+    assert.equal(result.memoryRuntime.readOnlyLogCountUnchanged, true, "strict read-only Agent retrieval must not append an in-memory retrieve log");
+    assert.equal(result.memoryRuntime.readOnlyWritesZero, true, "strict read-only diagnostics must report zero writes");
+    assert.equal(result.memoryRuntime.readOnlyReceiptsSkipped, true, "strict read-only retrieval must skip both trigger receipts");
     assert.equal(result.memoryRuntime.explicitGlobalScopeTruthful, true, "explicit global retrieval must expose legacy mixed rows only as sanitized global review material");
     assert.equal(result.memoryRuntime.contextMode, "bm25f_compact_metadata_v1", "retrieve_context should report hybrid BM25F retrieval");
     assert.equal(result.memoryRuntime.sidecarWholeDatabaseExport, false, "sidecar retrieval must not use whole-database export");
@@ -191,6 +208,7 @@ function cleanupTempRoot() {
       `bounded synthetic memory benchmark should pass in Electron: ${JSON.stringify(result.memoryRuntime.benchmark || result.memoryRuntime)}`,
     );
     assert.equal(result.memoryRuntime.benchmarkRecallAtK, 1, "synthetic Electron benchmark should retain all anchors");
+    assert.notEqual(result.memoryRuntime.benchmarkVerdict, "PASS", "bounded Electron IPC fixtures must not expose an unqualified PASS verdict");
     assert.equal(result.memoryRuntime.rejectedWritebackStatus, "rejected", "unsafe evidence should be rejected in the real Electron main process");
     assert.equal(result.memoryRuntime.rejectedWritebackFactCountUnchanged, true, "rejected evidence must not create current MemoryFact rows");
     assert.equal(result.memoryRuntime.rejectedStoredPayloadSanitized, true, "rejected evidence storage must not retain credential values");

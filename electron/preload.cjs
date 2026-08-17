@@ -1,22 +1,36 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+const platformCapabilities = Object.freeze({
+  guardian: Object.freeze({
+    supported: process.platform === "win32",
+    adapter: process.platform === "win32" ? "windows_powershell" : "unavailable",
+    reason: process.platform === "win32" ? null : "旧线程整理目前仅支持 Windows PowerShell；此设备不会执行扫描、入库、瘦身或归档操作。",
+  }),
+});
+
+const invokeGuardian = (operation, options) => ipcRenderer
+  .invoke("runtimeBoundary:guardianInvoke", { operation, options })
+  .then((response) => response.result);
+
 const docKnowledgeApi = {
+  platformCapabilities,
+  getPlatformGuardianCapability: () => ipcRenderer.invoke("runtimeBoundary:guardianCapability"),
   listDocuments: (options) => ipcRenderer.invoke("documents:list", options),
   getDocument: (id) => ipcRenderer.invoke("documents:get", id),
   importDocuments: () => ipcRenderer.invoke("documents:import"),
   importFolder: () => ipcRenderer.invoke("documents:importFolder"),
   scanCodexWorkspace: () => ipcRenderer.invoke("codex:scanWorkspace"),
   exportCodexContext: (id) => ipcRenderer.invoke("codex:exportContext", id),
-  getCodexGuardianReport: () => ipcRenderer.invoke("codexGuardian:report"),
-  cleanCodexHotLogs: (options) => ipcRenderer.invoke("codexGuardian:cleanLogs", options),
-  searchCodexHistory: (options) => ipcRenderer.invoke("codexGuardian:searchHistory", options),
-  getCodexThreadContext: (options) => ipcRenderer.invoke("codexGuardian:getThreadContext", options),
-  getCodexProjectHistory: (options) => ipcRenderer.invoke("codexGuardian:getProjectHistory", options),
-  listLongCodexThreads: (options) => ipcRenderer.invoke("codexGuardian:listLongThreads", options),
-  optimizeCodexThread: (options) => ipcRenderer.invoke("codexGuardian:optimizeThread", options),
-  compactCodexThread: (options) => ipcRenderer.invoke("codexGuardian:compactThread", options),
-  autoIngestCodexHistory: (options) => ipcRenderer.invoke("codexGuardian:autoIngestHistory", options),
-  generateCodexArchiveQueue: (options) => ipcRenderer.invoke("codexGuardian:generateArchiveQueue", options),
+  getCodexGuardianReport: () => invokeGuardian("report"),
+  cleanCodexHotLogs: (options) => invokeGuardian("clean_logs", options),
+  searchCodexHistory: (options) => invokeGuardian("search_history", options),
+  getCodexThreadContext: (options) => invokeGuardian("get_thread_context", options),
+  getCodexProjectHistory: (options) => invokeGuardian("get_project_history", options),
+  listLongCodexThreads: (options) => invokeGuardian("list_long_threads", options),
+  optimizeCodexThread: (options) => invokeGuardian("optimize_thread", options),
+  compactCodexThread: (options) => invokeGuardian("compact_thread", options),
+  autoIngestCodexHistory: (options) => invokeGuardian("auto_ingest_history", options),
+  generateCodexArchiveQueue: (options) => invokeGuardian("generate_archive_queue", options),
   getRuntimeMonitorSnapshot: (options) => ipcRenderer.invoke("runtimeMonitor:getSnapshot", options),
   scanToolSkillInventory: (projectPath) => ipcRenderer.invoke("tools:scanInventory", projectPath),
   getToolSkillInventory: (projectPath) => ipcRenderer.invoke("tools:inventory", projectPath),
@@ -41,8 +55,16 @@ const docKnowledgeApi = {
   listSkillCandidates: (projectPath) => ipcRenderer.invoke("memory:skillCandidates", projectPath),
   updateExperienceCardStatus: (id, status, options) => ipcRenderer.invoke("memory:updateExperienceCardStatus", id, status, options),
   updateSkillCandidateStatus: (id, status) => ipcRenderer.invoke("memory:updateSkillCandidateStatus", id, status),
-  retrieveAgentContext: (options) => ipcRenderer.invoke("agent:retrieveContext", options),
-  retrieveMemoryRuntimeContext: (options) => ipcRenderer.invoke("memoryRuntime:retrieveContext", options),
+  retrieveAgentContext: (options) => options?.readOnly === true
+    ? ipcRenderer.invoke("runtimeBoundary:strictReadonlyMemoryQuery", options)
+    : ipcRenderer.invoke("agent:retrieveContext", options),
+  retrieveMemoryRuntimeContext: (options) => options?.readOnly === true
+    ? ipcRenderer.invoke("runtimeBoundary:strictReadonlyMemoryQuery", options)
+    : ipcRenderer.invoke("memoryRuntime:retrieveContext", options),
+  reviewMemoryRuntimeAuthority: (options) => options?.execute === true
+    ? ipcRenderer.invoke("runtimeBoundary:authorityAcceptRefreshReverify", options)
+    : ipcRenderer.invoke("runtimeBoundary:authorityReview", options),
+  acceptMemoryRuntimeAuthority: (options) => ipcRenderer.invoke("runtimeBoundary:authorityAcceptRefreshReverify", options),
   activateMemoryRuntimeGraph: (options) => ipcRenderer.invoke("memoryRuntime:activateMemory", options),
   retrieveMemoryRuntimePrecedent: (options) => ipcRenderer.invoke("memoryRuntime:retrievePrecedent", options),
   recoverMemoryRuntimeThread: (options) => ipcRenderer.invoke("memoryRuntime:recoverThread", options),
@@ -62,6 +84,7 @@ const docKnowledgeApi = {
   listMemoryCoreReviewQueue: (options) => ipcRenderer.invoke("memoryRuntime:listCoreReviewQueue", options),
   getMemoryCoreContinuityStatus: (options) => ipcRenderer.invoke("memoryRuntime:getContinuityStatus", options),
   getProjectContinuity: (options) => ipcRenderer.invoke("memoryRuntime:getProjectContinuity", options),
+  loadProjectReleaseEvidence: (options) => ipcRenderer.invoke("runtimeBoundary:releaseEvidence", options),
   closeWorkingMemory: (options) => ipcRenderer.invoke("memoryRuntime:closeWorkingMemory", options),
   promoteMemory: (candidate) => ipcRenderer.invoke("memoryRuntime:promoteMemory", candidate),
   listRetrieveLogs: (options) => ipcRenderer.invoke("agent:listRetrieveLogs", options),

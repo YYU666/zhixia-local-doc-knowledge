@@ -64,6 +64,7 @@ async function main() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-mcp-"));
   const workspace = path.join(root, "project");
   const userData = path.join(root, "user-data");
+  fs.mkdirSync(userData, { mode: 0o700 });
   fs.mkdirSync(path.join(workspace, ".codex-knowledge"), { recursive: true });
   fs.mkdirSync(path.join(workspace, "docs"), { recursive: true });
   fs.writeFileSync(path.join(workspace, "docs", "PRD.md"), "# MCP bridge acceptance\n", "utf8");
