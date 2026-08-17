@@ -25,17 +25,21 @@ assert.doesNotMatch(main, /ipcMain\.handle\("memoryRuntime:authorityLifecycleRev
 assert.match(preload, /runtimeBoundary:guardianInvoke/, "Guardian public APIs must use the facade route");
 assert.match(preload, /runtimeBoundary:authorityReview/, "authority review must use the facade route");
 assert.match(preload, /runtimeBoundary:authorityAcceptRefreshReverify/, "authority acceptance must use the facade route");
+assert.match(preload, /refreshBinding:[\s\S]*supported: process\.platform === "darwin"[\s\S]*darwin_authenticated_outcome_store/, "preload must expose the Darwin-only authenticated refresh-binding capability");
 assert.match(preload, /runtimeBoundary:strictReadonlyMemoryQuery/, "strict read-only retrieval must use the facade route");
 assert.match(preload, /retrieveAgentContext:[\s\S]*options\?\.readOnly === true[\s\S]*runtimeBoundary:strictReadonlyMemoryQuery/, "ordinary Agent UI reads must enter the strict facade");
 assert.match(preload, /runtimeBoundary:releaseEvidence/, "release evidence read must use the facade route");
 assert.doesNotMatch(main, /ipcMain\.handle\("projectRelease:loadEvidence"/, "release evidence must not bypass the facade");
 assert.match(types, /acceptMemoryRuntimeAuthority/, "renderer types must expose the explicit acceptance operation");
+assert.match(types, /refreshBinding:[\s\S]*darwin_authenticated_outcome_store/, "renderer types must expose the refresh-binding platform capability");
 
 assert.match(app, /initialRendererWorkflow[\s\S]*transitionRendererWorkflow[\s\S]*rendererWorkflowView/, "App must use the shared workflow implementation");
 assert.match(app, /type: "VERIFY_STARTED"[\s\S]*type: "REVIEW_PREPARED"/, "preview must advance verify to review");
 assert.match(app, /type: "ACCEPT_CONFIRMED"[\s\S]*acceptMemoryRuntimeAuthority/, "accept UI must explicitly confirm before calling the mutation route");
 assert.match(app, /type: "ACCEPTED"[\s\S]*type: "REFRESHED"[\s\S]*type: "REVERIFIED"/, "accepted result must advance receipt, checkpoint, and reverify stages");
 assert.match(app, /authorityWorkflowView\.canAccept/, "accept control must be driven by reducer state");
+assert.match(app, /if \(!refreshBindingCapability\.supported \|\| !effectiveProjectPath/, "unsupported platforms must return before the authority mutation workflow starts");
+assert.match(app, /disabled=\{!refreshBindingCapability\.supported \|\| authorityWorkflowView\.busy \|\| !authorityWorkflowView\.canAccept\}/, "unsupported platforms must keep the authority refresh control disabled");
 assert.match(app, /authorityWorkflowView\.ready/, "ready display must be driven by reducer state");
 assert.match(app, /retrieveAgentContext\(\{[\s\S]*readOnly:\s*true/, "ordinary Agent UI retrieval must request strict read-only mode");
 assert.match(app, /data-e2e="agent-retrieval-contract"[\s\S]*strict read-only/, "ordinary Agent UI must disclose the strict read-only contract");

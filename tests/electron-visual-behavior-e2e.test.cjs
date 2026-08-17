@@ -218,7 +218,8 @@ function rendererScript() {
   await waitForText("待复核内容");
   await waitForSelector('[data-e2e="authority-lifecycle-review"]');
   await waitForText("正式来源验收");
-  await waitForText("先只读执行 exact scan 与 verify");
+  const refreshBindingSupported = window.docKnowledge.platformCapabilities.refreshBinding.supported;
+  await waitForText(refreshBindingSupported ? "先只读执行 exact scan 与 verify" : "可只读执行 exact scan 与 verify");
   const authorityPathInput = document.querySelector('[data-e2e="lifecycle-changed-paths"]');
   if (!authorityPathInput) throw new Error("Missing authority changed-path input");
   const inputSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
@@ -229,39 +230,50 @@ function rendererScript() {
     workspace: projectPath,
     acceptedChangedPaths: ["docs/CEO_FLOW_HANDOFF.md"],
   });
-  let tamperedAuthorityRejected = false;
-  try {
-    await window.docKnowledge.acceptMemoryRuntimeAuthority({
-      workspace: projectPath,
-      acceptedChangedPaths: directReview.binding.acceptedChangedPaths,
-      execute: true,
-      userConfirmed: true,
-      decision: "accept",
-      reviewToken: "0".repeat(64),
-      expectedProjectIdentitySha256: directReview.binding.projectIdentitySha256,
-      expectedScanSha256: directReview.binding.scanSha256,
-      previousCheckpointId: directReview.binding.previousCheckpointId,
-      sourceRefs: directReview.files.map((file) => ({ path: file.relativePath, sha256: file.sha256 })),
-      lane: "ordinary-ui-review",
-    });
-  } catch {
-    tamperedAuthorityRejected = true;
-  }
-  if (!tamperedAuthorityRejected) throw new Error("Tampered authority review token was accepted");
   click('[data-e2e="lifecycle-review"]');
-  await waitFor(() => !document.querySelector('[data-e2e="lifecycle-accept"]').disabled, "reviewed authority acceptance", 30000);
-  click('[data-e2e="lifecycle-accept"]');
-  await waitForSelector('[data-e2e="lifecycle-verified-result"]');
-  await waitForText("已重新验证");
-  const verifiedAuthority = document.querySelector('[data-e2e="lifecycle-verified-result"]');
-  const verifiedGeneration = verifiedAuthority.dataset.contextGeneration || "";
-  const verifiedScan = verifiedAuthority.dataset.scanSha256 || "";
-  const verifiedCheckpoint = verifiedAuthority.dataset.checkpointId || "";
-  if (!/^context-[a-f0-9]{24}$/.test(verifiedGeneration)
-      || verifiedScan !== directReview.binding.scanSha256
-      || !/^checkpoint-[A-Za-z0-9-]+$/.test(verifiedCheckpoint)
-      || verifiedCheckpoint === directReview.binding.previousCheckpointId) {
-    throw new Error("Authority result did not expose an advanced exact generation, scan, and checkpoint: " + JSON.stringify({ verifiedGeneration, verifiedScan, verifiedCheckpoint, review: directReview.binding }));
+  if (refreshBindingSupported) {
+    let tamperedAuthorityRejected = false;
+    try {
+      await window.docKnowledge.acceptMemoryRuntimeAuthority({
+        workspace: projectPath,
+        acceptedChangedPaths: directReview.binding.acceptedChangedPaths,
+        execute: true,
+        userConfirmed: true,
+        decision: "accept",
+        reviewToken: "0".repeat(64),
+        expectedProjectIdentitySha256: directReview.binding.projectIdentitySha256,
+        expectedScanSha256: directReview.binding.scanSha256,
+        previousCheckpointId: directReview.binding.previousCheckpointId,
+        sourceRefs: directReview.files.map((file) => ({ path: file.relativePath, sha256: file.sha256 })),
+        lane: "ordinary-ui-review",
+      });
+    } catch {
+      tamperedAuthorityRejected = true;
+    }
+    if (!tamperedAuthorityRejected) throw new Error("Tampered authority review token was accepted");
+    await waitFor(() => !document.querySelector('[data-e2e="lifecycle-accept"]').disabled, "reviewed authority acceptance", 30000);
+    click('[data-e2e="lifecycle-accept"]');
+    await waitForSelector('[data-e2e="lifecycle-verified-result"]');
+    await waitForText("已重新验证");
+    const verifiedAuthority = document.querySelector('[data-e2e="lifecycle-verified-result"]');
+    const verifiedGeneration = verifiedAuthority.dataset.contextGeneration || "";
+    const verifiedScan = verifiedAuthority.dataset.scanSha256 || "";
+    const verifiedCheckpoint = verifiedAuthority.dataset.checkpointId || "";
+    if (!/^context-[a-f0-9]{24}$/.test(verifiedGeneration)
+        || verifiedScan !== directReview.binding.scanSha256
+        || !/^checkpoint-[A-Za-z0-9-]+$/.test(verifiedCheckpoint)
+        || verifiedCheckpoint === directReview.binding.previousCheckpointId) {
+      throw new Error("Authority result did not expose an advanced exact generation, scan, and checkpoint: " + JSON.stringify({ verifiedGeneration, verifiedScan, verifiedCheckpoint, review: directReview.binding }));
+    }
+  } else {
+    await waitForSelector('[data-e2e="binding-refresh-unavailable"]');
+    const unavailableText = document.querySelector('[data-e2e="binding-refresh-unavailable"]').innerText;
+    if (!unavailableText.includes("仅支持 macOS") || !unavailableText.includes("不签发回执")) {
+      throw new Error("Authority refresh platform boundary was not disclosed: " + unavailableText);
+    }
+    await waitFor(() => document.querySelector('[data-e2e="lifecycle-review"]') && !document.querySelector('[data-e2e="lifecycle-review"]').disabled, "completed read-only authority review", 30000);
+    if (!document.querySelector('[data-e2e="lifecycle-accept"]').disabled) throw new Error("Authority refresh remained enabled on an unsupported platform");
+    if (document.querySelector('[data-e2e="lifecycle-verified-result"]')) throw new Error("Unsupported platform exposed a refreshed authority result");
   }
   await waitForText("为什么会想起这些内容");
   await waitForText("已有经验记忆");

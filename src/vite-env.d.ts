@@ -2116,6 +2116,11 @@ declare global {
           adapter: "windows_powershell" | "unavailable";
           reason: string | null;
         };
+        refreshBinding: {
+          supported: boolean;
+          adapter: "darwin_authenticated_outcome_store" | "unavailable";
+          reason: string | null;
+        };
       };
       getPlatformGuardianCapability: () => Promise<{ supported: boolean; adapter: "windows_powershell" | "unavailable"; reason: string | null }>;
       listDocuments: (options?: { includeContentText?: boolean; contentTextLimit?: number }) => Promise<{

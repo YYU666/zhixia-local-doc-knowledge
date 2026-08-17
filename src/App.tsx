@@ -1572,6 +1572,7 @@ function App() {
   const [authorityReviewPacket, setAuthorityReviewPacket] = useState<AuthorityReviewPacket | null>(null);
   const [authorityWorkflow, setAuthorityWorkflow] = useState(initialRendererWorkflow);
   const authorityWorkflowView = rendererWorkflowView(authorityWorkflow);
+  const refreshBindingCapability = window.docKnowledge.platformCapabilities.refreshBinding;
   const projectMemoryCoreStartedRef = useRef(new Set<string>());
   const projectMemoryRecallStartedRef = useRef(new Set<string>());
   const projectMemoryGraphStartedRef = useRef(new Set<string>());
@@ -2536,9 +2537,8 @@ function App() {
       }));
     }
   }
-
   async function acceptAuthorityLifecycle() {
-    if (!effectiveProjectPath || !authorityReviewPacket?.reviewToken || !authorityReviewPacket.files) return;
+    if (!refreshBindingCapability.supported || !effectiveProjectPath || !authorityReviewPacket?.reviewToken || !authorityReviewPacket.files) return;
     setAuthorityWorkflow((current) => transitionRendererWorkflow(current, {
       type: "ACCEPT_CONFIRMED",
       userConfirmed: true,
@@ -5897,12 +5897,11 @@ function App() {
             ))}
           </div>
         </section>
-
         <section className="memory-core-section" aria-label="正式来源验收" data-e2e="authority-lifecycle-review">
           <div className="memory-core-section-heading">
             <div>
               <h4>正式来源验收</h4>
-              <p>本地精选不会改变项目 authority。这里先只读执行 exact scan 与 verify；核对文件 SHA 后，才通过同一 Runtime 生成一次性回执、刷新绑定并重新验证。</p>
+              <p>{refreshBindingCapability.supported ? "本地精选不会改变项目 authority。这里先只读执行 exact scan 与 verify；核对文件 SHA 后，才通过同一 Runtime 生成一次性回执、刷新绑定并重新验证。" : "本地精选不会改变项目权威状态。此设备可只读执行 exact scan 与 verify，但不执行来源接受、绑定刷新或检查点推进。"}</p>
             </div>
             {renderTonePill(
               authorityWorkflowView.ready ? "已重新验证" : authorityWorkflowView.canReview ? "待确认" : authorityWorkflowView.busy ? "处理中" : authorityWorkflow.stage === "failed" ? "核验失败" : "未预览",
@@ -5923,10 +5922,11 @@ function App() {
             <button data-e2e="lifecycle-review" className="ghost-button" onClick={previewAuthorityLifecycle} disabled={authorityWorkflowView.busy || authorityChangedPaths().length === 0}>
               <RefreshCw size={15} /> 只读核验
             </button>
-            <button data-e2e="lifecycle-accept" className="primary-button" onClick={acceptAuthorityLifecycle} disabled={authorityWorkflowView.busy || !authorityWorkflowView.canAccept}>
+            <button data-e2e="lifecycle-accept" className="primary-button" onClick={acceptAuthorityLifecycle} disabled={!refreshBindingCapability.supported || authorityWorkflowView.busy || !authorityWorkflowView.canAccept}>
               <Database size={15} /> 确认来源并刷新
             </button>
           </div>
+          {!refreshBindingCapability.supported ? <div className="inspector-note" data-e2e="binding-refresh-unavailable">{refreshBindingCapability.reason || "当前平台不支持正式来源验收刷新。"}</div> : null}
           {authorityWorkflow.error ? <div className="inspector-note">核验失败：{authorityWorkflow.error}</div> : null}
           {authorityReviewPacket?.binding ? (
             <div className="memory-core-row-list">

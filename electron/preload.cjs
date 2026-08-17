@@ -6,6 +6,11 @@ const platformCapabilities = Object.freeze({
     adapter: process.platform === "win32" ? "windows_powershell" : "unavailable",
     reason: process.platform === "win32" ? null : "旧线程整理目前仅支持 Windows PowerShell；此设备不会执行扫描、入库、瘦身或归档操作。",
   }),
+  refreshBinding: Object.freeze({
+    supported: process.platform === "darwin",
+    adapter: process.platform === "darwin" ? "darwin_authenticated_outcome_store" : "unavailable",
+    reason: process.platform === "darwin" ? null : "正式来源验收刷新目前仅支持 macOS；此设备只执行只读核验，不签发回执、刷新绑定或推进检查点。",
+  }),
 });
 
 const invokeGuardian = (operation, options) => ipcRenderer
