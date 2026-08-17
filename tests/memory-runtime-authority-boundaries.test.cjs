@@ -200,11 +200,18 @@ function testExactScanContainment(root) {
 
   const raceWorkspace = path.join(root, "race-workspace");
   initializeRepo(raceWorkspace, "TOCTOU Fixture");
-  const racePath = path.join(fs.realpathSync(raceWorkspace), "docs", "CURRENT_CHECKPOINT.md");
+  const canonicalRaceWorkspace = fs.realpathSync.native
+    ? fs.realpathSync.native(raceWorkspace)
+    : fs.realpathSync(raceWorkspace);
+  const racePath = path.join(canonicalRaceWorkspace, "docs", "CURRENT_CHECKPOINT.md");
   const originalOpenSync = fs.openSync;
   let raceInjected = false;
   fs.openSync = function instrumentedOpenSync(filePath, ...args) {
-    if (!raceInjected && path.resolve(String(filePath)) === racePath) {
+    const openedPath = path.resolve(String(filePath));
+    const matchesRacePath = process.platform === "win32"
+      ? openedPath.toLowerCase() === racePath.toLowerCase()
+      : openedPath === racePath;
+    if (!raceInjected && matchesRacePath) {
       raceInjected = true;
       fs.unlinkSync(racePath);
       fs.symlinkSync(externalFile, racePath);
