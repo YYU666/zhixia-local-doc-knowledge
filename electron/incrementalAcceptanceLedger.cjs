@@ -226,13 +226,17 @@ function pathHeads(entries) {
   return heads;
 }
 
-function publishEntry(root, entry) {
+function publishEntry(root, entry, platform = process.platform) {
   const finalPath = path.join(root, `${entry.entryId}.json`);
   const bytes = Buffer.from(`${JSON.stringify(entry)}\n`, "utf8");
   if (bytes.length > MAX_ENTRY_BYTES) throw new Error("incremental_acceptance_entry_too_large");
   if (fs.existsSync(finalPath)) {
     if (!readRegularFileNoFollow(finalPath, MAX_ENTRY_BYTES).equals(bytes)) throw new Error("incremental_acceptance_entry_conflict");
-    return "noop";
+    return {
+      action: "noop",
+      fileSync: "existing_entry_verified",
+      directorySync: { status: "not_applicable", reason: "existing_entry_verified" },
+    };
   }
   const temporary = path.join(root, `.${entry.entryId}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`);
   let fd;
@@ -243,9 +247,15 @@ function publishEntry(root, entry) {
     fs.closeSync(fd); fd = undefined;
     fs.linkSync(temporary, finalPath);
     fs.unlinkSync(temporary);
-    const dirFd = fs.openSync(root, fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY || 0));
-    try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
-    return "insert";
+    let directorySync;
+    if (platform === "win32") {
+      directorySync = { status: "deferred_unverified", reason: "windows_directory_fsync_unavailable" };
+    } else {
+      const dirFd = fs.openSync(root, fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY || 0));
+      try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
+      directorySync = { status: "verified", reason: null };
+    }
+    return { action: "insert", fileSync: "verified", directorySync };
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
     if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
@@ -321,12 +331,13 @@ function stageAcceptedSlice(request = {}, options = {}) {
     };
     const entryId = `entry-${sha256(stable(core))}`;
     const entry = { schemaVersion: ENTRY_SCHEMA, projectId: projectIdentity.projectId, entryId, core, paths, proof: entryProof(options.signingKey, core) };
-    const action = publishEntry(root, entry);
+    const publication = publishEntry(root, entry, options.platform);
     return {
       schemaVersion: LEDGER_SCHEMA,
       operation: "stage_accepted_slice",
       status: "staged",
-      action,
+      action: publication.action,
+      persistence: { fileSync: publication.fileSync, directorySync: publication.directorySync },
       workspace,
       projectIdentity,
       entryId,

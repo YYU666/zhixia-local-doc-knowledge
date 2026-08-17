@@ -89,6 +89,15 @@ function main() {
   });
   assert.equal(first.status, "staged");
   assert.equal(first.action, "insert");
+  assert.deepEqual(
+    first.persistence,
+    {
+      fileSync: "verified",
+      directorySync: process.platform === "win32"
+        ? { status: "deferred_unverified", reason: "windows_directory_fsync_unavailable" }
+        : { status: "verified", reason: null },
+    },
+  );
   assert.equal(first.authorityGranted, false);
   assert.equal(first.writeAuthority, false);
   assert.deepEqual(fs.readdirSync(workspace), workspaceBefore, "staging must not modify the canonical workspace");
