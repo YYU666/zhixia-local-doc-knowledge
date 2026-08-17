@@ -202,8 +202,17 @@ function readPackage(root) {
   return JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 }
 
-function npmExecutable(platform = process.platform) {
-  return platform === "win32" ? "npm.cmd" : "npm";
+function npmVersionInvocation(options = {}) {
+  const platform = options.platform || process.platform;
+  const env = options.env || process.env;
+  const npmExecPath = String(env.npm_execpath || "");
+  if (npmExecPath && path.isAbsolute(npmExecPath)) {
+    return { command: process.execPath, args: [npmExecPath, "--version"] };
+  }
+  if (platform === "win32") {
+    return { command: env.ComSpec || "cmd.exe", args: ["/d", "/s", "/c", "npm --version"] };
+  }
+  return { command: "npm", args: ["--version"] };
 }
 
 function readToolchain(root) {
@@ -211,9 +220,10 @@ function readToolchain(root) {
     const packagePath = path.join(root, relativePath, "package.json");
     return fs.existsSync(packagePath) ? JSON.parse(fs.readFileSync(packagePath, "utf8")).version || null : null;
   };
+  const npmInvocation = npmVersionInvocation();
   return {
     node: process.version,
-    npm: childProcess.execFileSync(npmExecutable(), ["--version"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(),
+    npm: childProcess.execFileSync(npmInvocation.command, npmInvocation.args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim(),
     platform: process.platform,
     arch: process.arch,
     electron: version("node_modules/electron"),
@@ -416,7 +426,7 @@ module.exports = {
   buildCandidateManifest,
   buildCandidatePayload,
   candidateId,
-  npmExecutable,
+  npmVersionInvocation,
   parsePorcelainV1Z,
   readDirtyPostimage,
   verifyCandidateManifest,

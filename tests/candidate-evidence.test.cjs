@@ -6,7 +6,7 @@ const path = require("node:path");
 
 const {
   buildCandidateManifest,
-  npmExecutable,
+  npmVersionInvocation,
   verifyCandidateManifest,
   writeCandidateManifest,
 } = require("../scripts/candidate-evidence.cjs");
@@ -70,8 +70,18 @@ function assertPostimageMismatch(root, manifestPath, mutate, message) {
   );
 }
 
-assert.equal(npmExecutable("win32"), "npm.cmd");
-assert.equal(npmExecutable("darwin"), "npm");
+assert.deepEqual(
+  npmVersionInvocation({ platform: "win32", env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" } }),
+  { command: "C:\\Windows\\System32\\cmd.exe", args: ["/d", "/s", "/c", "npm --version"] },
+);
+assert.deepEqual(
+  npmVersionInvocation({ platform: "darwin", env: {} }),
+  { command: "npm", args: ["--version"] },
+);
+assert.deepEqual(
+  npmVersionInvocation({ platform: "win32", env: { npm_execpath: path.resolve("npm-cli.js") } }),
+  { command: process.execPath, args: [path.resolve("npm-cli.js"), "--version"] },
+);
 
 (() => {
   const root = fixture();
