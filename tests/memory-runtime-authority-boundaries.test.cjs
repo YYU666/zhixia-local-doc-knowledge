@@ -309,6 +309,12 @@ async function testAcceptedEvidenceReceipt(root) {
   );
 
   const receipt = issueReceipt(workspace, storeRoot, scan, previousCheckpointId, [changedPath]);
+  assert.deepEqual(receipt.persistence, {
+    fileSync: "verified",
+    directorySync: process.platform === "win32"
+      ? { status: "deferred_unverified", reason: "windows_directory_fsync_unavailable" }
+      : { status: "verified", reason: null },
+  });
   assert.match(receipt.receiptId, /^accepted-evidence-[a-f0-9]{32}$/);
   assert.equal(Object.hasOwn(receipt, "proof"), false, "receipt proof must remain app-owned");
   assert.equal(Object.hasOwn(receipt, "nonce"), false, "receipt nonce must remain app-owned");

@@ -527,7 +527,7 @@ function readAcceptedEvidenceReceiptStore(storeRoot, projectId) {
   return { storePath, data };
 }
 
-function writeAcceptedEvidenceReceiptStoreUnlocked(storePath, data) {
+function writeAcceptedEvidenceReceiptStoreUnlocked(storePath, data, options = {}) {
   const dir = path.dirname(storePath);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const dirStats = fs.lstatSync(dir);
@@ -539,14 +539,21 @@ function writeAcceptedEvidenceReceiptStoreUnlocked(storePath, data) {
     const temporaryFd = fs.openSync(temporaryPath, "r");
     try { fs.fsyncSync(temporaryFd); } finally { fs.closeSync(temporaryFd); }
     fs.renameSync(temporaryPath, storePath);
-    const dirFd = fs.openSync(dir, "r");
-    try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
+    let directorySync;
+    if ((options.platform || process.platform) === "win32") {
+      directorySync = { status: "deferred_unverified", reason: "windows_directory_fsync_unavailable" };
+    } else {
+      const dirFd = fs.openSync(dir, "r");
+      try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
+      directorySync = { status: "verified", reason: null };
+    }
+    return { fileSync: "verified", directorySync };
   } finally {
     if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
   }
 }
 
-function mutateAcceptedEvidenceReceiptStore(storeRoot, projectId, mutate) {
+function mutateAcceptedEvidenceReceiptStore(storeRoot, projectId, mutate, options = {}) {
   const storePath = acceptedEvidenceReceiptStorePath(storeRoot, projectId);
   fs.mkdirSync(path.dirname(storePath), { recursive: true, mode: 0o700 });
   const lockPath = `${storePath}.lock`;
@@ -555,8 +562,8 @@ function mutateAcceptedEvidenceReceiptStore(storeRoot, projectId, mutate) {
     lockFd = fs.openSync(lockPath, "wx", 0o600);
     const { data } = readAcceptedEvidenceReceiptStore(storeRoot, projectId);
     const result = mutate(data);
-    writeAcceptedEvidenceReceiptStoreUnlocked(storePath, data);
-    return result;
+    const persistence = writeAcceptedEvidenceReceiptStoreUnlocked(storePath, data, options);
+    return { value: result, persistence };
   } catch (error) {
     if (error?.code === "EEXIST") throw new Error("accepted_evidence_receipt_store_busy");
     throw error;
@@ -622,13 +629,13 @@ function issueAcceptedEvidenceReceiptFromApp(request = {}, options = {}) {
   );
   const proof = acceptedEvidenceReceiptProof(signingKey, binding);
   const receiptId = `accepted-evidence-${sha256(`${proof}:${binding.nonce}`).slice(0, 32)}`;
-  mutateAcceptedEvidenceReceiptStore(storeRoot, scan.projectIdentity.projectId, (data) => {
+  const mutation = mutateAcceptedEvidenceReceiptStore(storeRoot, scan.projectIdentity.projectId, (data) => {
     if (data.receipts.some((receipt) => receipt.receiptId === receiptId)) throw new Error("accepted_evidence_receipt_conflict");
     const active = data.receipts.filter((receipt) => receipt.status === "issued" && Date.parse(receipt.binding?.expiresAt || "") > issuedMs);
     if (active.length >= MAX_ACCEPTED_EVIDENCE_RECEIPTS_PER_PROJECT) throw new Error("accepted_evidence_receipt_store_capacity_reached");
     const historical = data.receipts.filter((receipt) => !active.includes(receipt)).slice(-Math.max(0, MAX_ACCEPTED_EVIDENCE_RECEIPTS_PER_PROJECT - active.length - 1));
     data.receipts = [...historical, ...active, { receiptId, binding, proof, status: "issued", consumedAt: null, consumedBy: null }];
-  });
+  }, options);
   return assertPacketBytes({
     schemaVersion: CLI_SCHEMA,
     operation: "issue_accepted_evidence_receipt",
@@ -646,6 +653,7 @@ function issueAcceptedEvidenceReceiptFromApp(request = {}, options = {}) {
     issuedAt,
     expiresAt,
     oneTimeUse: true,
+    persistence: mutation.persistence,
     safety: { proofExposed: false, nonceExposed: false, signingKeyExposed: false, rawSessionBodyRead: false },
   }, MAX_RESUME_PACKET_BYTES, "accepted_evidence_receipt");
 }
@@ -656,7 +664,7 @@ function consumeAcceptedEvidenceReceipt(storeRoot, scan, request, previousCheckp
   const signingKey = loadExistingSigningKey(storeRoot);
   if (!signingKey) throw new Error("accepted_evidence_receipt_authority_unavailable");
   const nowMs = trustedAuthorityNowMs(options);
-  return mutateAcceptedEvidenceReceiptStore(storeRoot, scan.projectIdentity.projectId, (data) => {
+  const mutation = mutateAcceptedEvidenceReceiptStore(storeRoot, scan.projectIdentity.projectId, (data) => {
     const receipt = data.receipts.find((candidate) => candidate.receiptId === receiptId);
     if (!receipt) throw new Error("accepted_evidence_receipt_not_found");
     if (receipt.status === "consumed") throw new Error("accepted_evidence_receipt_already_consumed");
@@ -687,7 +695,8 @@ function consumeAcceptedEvidenceReceipt(storeRoot, scan, request, previousCheckp
       issuedAt: binding.issuedAt,
       expiresAt: binding.expiresAt,
     };
-  });
+  }, options);
+  return { ...mutation.value, persistence: mutation.persistence };
 }
 
 function consumeAcceptedEvidenceReceiptForTest(request = {}, options = {}) {
