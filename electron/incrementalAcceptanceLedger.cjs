@@ -20,6 +20,10 @@ const RAW_SESSION_RE = /(?:\.codex[\\/](?:archived_)?sessions[\\/]|session[_ -]?
 const SECRET_RE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+/=-]{12,}|\bsk-[A-Za-z0-9_-]{12,}|\b(?:ghp|gho|github_pat)_[A-Za-z0-9_]{12,}|\bAKIA[0-9A-Z]{16}\b/i;
 const BASE64_RE = /(?:data:[^;]+;base64,|[A-Za-z0-9+/]{240,}={0,2})/;
 
+function canonicalRealPath(value) {
+  return fs.realpathSync.native ? fs.realpathSync.native(value) : fs.realpathSync(value);
+}
+
 function stable(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
@@ -106,7 +110,7 @@ function readRegularFileNoFollow(filePath, maxBytes) {
 }
 
 function inspectCandidatePath(candidateRoot, relativePath) {
-  const canonicalRoot = fs.realpathSync(candidateRoot);
+  const canonicalRoot = canonicalRealPath(candidateRoot);
   const rootStats = fs.lstatSync(canonicalRoot);
   if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) throw new Error("incremental_acceptance_candidate_invalid");
   let current = canonicalRoot;
@@ -115,7 +119,7 @@ function inspectCandidatePath(candidateRoot, relativePath) {
     containedRelative(canonicalRoot, current);
     const stats = fs.lstatSync(current);
     if (stats.isSymbolicLink()) throw new Error("incremental_acceptance_candidate_symlink_rejected");
-    const real = fs.realpathSync(current);
+    const real = canonicalRealPath(current);
     if (real !== current || stats.dev !== rootStats.dev) throw new Error("incremental_acceptance_candidate_escape");
   }
   return current;
@@ -145,7 +149,7 @@ function validateReceiptBytes(bytes, expectedReceiptSha256) {
     receiptSchema: compact(receipt.schema || "external.acceptance_receipt", 120),
     taskId: compact(receipt.task, 180),
     acceptedAt: new Date(acceptedAtMs).toISOString(),
-    candidateRoot: fs.realpathSync(candidateValue),
+    candidateRoot: canonicalRealPath(candidateValue),
     changedPaths: normalizeChangedPaths(receipt.changedPaths),
   };
 }
@@ -169,7 +173,7 @@ function ensureLedgerRoot(storeRoot, projectId) {
   const root = path.resolve(storeRoot);
   if (!fs.existsSync(root)) throw new Error("incremental_acceptance_store_unavailable");
   const rootStats = fs.lstatSync(root);
-  if (!rootStats.isDirectory() || rootStats.isSymbolicLink() || fs.realpathSync(root) !== root) {
+  if (!rootStats.isDirectory() || rootStats.isSymbolicLink() || canonicalRealPath(root) !== root) {
     throw new Error("incremental_acceptance_store_unsafe");
   }
   let current = root;
@@ -177,7 +181,7 @@ function ensureLedgerRoot(storeRoot, projectId) {
     current = path.join(current, segment);
     try { fs.mkdirSync(current, { mode: 0o700 }); } catch (error) { if (error?.code !== "EEXIST") throw error; }
     const stats = fs.lstatSync(current);
-    if (!stats.isDirectory() || stats.isSymbolicLink() || fs.realpathSync(current) !== current) {
+    if (!stats.isDirectory() || stats.isSymbolicLink() || canonicalRealPath(current) !== current) {
       throw new Error("incremental_acceptance_store_unsafe");
     }
   }
@@ -193,7 +197,7 @@ function readEntries(storeRoot, projectId, signingKey) {
   const root = ledgerRoot(storeRoot, projectId);
   if (!fs.existsSync(root)) return [];
   const rootStats = fs.lstatSync(root);
-  if (!rootStats.isDirectory() || rootStats.isSymbolicLink() || fs.realpathSync(root) !== root) {
+  if (!rootStats.isDirectory() || rootStats.isSymbolicLink() || canonicalRealPath(root) !== root) {
     throw new Error("incremental_acceptance_store_unsafe");
   }
   const names = fs.readdirSync(root).filter((name) => /^entry-[a-f0-9]{64}\.json$/.test(name)).sort();
@@ -250,7 +254,7 @@ function publishEntry(root, entry) {
 
 function stageAcceptedSlice(request = {}, options = {}) {
   if (request.execute !== true) throw new Error("incremental_acceptance_execute_true_required");
-  const workspace = fs.realpathSync(path.resolve(request.workspace || ""));
+  const workspace = canonicalRealPath(path.resolve(request.workspace || ""));
   const projectIdentity = options.projectIdentity;
   if (!projectIdentity?.projectId || projectIdentity.canonicalRoot !== workspace
       || request.expectedProjectIdentitySha256 !== projectIdentity.projectIdentitySha256) {
@@ -258,7 +262,7 @@ function stageAcceptedSlice(request = {}, options = {}) {
   }
   const receiptPath = path.resolve(compact(request.receiptPath, 1200));
   if (path.basename(receiptPath) !== "acceptance-receipt.json") throw new Error("incremental_acceptance_receipt_name_invalid");
-  if (fs.realpathSync(receiptPath) !== receiptPath) throw new Error("incremental_acceptance_receipt_path_alias_rejected");
+  if (canonicalRealPath(receiptPath) !== receiptPath) throw new Error("incremental_acceptance_receipt_path_alias_rejected");
   const receipt = validateReceiptBytes(readRegularFileNoFollow(receiptPath, MAX_RECEIPT_BYTES), request.expectedReceiptSha256);
   validateCandidatePostimages(receipt);
   const root = ensureLedgerRoot(options.storeRoot, projectIdentity.projectId);
@@ -345,7 +349,7 @@ function stageAcceptedSlice(request = {}, options = {}) {
 }
 
 function reconcileAcceptedSlices(request = {}, options = {}) {
-  const workspace = fs.realpathSync(path.resolve(request.workspace || ""));
+  const workspace = canonicalRealPath(path.resolve(request.workspace || ""));
   const projectIdentity = options.projectIdentity;
   const scan = options.scan;
   if (!projectIdentity?.projectId || projectIdentity.canonicalRoot !== workspace || scan?.workspace !== workspace) {

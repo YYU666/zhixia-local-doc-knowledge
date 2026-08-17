@@ -331,7 +331,9 @@ function resolvePortfolioWorkspaces(values) {
   if (values.some((value) => typeof value !== "string" || !value.trim())) {
     throw new Error("zhixia_control_portfolio_workspace_string_required");
   }
-  const resolved = values.map((value) => fs.realpathSync(resolveWorkspace(value)));
+  const resolved = values.map((value) => fs.realpathSync.native
+    ? fs.realpathSync.native(resolveWorkspace(value))
+    : fs.realpathSync(resolveWorkspace(value)));
   if (new Set(resolved).size !== resolved.length) throw new Error("zhixia_control_portfolio_workspace_duplicate");
   return resolved;
 }

@@ -116,7 +116,8 @@ function snapshotFileContents(root) {
 }
 
 async function main() {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-codex-control-")));
+  const realPath = (value) => fs.realpathSync.native ? fs.realpathSync.native(value) : fs.realpathSync(value);
+  const root = realPath(fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-codex-control-")));
   const workspace = path.join(root, "workspace");
   const secondReadyWorkspace = path.join(root, "second-ready-workspace");
   const staleWorkspace = path.join(root, "stale-workspace");
@@ -330,13 +331,13 @@ async function main() {
     assert.equal(portfolioOutput.projectCount, 2);
     assert.equal(portfolioOutput.readyProjectCount, 1, JSON.stringify(portfolioOutput));
     assert.equal(portfolioOutput.staleProjectCount, 1);
-    assert.equal(portfolioOutput.projects[0].workspace, fs.realpathSync(staleWorkspace));
+    assert.equal(portfolioOutput.projects[0].workspace, realPath(staleWorkspace));
     assert.equal(portfolioOutput.projects[0].status, "stale");
     assert.equal(portfolioOutput.projects[0].current, false);
     assert.equal(portfolioOutput.projects[0].contextGenerationId, null);
     assert.equal(portfolioOutput.projects[0].returnedCount, 0);
     assert.equal(portfolioOutput.projects[0].items.length, 0);
-    assert.equal(portfolioOutput.projects[1].workspace, fs.realpathSync(workspace));
+    assert.equal(portfolioOutput.projects[1].workspace, realPath(workspace));
     assert.equal(portfolioOutput.projects[1].status, "ready");
     assert.equal(portfolioOutput.projects[1].current, true);
     assert.ok(portfolioOutput.projects[1].returnedCount > 0);

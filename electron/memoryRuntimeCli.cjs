@@ -90,6 +90,10 @@ const SKIP_DIRECTORY_NAMES = new Set([
 const RAW_SESSION_RE = /(?:\.codex[\\/](?:archived_)?sessions[\\/]|session[_ -]?jsonl|rollout-[^\s]+\.jsonl|raw[_ -]?session[_ -]?(?:body|payload)\s*[:=])/i;
 const SECRET_RE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+/=-]{12,}|\bsk-[A-Za-z0-9_-]{12,}|\b(?:ghp|gho|github_pat)_[A-Za-z0-9_]{12,}|\bAKIA[0-9A-Z]{16}\b/i;
 const BASE64_RE = /(?:data:[^;]+;base64,|[A-Za-z0-9+/]{240,}={0,2})/;
+
+function canonicalRealPath(value) {
+  return fs.realpathSync.native ? fs.realpathSync.native(value) : fs.realpathSync(value);
+}
 const TASK_CARD_PATH_RE = /(?:^|[\/_-])TASK[_-]?CARDS?(?:[\/_.-]|$)/i;
 const SENSITIVE_WORKTREE_PATH_RE = /(?:^|\/)(?:\.env(?:$|[._-])|[^/]*(?:credential|keychain|private[_-]?key|secret|access[_-]?token|auth[_-]?token)[^/]*)/i;
 
@@ -201,7 +205,7 @@ function readRequest(argv = process.argv.slice(2)) {
 
 function resolveWorkspace(request = {}) {
   if (!request.workspace) throw new Error("exact_workspace_required");
-  const workspace = fs.realpathSync(path.resolve(request.workspace));
+  const workspace = canonicalRealPath(path.resolve(request.workspace));
   if (!fs.statSync(workspace).isDirectory()) throw new Error("exact_workspace_directory_required");
   const projectIdentity = deriveProjectIdentityEnvelope(workspace, { expected: request.projectIdentity });
   return { workspace, projectIdentity };
@@ -2643,7 +2647,7 @@ function resolveKnowledgeOutputRoot(workspace) {
   if (!fs.existsSync(knowledgeRoot)) fs.mkdirSync(knowledgeRoot, { recursive: false });
   const stat = fs.lstatSync(knowledgeRoot);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("knowledge_output_directory_must_be_real_directory");
-  const resolved = fs.realpathSync(knowledgeRoot);
+  const resolved = canonicalRealPath(knowledgeRoot);
   const relative = path.relative(workspace, resolved);
   if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error("knowledge_output_cross_project_rejected");
   return resolved;
