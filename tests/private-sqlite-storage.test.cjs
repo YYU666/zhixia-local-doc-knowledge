@@ -41,6 +41,22 @@ function restoreSwap(linkPath, parkedPath) {
 function main() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-private-sqlite-"));
   try {
+    if (process.platform === "win32") {
+      const databasePath = path.join(root, "windows-boundary", "memory-runtime-index.sqlite");
+      const prepared = preparePrivateSqliteStorage(databasePath, { platform: "win32", trustedRoot: root });
+      assert.deepEqual(prepared.acl, WINDOWS_ACL_BOUNDARY);
+      assert.equal(prepared.acl.status, "deferred_unverified", "Windows must not claim native ACL evidence");
+      assert.equal(prepared.directoryMode, null, "Windows must not report POSIX directory-mode enforcement");
+      assert.equal(prepared.fileMode, null, "Windows must not report POSIX file-mode enforcement");
+      assert.equal(fs.existsSync(databasePath), true, "the guarded Windows storage path must still be prepared");
+      assert.deepEqual(
+        repairPrivateSqliteFiles(databasePath, { platform: "win32", trustedRoot: root }).acl,
+        WINDOWS_ACL_BOUNDARY,
+      );
+      console.log("Private SQLite Windows ACL boundary tests passed.");
+      return;
+    }
+
     const storeRoot = path.join(root, "memory-runtime");
     fs.mkdirSync(storeRoot, { mode: 0o777 });
     fs.chmodSync(storeRoot, 0o777);
