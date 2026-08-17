@@ -11202,7 +11202,8 @@ async function runE2EGovernanceProbe(options = {}) {
       ndcgAtK: 0.6,
       missingAnchorRate: 0,
       staleHitRate: 0.3,
-      p95LatencyMs: 500,
+      averageLatencyMs: 1000,
+      p95LatencyMs: 1000,
       p95TokenEstimate: 1800,
     },
   });
