@@ -63,7 +63,8 @@ function reconcile(workspace, identity, storeRoot, signingKey, requiredChangedPa
 }
 
 function main() {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-incremental-acceptance-")));
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "zhixia-incremental-acceptance-"));
+  const root = fs.realpathSync.native ? fs.realpathSync.native(temporaryRoot) : fs.realpathSync(temporaryRoot);
   const workspace = path.join(root, "workspace");
   const storeRoot = path.join(root, "store");
   const firstCandidate = path.join(root, "slice-001", "candidate");
