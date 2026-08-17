@@ -98,6 +98,7 @@ function createSqlJsDurableStore(options = {}) {
     getDatabase,
     setDatabase,
     fsOps = fs,
+    platform = process.platform,
     ownerOnlyMode = OWNER_ONLY_FILE_MODE,
     beforeStage = async () => {},
     idFactory = () => `${process.pid}.${Date.now()}.${crypto.randomUUID()}`,
@@ -311,9 +312,14 @@ function createSqlJsDurableStore(options = {}) {
     let directory = null;
     try {
       await beforeStage(`${stagePrefix}parent_dir_open`);
+      if (platform === "win32") {
+        await beforeStage(`${stagePrefix}parent_dir_fsync`);
+        return { status: "deferred_unverified", reason: "windows_directory_fsync_unavailable" };
+      }
       directory = await fsOps.open(path.dirname(filePath), "r");
       await beforeStage(`${stagePrefix}parent_dir_fsync`);
       await directory.sync();
+      return { status: "verified", reason: null };
     } finally {
       await closeQuietly(directory);
     }
@@ -447,7 +453,7 @@ function createSqlJsDurableStore(options = {}) {
       } catch (error) {
         targetState = await readTargetState(fsOps, filePath, candidateHash, durableSnapshotHash, targetExisted);
         if (targetState.state !== "candidate") throw Object.assign(error, { zhixiaTargetState: targetState });
-        await syncParentDirectory("confirm_");
+        const directorySync = await syncParentDirectory("confirm_");
         durableSnapshot = Buffer.from(candidate);
         durableSnapshotHash = candidateHash;
         state = "writable";
@@ -455,11 +461,12 @@ function createSqlJsDurableStore(options = {}) {
           durable: true,
           bytes: candidate.length,
           ownerOnlyMode,
+          directorySync,
           sha256: candidateHash,
           renameOutcome: "candidate_confirmed_after_ambiguous_error",
         };
       }
-      await syncParentDirectory();
+      const directorySync = await syncParentDirectory();
       durableSnapshot = Buffer.from(candidate);
       durableSnapshotHash = candidateHash;
       state = "writable";
@@ -467,6 +474,7 @@ function createSqlJsDurableStore(options = {}) {
         durable: true,
         bytes: candidate.length,
         ownerOnlyMode,
+        directorySync,
         sha256: candidateHash,
         renameOutcome: "rename_confirmed",
       };

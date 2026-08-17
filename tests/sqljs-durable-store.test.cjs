@@ -176,9 +176,45 @@ function injectedFailure(stageToFail) {
     successDb.run("INSERT INTO durable_items VALUES ('committed')");
     const receipt = await successStore.persist();
     assert.equal(receipt.durable, true);
+    assert.deepEqual(
+      receipt.directorySync,
+      process.platform === "win32"
+        ? { status: "deferred_unverified", reason: "windows_directory_fsync_unavailable" }
+        : { status: "verified", reason: null },
+      "the receipt must report the platform's actual parent-directory durability evidence",
+    );
     await assertOwnerOnlyMode(successPath, "database replacement must be owner-only");
     assert.deepEqual(await readRows(Runtime, successPath), ["committed"]);
     successDb.close();
+
+    const windowsBoundaryRoot = path.join(root, "windows-directory-sync-boundary");
+    const windowsBoundaryPath = path.join(windowsBoundaryRoot, "knowledge-store.sqlite");
+    await fs.mkdir(windowsBoundaryRoot, { recursive: true, mode: 0o700 });
+    let windowsBoundaryDb = new Runtime.Database();
+    windowsBoundaryDb.run("CREATE TABLE durable_items (value TEXT PRIMARY KEY)");
+    windowsBoundaryDb.run("INSERT INTO durable_items VALUES ('committed')");
+    const windowsBoundaryStore = createSqlJsDurableStore({
+      Runtime,
+      filePath: windowsBoundaryPath,
+      getDatabase: () => windowsBoundaryDb,
+      setDatabase: (next) => { windowsBoundaryDb = next; },
+      platform: "win32",
+      fsOps: {
+        ...fs,
+        open: async (target, ...args) => {
+          if (target === windowsBoundaryRoot) throw new Error("Windows must not open a directory for fsync");
+          return fs.open(target, ...args);
+        },
+      },
+      idFactory: () => "windows-boundary-candidate",
+    });
+    const windowsBoundaryReceipt = await windowsBoundaryStore.persist();
+    assert.deepEqual(
+      windowsBoundaryReceipt.directorySync,
+      { status: "deferred_unverified", reason: "windows_directory_fsync_unavailable" },
+    );
+    assert.deepEqual(await readRows(Runtime, windowsBoundaryPath), ["committed"]);
+    windowsBoundaryDb.close();
 
     const overlapRoot = path.join(root, "overlapping-exec");
     const overlapPath = path.join(overlapRoot, "knowledge-store.sqlite");
