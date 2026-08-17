@@ -442,6 +442,17 @@ async function testAcceptedEvidenceReceipt(root) {
   assert.deepEqual(snapshot(storeRoot), beforeUnsupportedRefresh,
     "unsupported refresh must not consume its receipt, advance a checkpoint, publish a key/outcome, or leave temporary paths");
 
+  if (process.platform !== "darwin") {
+    const beforeNativeUnsupportedRefresh = snapshot(storeRoot);
+    assert.throws(
+      () => execute(refreshRequest(workspace, storeRoot, scan, previousCheckpointId, receipt.receiptId, [changedPath])),
+      /refresh_outcome_publication_unavailable/,
+    );
+    assert.deepEqual(snapshot(storeRoot), beforeNativeUnsupportedRefresh,
+      "a native unsupported-platform refresh must preserve the issued receipt and prior authority state byte-for-byte");
+    return;
+  }
+
   const refreshed = execute(refreshRequest(workspace, storeRoot, scan, previousCheckpointId, receipt.receiptId, [changedPath]));
   assert.equal(refreshed.current, true);
   assert.equal(refreshed.acceptedEvidenceReceipt, receipt.receiptId);
