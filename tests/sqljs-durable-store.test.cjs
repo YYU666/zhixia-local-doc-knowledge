@@ -44,6 +44,11 @@ async function legacySave(fsOps, database, filePath) {
   await fsOps.rename(tempPath, filePath);
 }
 
+async function assertOwnerOnlyMode(filePath, message) {
+  if (process.platform === "win32") return;
+  assert.equal((await fs.stat(filePath)).mode & 0o777, 0o600, message);
+}
+
 function injectedFailure(stageToFail) {
   let failed = false;
   return async (stage) => {
@@ -125,7 +130,7 @@ function injectedFailure(stageToFail) {
       assert.equal(store.getStatus().degradedReadonly, true);
       assert.equal(scalar(database, "SELECT COUNT(*) FROM durable_items"), 1, `${stage} must restore the in-memory snapshot`);
       assert.deepEqual(await readRows(Runtime, filePath), ["baseline"], `${stage} must preserve the durable pre-mutation state`);
-      assert.equal((await fs.stat(filePath)).mode & 0o777, 0o600, `${stage} rollback must preserve owner-only mode`);
+      await assertOwnerOnlyMode(filePath, `${stage} rollback must preserve owner-only mode`);
       assert.deepEqual(
         (await fs.readdir(caseRoot)).filter((name) => name.endsWith(".tmp")),
         [],
@@ -171,7 +176,7 @@ function injectedFailure(stageToFail) {
     successDb.run("INSERT INTO durable_items VALUES ('committed')");
     const receipt = await successStore.persist();
     assert.equal(receipt.durable, true);
-    assert.equal((await fs.stat(successPath)).mode & 0o777, 0o600, "database replacement must be owner-only");
+    await assertOwnerOnlyMode(successPath, "database replacement must be owner-only");
     assert.deepEqual(await readRows(Runtime, successPath), ["committed"]);
     successDb.close();
 
