@@ -3174,6 +3174,8 @@ mark {
 
 /* Memory graph explorer */
 .memory-graph-explorer {
+  container-name: memory-graph;
+  container-type: inline-size;
   display: grid;
   grid-template-rows: auto minmax(440px, 1fr);
   min-width: 0;
@@ -3774,7 +3776,7 @@ mark {
   }
 }
 
-@media (max-width: 980px) {
+@container memory-graph (max-width: 760px) {
   .memory-graph-toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
