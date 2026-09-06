@@ -266,7 +266,7 @@ node scripts/read-project-knowledge.cjs <workspace-path> --ceo-takeover --projec
 ```
 
 - Recovery returns a workspace-metadata-only ThreadRecoveryPacket-shaped object and never walks raw or Vault session bodies.
-- Pressure evaluates caller-supplied metrics only. It may recommend writeback, harvest, takeover, or a dispatch freeze; it does not inspect sessions or mutate Codex state.
+- Pressure evaluates caller-supplied archive metrics only and returns v2 `unknown/advisory_only`, with no dispatch, freeze or execution authority. Missing metrics remain unknown. Fresh Host telemetry and CEO Flow govern current context pressure; archive size, workers and titles do not. It does not inspect sessions or mutate Codex state.
 - Takeover returns Hot/Warm/Skill defaults, Cold pointer-only history, sourceRefs, and a one-line startup prompt.
 
 ## Writeback Dry Run

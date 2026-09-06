@@ -46,10 +46,7 @@ const MAX_WORKTREE_POSTIMAGES = 128;
 const MAX_SCANNED_FILE_BYTES = 1024 * 1024;
 const MAX_RESUME_PACKET_BYTES = 16 * 1024;
 const MAX_RETRIEVAL_PACKET_BYTES = 48 * 1024;
-const MAX_RETRIEVAL_TOKEN_BUDGET = 10_000;
-const DEFAULT_CONTEXT_TOKEN_BUDGET = 1_200;
-const DEFAULT_TAKEOVER_TOKEN_BUDGET = 2_200;
-const ADAPTIVE_TOKEN_BUDGET_STEPS = [1_200, 2_200, 3_000, 5_000, 7_500, 10_000];
+const { retrievalBudgetEnvelope, nextAdaptiveTokenBudget } = require("../codex-skills/zhixia-local-docs/scripts/memory-context-policy.cjs");
 const TRUSTED_WORKSPACE_SCAN_URI_RE = /^memory-runtime:\/\/workspace-scan\/([a-f0-9]{64})$/;
 const MAX_TEXT_CHARS = 1200;
 const MAX_LIST_ITEMS = 24;
@@ -138,35 +135,6 @@ function compactSafeList(values, maxItems = MAX_LIST_ITEMS, maxChars = 360) {
   return result;
 }
 
-function boundedTokenBudget(value, fallback) {
-  const parsed = Number(value);
-  const selected = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-  return Math.max(800, Math.min(Math.floor(selected), MAX_RETRIEVAL_TOKEN_BUDGET));
-}
-
-function retrievalBudgetEnvelope(request = {}, operation = "retrieve") {
-  const defaultPreferred = operation === "prepare_takeover"
-    ? DEFAULT_TAKEOVER_TOKEN_BUDGET
-    : DEFAULT_CONTEXT_TOKEN_BUDGET;
-  const preferredTokenBudget = boundedTokenBudget(request.tokenBudget, defaultPreferred);
-  const strictTokenBudget = request.strictTokenBudget === true;
-  const requestedMax = boundedTokenBudget(request.maxTokenBudget, MAX_RETRIEVAL_TOKEN_BUDGET);
-  const maxTokenBudget = strictTokenBudget
-    ? preferredTokenBudget
-    : Math.max(preferredTokenBudget, requestedMax);
-  return {
-    mode: strictTokenBudget ? "strict" : "adaptive",
-    preferredTokenBudget,
-    maxTokenBudget,
-    hardTokenLimit: MAX_RETRIEVAL_TOKEN_BUDGET,
-    strictTokenBudget,
-  };
-}
-
-function nextAdaptiveTokenBudget(current, maximum) {
-  const next = ADAPTIVE_TOKEN_BUDGET_STEPS.find((value) => value > current);
-  return Math.min(maximum, next || maximum);
-}
 
 function resolveUserData(env = process.env) {
   if (env.ZHIXIA_USER_DATA) return path.resolve(env.ZHIXIA_USER_DATA);
@@ -1244,9 +1212,20 @@ function takeoverControl(verified, returnedCount) {
     maxInjectionsPerTask: 1,
     hostRequirements: takeoverHostRequirements(),
     reasonCodes,
+    failureDisposition: ready ? null : {
+      scope: "memory_dependent_lane",
+      lifecycleState: "lane_paused_recoverable",
+      freezeCaller: false,
+      preserveExistingHostFreeze: true,
+      grantsExecutionAuthority: false,
+      blocks: ["stale_context_injection", "authority_dependent_writes"],
+      unrelatedAuthorizedLanesMayContinue: true,
+      recoveryOperations: ["verify", "scan"],
+      retryPolicy: "one_bounded_verify_then_repair_from_new_evidence_no_refresh_replay",
+    },
     nextAction: ready
       ? "Start a clean takeover task and inject this context generation once."
-      : "Keep the old task frozen and repair or verify app-owned Memory Core before takeover.",
+      : "Pause only the memory-dependent lane; run one bounded verify and repair the reported evidence defect. Do not inject stale context or replay refresh. Preserve any existing Host freeze; this result neither freezes a safe caller nor grants execution authority.",
   };
 }
 

@@ -496,7 +496,9 @@ assert.match(main, /filterAuthorizedCandidates[\s\S]*retrieveHybridMemory/, "aut
 assert.match(main, /origin === APP_OWNED_MEMORY_CORE_ORIGIN[\s\S]*formAppOwnedLifecycleEvent\("writeback_evidence"[\s\S]*formLifecycleEvent\("writeback_evidence"/, "evidence writeback must separate app-owned and untrusted formation paths");
 assert.match(main, /origin === APP_OWNED_MEMORY_CORE_ORIGIN[\s\S]*formAppOwnedLifecycleEvent\("observe_event"[\s\S]*formLifecycleEvent\("observe_event"/, "runtime events must separate app-owned and untrusted formation paths");
 assert.match(main, /origin === APP_OWNED_MEMORY_CORE_ORIGIN[\s\S]*formAppOwnedLifecycleEvent\("close_working_memory"[\s\S]*formLifecycleEvent\("close_working_memory"/, "working-memory close must separate app-owned and renderer review-only paths");
-assert.ok((main.match(/getProjectContinuity\(\{[\s\S]{0,500}?readOnly:\s*true/g) || []).length >= 4, "renderer-facing continuity reads must remain logically read-only");
+const continuityReadCount = (main.match(/\.getProjectContinuity\(\{/g) || []).length;
+assert.ok(continuityReadCount > 0);
+assert.equal((main.match(/\.getProjectContinuity\(\{[\s\S]{0,500}?readOnly:\s*true/g) || []).length, continuityReadCount, "every remaining renderer-facing continuity read must be logically read-only");
 assert.match(main, /getProjectContinuity[\s\S]*continuityPacket[\s\S]*recoveryReady[\s\S]*nextCursor/, "recovery and takeover must use paged ContinuityPacket readiness rather than topK");
 assert.match(main, /loadOrCreateSigningKey[\s\S]*authoritySigningKey[\s\S]*createMemoryCoreRuntime/, "main must supply the app-owned stable authority signing key to Memory Core");
 assert.match(main, /recoverMemoryRuntimeThread[\s\S]*getProjectContinuity[\s\S]*recoveryReady[\s\S]*nextCursor/, "thread recovery readiness must come from paged ProjectBrain continuity status");
@@ -568,13 +570,13 @@ assert.match(memoryRuntimePolicy, /runsFlowSkill:\s*false[\s\S]*installsOrExecut
 assert.match(memoryRuntimePolicy, /evaluatePromotionCandidate[\s\S]*installsOrExecutes:\s*false/, "Memory Runtime promotion must not install or execute candidates");
 assert.match(memoryRuntimePolicy, /publicExportAutomatic:\s*false/, "Memory Runtime writeback must never auto-public-export FlowSkill material");
 assert.match(ceoMemoryRuntimeGuardPolicy, /function evaluateCeoThreadPressure/, "CEO Memory Runtime guard must expose a pure thread pressure evaluator");
-assert.match(ceoMemoryRuntimeGuardPolicy, /freeze_risk_stop_dispatch/, "CEO thread pressure guard must be able to stop dispatch on freeze risk");
+assert.match(ceoMemoryRuntimeGuardPolicy, /evaluateArchivePressure/, "legacy pressure must use the shared diagnostic-only policy");
 assert.match(ceoMemoryRuntimeGuardPolicy, /function buildCeoTakeoverBootstrapPacket/, "CEO Memory Runtime guard must build one-line takeover bootstrap packets");
 assert.match(ceoMemoryRuntimeGuardPolicy, /function buildCeoLifecycleWritebackPacket/, "CEO Memory Runtime guard must build compact lifecycle writeback packets");
 assert.match(ceoMemoryRuntimeGuardPolicy, /startsTimers:\s*false[\s\S]*scansVault:\s*false[\s\S]*rawSessionBodyRead:\s*false/, "CEO Memory Runtime guard must not add timers, vault scans, or raw-session reads");
 assert.match(main, /memoryRuntime:evaluateCeoThreadPressure/, "main process must expose CEO thread pressure evaluation IPC");
 assert.match(main, /memoryRuntime:buildCeoTakeoverBootstrap/, "main process must expose CEO takeover bootstrap IPC");
-assert.match(main, /function buildCeoTakeoverBootstrap[\s\S]*allowedKinds:\s*\["runtime_event",\s*"project_record",\s*"project_resume_packet",\s*"ceo_flow_record",\s*"project_artifact",\s*"knowledge_item",\s*"experience_card"\]/, "CEO takeover bootstrap retrieval must avoid thread_lineage_index refresh side effects");
+assert.match(main, /function buildCeoTakeoverBootstrap[\s\S]*?return prepareCeoTakeover\(options,\s*\{\s*executeRuntime: executeMemoryRuntimeCli/, "legacy bootstrap IPC must route to the app-owned takeover adapter");
 assert.match(preload, /evaluateCeoThreadPressure/, "preload must expose CEO thread pressure evaluation");
 assert.match(viteEnv, /export type CeoTakeoverBootstrapPacket/, "renderer types must include CEO takeover bootstrap packets");
 assert.match(pkg.scripts.test, /ceo-memory-runtime-guard-policy\.test\.cjs/, "default npm test must include CEO Memory Runtime guard coverage");
@@ -1446,7 +1448,7 @@ assert.match(helper, /--precedent/, "retrieval helper must support precedent ret
 assert.match(helper, /--recover-thread/, "retrieval helper must support explicit old-thread recovery packets");
 assert.match(helper, /buildThreadRecoveryPacket/, "retrieval helper must build ThreadRecoveryPacket-shaped output");
 assert.match(helper, /--ceo-takeover[\s\S]*ceo_takeover_bootstrap_packet/, "Zhixia helper must expose CEO takeover bootstrap mode");
-assert.match(helper, /--thread-pressure[\s\S]*freeze_risk_stop_dispatch/, "Zhixia helper must expose metadata-only CEO pressure evaluation");
+assert.match(helper, /function evaluateCeoThreadPressure\(options = \{\}\)\s*\{\s*return evaluateArchivePressure\(options\)/, "helper must share the diagnostic-only archive policy");
 assert.match(helper, /--writeback-dry-run/, "retrieval helper must generate dry-run evidence writeback packets");
 assert.match(helper, /--evidence-json/, "retrieval helper must accept compact evidence JSON input");
 assert.match(helper, /--limit/, "retrieval helper must support --limit");

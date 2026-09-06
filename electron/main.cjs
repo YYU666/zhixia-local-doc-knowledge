@@ -42,7 +42,7 @@ const {
 } = require("./memoryRuntimePolicy.cjs");
 const {
   buildCeoLifecycleWritebackPacket,
-  buildCeoTakeoverBootstrapPacket,
+  prepareCeoTakeover,
   evaluateCeoThreadPressure,
 } = require("./ceoMemoryRuntimeGuardPolicy.cjs");
 const {
@@ -9940,72 +9940,10 @@ async function recoverMemoryRuntimeThread(options = {}) {
 }
 
 async function buildCeoTakeoverBootstrap(options = {}) {
-  const projectPath = options.projectPath || null;
-  const contextPacket = await retrieveMemoryRuntimeContext({
-    ...options,
-    taskGoal: options.taskGoal || options.query || options.projectName || options.title || "CEO takeover bootstrap",
-    queryType: "project_resume",
-    projectPath,
-    threadId: options.currentCeoThreadId || options.threadId || null,
-    parentCeoThreadId: options.parentCeoThreadId || options.currentCeoThreadId || options.threadId || null,
-    allowedKinds: ["runtime_event", "project_record", "project_resume_packet", "ceo_flow_record", "project_artifact", "knowledge_item", "experience_card"],
-    tokenBudget: options.tokenBudget || 1200,
-    maxResults: options.maxResults || 8,
+  return prepareCeoTakeover(options, {
+    executeRuntime: executeMemoryRuntimeCli,
+    storeRoot: memoryRuntimeRoot(),
   });
-  const projectDocs = await buildRecoveryProjectDocs(projectPath);
-  const sourceRefs = [
-    ...safeArray(contextPacket.sourceRefs),
-    ...projectDocs.map((doc) => ({
-      kind: doc.kind,
-      path: doc.path,
-      title: doc.title,
-      updatedAt: doc.lastWriteTime,
-    })),
-  ];
-  const bootstrap = buildCeoTakeoverBootstrapPacket({
-    ...options,
-    projectPath,
-    projectName: options.projectName || options.title || contextPacket.project?.name || path.basename(projectPath || "") || "当前项目",
-    projectSummary: options.projectSummary || contextPacket.project?.summary || "",
-    currentCeoThreadId: options.currentCeoThreadId || options.threadId || null,
-    sourceRefs,
-    coldHistorySources: safeArray(options.coldHistorySources || options.staleThreadIds || options.badThreadIds),
-    pressure: options.pressure || null,
-  });
-  if (!projectPath) {
-    return {
-      ...bootstrap,
-      continuityPacket: null,
-      recoveryReady: false,
-      missing: ["project_identity"],
-      stale: [],
-      conflict: [],
-      nextCursor: null,
-    };
-  }
-  const workingMemory = await listWorkingMemoryRecords(memoryRuntimeRoot(), { projectPath, limit: 200 });
-  const continuity = getMemoryCoreRuntime().getProjectContinuity({
-    ...options,
-    readOnly: true,
-    projectPath,
-    workingMemory,
-    cursor: options.cursor || options.nextCursor || null,
-    tokenBudget: options.continuityTokenBudget || 2200,
-  });
-  return {
-    ...bootstrap,
-    continuityPacket: continuity.continuityPacket,
-    recoveryReady: continuity.recoveryReady,
-    missing: continuity.missing,
-    stale: continuity.stale,
-    conflict: continuity.conflict,
-    nextCursor: continuity.nextCursor,
-    memoryCore: {
-      identity: continuity.principal,
-      authority: continuity.authority,
-      mandatoryComplete: continuity.mandatoryComplete,
-    },
-  };
 }
 
 async function writebackMemoryRuntimeEvidence(packet = {}, origin = null) {
@@ -11705,7 +11643,6 @@ ipcMain.handle("memoryRuntime:recoverThread", async (_event, options = {}) => {
 ipcMain.handle("memoryRuntime:evaluateCeoThreadPressure", async (_event, options = {}) => evaluateCeoThreadPressure(options));
 
 ipcMain.handle("memoryRuntime:buildCeoTakeoverBootstrap", async (_event, options = {}) => {
-  await ensureDatabase();
   return buildCeoTakeoverBootstrap(options);
 });
 

@@ -4,7 +4,9 @@ const {
   buildCeoLifecycleWritebackPacket,
   buildCeoTakeoverBootstrapPacket,
   evaluateCeoThreadPressure,
+  prepareCeoTakeover,
 } = require("../electron/ceoMemoryRuntimeGuardPolicy.cjs");
+const { retrievalBudgetEnvelope, nextAdaptiveTokenBudget } = require("../codex-skills/zhixia-local-docs/scripts/memory-context-policy.cjs");
 
 function assertNoUnsafePayload(value, label) {
   const text = JSON.stringify(value);
@@ -31,10 +33,10 @@ function main() {
     activeWorkerCount: 3,
     longTitleCount: 5,
   });
-  assert.equal(critical.pressureLevel, "critical", "200MB+ image/base64 threads should be critical");
-  assert.equal(critical.action, "freeze_risk_stop_dispatch", "critical pressure should stop new dispatch");
-  assert.equal(critical.gates.stopNewDispatch, true, "critical pressure should gate new dispatch");
-  assert.equal(critical.gates.takeoverRecommended, true, "critical pressure should recommend takeover");
+  assert.equal(critical.pressureLevel, "unknown", "archive size is not current context");
+  assert.equal(critical.action, "advisory_only");
+  assert.equal(critical.gates.stopNewDispatch, false);
+  assert.equal(critical.gates.takeoverRecommended, false);
   assert.equal(critical.performance.startsTimers, false, "pressure guard must be pure and timer-free");
   assert.equal(critical.performance.readsRawSessionBody, false, "pressure guard must not read raw session bodies");
   assert.equal(critical.performance.archiveCompactDeleteMoveRestore, false, "pressure guard must not authorize archive/compact/delete/move/restore");
@@ -45,8 +47,8 @@ function main() {
     activeWorkerCount: 4,
     longTitleCount: 12,
   });
-  assert.equal(multiThreadPressure.action, "harvest_only", "many visible/active lanes should switch CEO into harvest-only mode");
-  assert.ok(multiThreadPressure.warnings.includes("multi_thread_visible_pressure_harvest_only"), "multi-thread pressure should be explicit");
+  assert.equal(multiThreadPressure.action, "advisory_only", "workers and titles do not constrain dispatch");
+  assert.equal(multiThreadPressure.gates.harvestOnly, false);
 
   const safe = evaluateCeoThreadPressure({
     sessionBytes: 9 * 1024 * 1024,
@@ -55,8 +57,55 @@ function main() {
     visibleThreadCount: 2,
     activeWorkerCount: 1,
   });
-  assert.equal(safe.action, "continue", "small metadata-only thread should continue");
+  assert.equal(safe.action, "advisory_only", "small archive must not imply execution permission");
   assert.equal(safe.gates.writebackRequired, false, "small thread should not force writeback");
+
+  for (const metrics of [{}, { sessionBytes: NaN }, { sessionBytes: Infinity }, { sessionBytes: -1 },
+    { activeWorkerCount: 4 }, { longTitleCount: 8 }, { visibleThreadCount: 200 },
+    { currentPostCompactionContextTokens: 190000, modelContextWindowTokens: 200000 },
+    { sessionBytes: 210 * 1024 * 1024, currentPostCompactionContextTokens: 8000 }]) {
+    const report = evaluateCeoThreadPressure(metrics);
+    assert.equal(report.contextSafe, null);
+    assert.equal(report.authority, "none");
+    assert.equal(report.hostAssessmentRequired, true);
+    assert.equal(report.action, "advisory_only");
+    assert.ok(Object.values(report.gates).every((gate) => gate === false));
+  }
+  assert.equal(evaluateCeoThreadPressure({}).metrics.sessionBytes, null);
+  assert.ok(evaluateCeoThreadPressure({}).missingMetrics.includes("sessionBytes"));
+
+  for (const requested of [undefined, 1200, 2200, 3000, 5000, 10000, 50000, NaN, -1]) {
+    for (const strictTokenBudget of [true, false]) {
+      const input = { tokenBudget: requested, strictTokenBudget };
+      const packet = buildCeoTakeoverBootstrapPacket(input);
+      const envelope = retrievalBudgetEnvelope(input, "prepare_takeover");
+      assert.deepEqual(packet.request.budgetEnvelope, envelope);
+      assert.equal(packet.request.tokenBudget, envelope.preferredTokenBudget);
+      assert.ok(envelope.maxTokenBudget <= 10000);
+      assert.equal(packet.replacementContextAllowed, false);
+      if (strictTokenBudget) assert.equal(envelope.maxTokenBudget, envelope.preferredTokenBudget);
+    }
+  }
+  assert.equal(buildCeoTakeoverBootstrapPacket({ tokenBudget: 10000 }).request.tokenBudget, 10000);
+  assert.deepEqual([1200, 2200, 3000, 5000, 7500].map((n) => nextAdaptiveTokenBudget(n, 10000)), [2200, 3000, 5000, 7500, 10000]);
+  const expectedResult = { current: false, takeover: { shouldInject: false } };
+  let calls = 0;
+  const routed = prepareCeoTakeover({
+    projectPath: "/fixture/project", tokenBudget: 10000, maxTokenBudget: 10000, strictTokenBudget: true,
+    operation: "seed", execute: true, storeRoot: "/untrusted", readOnly: false,
+  }, { storeRoot: "/app-owned", executeRuntime: (request) => {
+    calls += 1;
+    assert.equal(request.operation, "prepare_takeover");
+    assert.equal(request.storeRoot, "/app-owned");
+    assert.equal(request.readOnly, true);
+    assert.equal(request.execute, undefined);
+    assert.equal(request.tokenBudget, 10000);
+    assert.equal(request.strictTokenBudget, true);
+    return expectedResult;
+  } });
+  assert.equal(calls, 1);
+  assert.equal(routed, expectedResult, "adapter must return exact Runtime envelope without appending unbudgeted context");
+  assert.throws(() => prepareCeoTakeover({}, { executeRuntime: () => assert.fail("must not resolve cwd"), storeRoot: "/fixture" }), /canonical_workspace_required/);
 
   const unsafePayload = `Accepted UI direction. Screenshot bytes data:image/png;base64,${"A".repeat(260)} and token sk-1234567890abcdef plus C:/Users/example/.codex/sessions/2026/07/raw.jsonl`;
   const writeback = buildCeoLifecycleWritebackPacket({

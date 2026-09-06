@@ -77,7 +77,15 @@ async function writeFixture() {
 
 function runElectronProbe() {
   return new Promise((resolve, reject) => {
-    const probeScript = `window.docKnowledge.e2eProbe({ projectPath: ${JSON.stringify(projectPath)}, expectedLegacyApiKey: ${JSON.stringify(legacyApiKey)} })`;
+    const probeScript = `(async () => {
+      const result = await window.docKnowledge.e2eProbe({ projectPath: ${JSON.stringify(projectPath)}, expectedLegacyApiKey: ${JSON.stringify(legacyApiKey)} });
+      const pressure = await window.docKnowledge.evaluateCeoThreadPressure({ activeWorkerCount: 4 });
+      const takeover = await window.docKnowledge.buildCeoTakeoverBootstrap({ projectPath: ${JSON.stringify(projectPath)}, tokenBudget: 10000, strictTokenBudget: true });
+      result.contextCompatibility = { pressure, operation: takeover.operation, current: takeover.current,
+        shouldInject: takeover.takeover.shouldInject, disposition: takeover.takeover.failureDisposition,
+        budget: takeover.performance.budgetEnvelope, tokenEstimate: takeover.tokenEstimate };
+      return result;
+    })()`;
 
     const child = spawn(electronExe, [
       root,
@@ -153,6 +161,15 @@ function cleanupTempRoot() {
     await writeFixture();
     const result = await runElectronProbe();
     assert.equal(result.ok, true, "Electron governance probe should complete");
+    assert.equal(result.contextCompatibility.pressure.action, "advisory_only");
+    assert.equal(result.contextCompatibility.pressure.contextSafe, null);
+    assert.equal(result.contextCompatibility.operation, "prepare_takeover");
+    assert.equal(result.contextCompatibility.current, false, "unseeded fixture cannot gain authority through legacy IPC");
+    assert.equal(result.contextCompatibility.shouldInject, false);
+    assert.equal(result.contextCompatibility.disposition.freezeCaller, false);
+    assert.equal(result.contextCompatibility.disposition.preserveExistingHostFreeze, true);
+    assert.equal(result.contextCompatibility.budget.effectiveTokenBudget, 10000);
+    assert.ok(result.contextCompatibility.tokenEstimate <= 10000);
     assert.equal(isPathInside(userData, result.storePath), true, "probe storePath must stay under isolated userData");
     assert.equal(result.secretStorage.status, "encrypted", "real Electron safeStorage must be available in the supported host test environment");
     assert.equal(result.secretStorage.legacyMigrated, true, "startup must replace a legacy plaintext API key with ciphertext");

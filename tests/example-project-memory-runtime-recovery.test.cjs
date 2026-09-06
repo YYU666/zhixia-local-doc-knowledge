@@ -3,6 +3,7 @@ const { execFileSync, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { prepareCeoTakeover } = require("../electron/ceoMemoryRuntimeGuardPolicy.cjs");
 
 const {
   execute,
@@ -202,6 +203,12 @@ function main() {
     assert.equal(unreadyTakeover.takeover.shouldInject, false);
     assert.equal(unreadyTakeover.takeover.schemaVersion, "zhixia.takeover_control.v2");
     assert.equal(unreadyTakeover.takeover.injectionMode, "blocked_fail_closed");
+    assert.equal(unreadyTakeover.takeover.failureDisposition.scope, "memory_dependent_lane");
+    assert.equal(unreadyTakeover.takeover.failureDisposition.freezeCaller, false);
+    assert.equal(unreadyTakeover.takeover.failureDisposition.preserveExistingHostFreeze, true);
+    assert.equal(unreadyTakeover.takeover.failureDisposition.grantsExecutionAuthority, false);
+    assert.equal(unreadyTakeover.takeover.failureDisposition.unrelatedAuthorizedLanesMayContinue, true);
+    assert.deepEqual(unreadyTakeover.takeover.failureDisposition.recoveryOperations, ["verify", "scan"]);
     assert.equal(verifyTakeoverHostRequirements(unreadyTakeover.takeover.hostRequirements), true);
     assert.match(unreadyTakeover.contextGenerationId, /^context-[a-f0-9]{24}$/);
     assert.equal(unreadyTakeover.head, baselineHead);
@@ -290,6 +297,16 @@ function main() {
     const prepared = runStrictCli({ ...retrieveRequest, operation: "prepare_takeover" });
     assert.equal(prepared.operation, "prepare_takeover");
     assert.equal(prepared.takeover.shouldInject, true);
+    assert.equal(prepared.takeover.failureDisposition, null);
+    const ipcAdapterPacket = prepareCeoTakeover({ projectPath: workspace, tokenBudget: 10000, strictTokenBudget: true }, { executeRuntime: execute, storeRoot });
+    assert.equal(ipcAdapterPacket.operation, "prepare_takeover");
+    assert.equal(ipcAdapterPacket.memoryMode, "app_owned_memory_core");
+    assert.equal(ipcAdapterPacket.authorityVerification, "app_owned_verified");
+    assert.equal(ipcAdapterPacket.takeover.shouldInject, true);
+    assert.equal(ipcAdapterPacket.contextGenerationId, prepared.contextGenerationId);
+    assert.equal(ipcAdapterPacket.performance.budgetEnvelope.effectiveTokenBudget, 10000);
+    assert.ok(ipcAdapterPacket.tokenEstimate <= 10000);
+    assert.equal(ipcAdapterPacket.packetBytes, Buffer.byteLength(JSON.stringify(ipcAdapterPacket), "utf8"));
     assert.equal(prepared.takeover.schemaVersion, "zhixia.takeover_control.v2");
     assert.equal(prepared.takeover.injectionMode, "replace_long_thread_context");
     assert.equal(prepared.takeover.maxInjectionsPerTask, 1);

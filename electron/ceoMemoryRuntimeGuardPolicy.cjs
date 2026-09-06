@@ -1,11 +1,10 @@
 const crypto = require("node:crypto");
 
-const CEO_MEMORY_GUARD_SCHEMA = "zhixia.ceo_memory_runtime_guard.v1";
+const CEO_MEMORY_GUARD_SCHEMA = "zhixia.ceo_memory_runtime_guard.v2";
 const CEO_TAKEOVER_BOOTSTRAP_SCHEMA = "zhixia.ceo_takeover_bootstrap_packet.v1";
 const CEO_LIFECYCLE_WRITEBACK_SCHEMA = "zhixia.ceo_lifecycle_writeback_packet.v1";
 
-const MB = 1024 * 1024;
-const DEFAULT_TOKEN_BUDGET = 1800;
+const { evaluateArchivePressure, retrievalBudgetEnvelope } = require("../codex-skills/zhixia-local-docs/scripts/memory-context-policy.cjs");
 const MAX_TEXT_CHARS = 900;
 const BASE64_RE = /\bdata:[^;,\s]+;base64,[A-Za-z0-9+/=]{80,}|\b[A-Za-z0-9+/]{180,}={0,2}\b/g;
 const RAW_SESSION_RE = /(?:^|[\\/])\.codex[\\/]sessions[\\/]|(?:raw|codex|thread)[_ -]?session|session[_ -]?jsonl/i;
@@ -25,12 +24,6 @@ const CEO_LIFECYCLE_STAGES = [
 
 function safeArray(value) {
   return Array.isArray(value) ? value : [];
-}
-
-function clampNumber(value, fallback, min, max) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
 }
 
 function redactCompactText(value, maxChars = MAX_TEXT_CHARS) {
@@ -96,104 +89,8 @@ function normalizeSourceRefs(refs, limit = 16) {
   return { refs: result, omitted };
 }
 
-function normalizeMetricNumber(metrics, name) {
-  return Math.max(0, Number(metrics[name] || 0) || 0);
-}
-
 function evaluateCeoThreadPressure(input = {}) {
-  const metrics = {
-    sessionBytes: normalizeMetricNumber(input, "sessionBytes"),
-    lineCount: normalizeMetricNumber(input, "lineCount"),
-    maxLineChars: normalizeMetricNumber(input, "maxLineChars"),
-    linesOver100k: normalizeMetricNumber(input, "linesOver100k"),
-    dataImageHits: normalizeMetricNumber(input, "dataImageHits"),
-    base64Hits: normalizeMetricNumber(input, "base64Hits"),
-    imagePathHits: normalizeMetricNumber(input, "imagePathHits"),
-    toolOutputLikeHits: normalizeMetricNumber(input, "toolOutputLikeHits"),
-    visibleThreadCount: normalizeMetricNumber(input, "visibleThreadCount"),
-    activeWorkerCount: normalizeMetricNumber(input, "activeWorkerCount"),
-    longTitleCount: normalizeMetricNumber(input, "longTitleCount"),
-  };
-  const sessionMb = Number((metrics.sessionBytes / MB).toFixed(2));
-  const warnings = [];
-  const gates = {
-    writebackRequired: false,
-    stopNewDispatch: false,
-    harvestOnly: false,
-    takeoverRecommended: false,
-    freezeRisk: false,
-  };
-
-  if (metrics.sessionBytes >= 50 * MB || metrics.maxLineChars >= 100000 || metrics.linesOver100k > 0) {
-    gates.writebackRequired = true;
-    warnings.push("thread_pressure_writeback_required");
-  }
-  if (metrics.sessionBytes >= 100 * MB || metrics.linesOver100k >= 25 || metrics.toolOutputLikeHits >= 5000) {
-    gates.harvestOnly = true;
-    warnings.push("thread_pressure_harvest_only");
-  }
-  if (metrics.sessionBytes >= 150 * MB || metrics.linesOver100k >= 80 || metrics.dataImageHits >= 200 || metrics.base64Hits >= 1000) {
-    gates.takeoverRecommended = true;
-    warnings.push("thread_pressure_takeover_recommended");
-  }
-  if (metrics.sessionBytes >= 200 * MB || metrics.linesOver100k >= 150 || metrics.dataImageHits >= 1000 || metrics.base64Hits >= 2000) {
-    gates.freezeRisk = true;
-    gates.stopNewDispatch = true;
-    warnings.push("thread_pressure_freeze_risk_stop_dispatch");
-  }
-  if (metrics.activeWorkerCount >= 4 || metrics.visibleThreadCount >= 8 || metrics.longTitleCount >= 8) {
-    gates.writebackRequired = true;
-    gates.harvestOnly = true;
-    warnings.push("multi_thread_visible_pressure_harvest_only");
-  }
-
-  const pressureLevel = gates.freezeRisk
-    ? "critical"
-    : gates.takeoverRecommended
-    ? "high"
-    : gates.harvestOnly
-    ? "warning"
-    : gates.writebackRequired
-    ? "watch"
-    : "ok";
-  const action = gates.freezeRisk
-    ? "freeze_risk_stop_dispatch"
-    : gates.takeoverRecommended
-    ? "takeover_recommended"
-    : gates.harvestOnly
-    ? "harvest_only"
-    : gates.writebackRequired
-    ? "writeback_required"
-    : "continue";
-
-  return {
-    schemaVersion: CEO_MEMORY_GUARD_SCHEMA,
-    generatedAt: new Date().toISOString(),
-    threadId: input.threadId || input.currentThreadId || null,
-    projectPath: input.projectPath || null,
-    pressureLevel,
-    action,
-    sessionMb,
-    metrics,
-    gates,
-    recommendations: [
-      gates.writebackRequired ? "write_compact_ceo_memory_before_more_work" : "",
-      gates.harvestOnly ? "harvest_existing_workers_do_not_dispatch_new_lanes" : "",
-      gates.takeoverRecommended ? "build_takeover_bootstrap_packet_for_clean_ceo_thread" : "",
-      gates.freezeRisk ? "stop_using_visible_bloated_thread_for_new_work" : "",
-      metrics.dataImageHits || metrics.base64Hits ? "keep_visual_evidence_as_local_paths_hashes_summaries_not_chat_payloads" : "",
-      metrics.longTitleCount >= 8 ? "shorten_visible_thread_titles_and_reduce_sidebar_churn" : "",
-    ].filter(Boolean),
-    warnings,
-    performance: {
-      purePolicy: true,
-      startsTimers: false,
-      scansVault: false,
-      readsRawSessionBody: false,
-      mutatesCodexSessions: false,
-      archiveCompactDeleteMoveRestore: false,
-    },
-  };
+  return evaluateArchivePressure(input);
 }
 
 function buildCeoLifecycleWritebackPacket(input = {}) {
@@ -203,7 +100,7 @@ function buildCeoLifecycleWritebackPacket(input = {}) {
   const pressure = input.threadPressure && typeof input.threadPressure === "object"
     ? evaluateCeoThreadPressure(input.threadPressure)
     : input.pressure && typeof input.pressure === "object"
-    ? input.pressure
+    ? evaluateCeoThreadPressure(input.pressure.metrics || {})
     : null;
   const warnings = [
     ...(sourceRefResult.omitted.rawSession > 0 ? ["raw_session_source_refs_omitted"] : []),
@@ -302,11 +199,8 @@ function buildCeoLifecycleWritebackPacket(input = {}) {
 }
 
 function buildCeoTakeoverBootstrapPacket(input = {}) {
-  const pressure = input.pressure && typeof input.pressure === "object"
-    ? input.pressure
-    : input.threadPressure && typeof input.threadPressure === "object"
-    ? evaluateCeoThreadPressure(input.threadPressure)
-    : evaluateCeoThreadPressure(input);
+  const pressure = evaluateCeoThreadPressure(input.threadPressure || input.pressure?.metrics || input);
+  const budgetEnvelope = retrievalBudgetEnvelope(input, "prepare_takeover");
   const sourceRefResult = normalizeSourceRefs(input.sourceRefs || input.projectSourceRefs, 20);
   const coldPointers = safeArray(input.coldHistorySources || input.staleThreadIds || input.badThreadIds).map((item) => {
     if (typeof item === "string") {
@@ -345,9 +239,13 @@ function buildCeoTakeoverBootstrapPacket(input = {}) {
     },
     request: {
       taskGoal,
-      tokenBudget: clampNumber(input.tokenBudget, DEFAULT_TOKEN_BUDGET, 600, 3000),
+      tokenBudget: budgetEnvelope.preferredTokenBudget,
+      budgetEnvelope,
       queryType: "thread_recovery",
     },
+    authoritative: false,
+    replacementContextAllowed: false,
+    preferredOperation: "prepare_takeover",
     threadPressure: pressure,
     recallPlan: {
       defaultReadOrder: ["hot", "warm", "canonical_docs", "skill", "source_refs", "cold_pointers_only"],
@@ -357,26 +255,12 @@ function buildCeoTakeoverBootstrapPacket(input = {}) {
       cold: "Thread History Vault/raw session/archive pointers only; readByDefault=false unless an explicit recovery hard gate is satisfied",
       coldLayer: { defaultRead: false, requiresExplicitGate: true },
     },
-    recommendedHooks: [
-      {
-        hook: "retrieve_context",
-        queryType: "project_resume",
-        tokenBudget: 1800,
-        reason: "recover hot/warm project state before reading old thread history",
-      },
-      {
-        hook: "retrieve_precedent",
-        queryType: "thread_recovery",
-        tokenBudget: 1000,
-        reason: "find known broken-thread and bloat lessons",
-      },
-      {
-        hook: "writeback_evidence",
-        queryType: "handoff",
-        tokenBudget: 800,
-        reason: "write compact decisions back after each accepted slice",
-      },
-    ],
+    recommendedHooks: [{
+      hook: "prepare_takeover",
+      queryType: "thread_recovery",
+      tokenBudget: budgetEnvelope.preferredTokenBudget,
+      reason: "use one verified app-owned envelope; this legacy plan is not replacement context",
+    }],
     sourceRefs: sourceRefResult.refs,
     coldHistorySources: coldPointers,
     oneLinePrompt: `你是 ${projectName} 的新 CEO 接管线程。请使用知匣 Memory Runtime 恢复当前项目状态：先读 Hot/Warm/Skill 记忆和 canonical docs，Cold/raw 历史只看 sourceRefs，不默认加载旧线程全文、图片/base64 或完整工具日志。`,
@@ -397,6 +281,23 @@ function buildCeoTakeoverBootstrapPacket(input = {}) {
   };
 }
 
+function prepareCeoTakeover(options = {}, { executeRuntime, storeRoot }) {
+  const workspace = options.projectPath || options.workspace;
+  if (!workspace) throw new Error("takeover_canonical_workspace_required");
+  return executeRuntime({
+    operation: "prepare_takeover",
+    workspace,
+    storeRoot,
+    taskGoal: options.taskGoal || options.goal || options.query || options.projectName || options.title || "CEO takeover",
+    queryType: "thread_recovery",
+    tokenBudget: options.tokenBudget,
+    maxTokenBudget: options.maxTokenBudget,
+    strictTokenBudget: options.strictTokenBudget,
+    limit: options.maxResults || options.limit,
+    readOnly: true,
+  });
+}
+
 module.exports = {
   CEO_LIFECYCLE_STAGES,
   CEO_LIFECYCLE_WRITEBACK_SCHEMA,
@@ -405,4 +306,5 @@ module.exports = {
   buildCeoLifecycleWritebackPacket,
   buildCeoTakeoverBootstrapPacket,
   evaluateCeoThreadPressure,
+  prepareCeoTakeover,
 };

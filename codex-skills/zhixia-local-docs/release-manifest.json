@@ -14,12 +14,12 @@
     "symlinkPolicy": "forbid",
     "specialFilePolicy": "forbid"
   },
-  "entryCount": 16,
+  "entryCount": 17,
   "entries": [
     {
       "path": "SKILL.md",
-      "bytes": 15970,
-      "sha256": "531bfa4cff948927b41c14d54850cc83fff7a2bb31474d054c9a4d1ac45672d9"
+      "bytes": 17004,
+      "sha256": "d8fee0e670a3a3996c56621d1375de17f980410f60f528b7cb905703ed719a0f"
     },
     {
       "path": "agents/openai.yaml",
@@ -28,8 +28,8 @@
     },
     {
       "path": "references/app-owned-memory-runtime.md",
-      "bytes": 10055,
-      "sha256": "84bef0142d6321d81884f800f80a8fc18d9663c29158213e3426bcd9eb972da1"
+      "bytes": 11060,
+      "sha256": "62c8f0cc54ffd38a03049050931c131bb2840d7949d4858a0c486b9da3d63fd1"
     },
     {
       "path": "references/context-bundle.md",
@@ -43,8 +43,8 @@
     },
     {
       "path": "references/memory-core-lifecycle.md",
-      "bytes": 10708,
-      "sha256": "1fb5ba5117372a9272bdcf3ce6b707b8514633e28daed4c1951714818ff4b0d5"
+      "bytes": 10875,
+      "sha256": "e72d71a53fdefcd7d0cbe9296909153a289dd22411f15ad4df87c2e01d8dc7f7"
     },
     {
       "path": "references/openclaw-cold-archive.md",
@@ -53,13 +53,18 @@
     },
     {
       "path": "scripts/codex-control-mcp.cjs",
-      "bytes": 31420,
-      "sha256": "c4eb443ee89de5566acb973eda3da11ae0182b737a0ccb6935754125cae18154"
+      "bytes": 31503,
+      "sha256": "19c1cb7260577acc26c5c8743023124c801475592f5e18b7b14d41fe579d1be4"
     },
     {
       "path": "scripts/invoke-app-memory-runtime.cjs",
       "bytes": 5659,
       "sha256": "18642d5b74a4837dc04751b072b2737b0a4f1f52a0b8b4a41b8edf75d16548b8"
+    },
+    {
+      "path": "scripts/memory-context-policy.cjs",
+      "bytes": 3418,
+      "sha256": "ab122f133d24659a2669e8d472cc523531911fcc414d336ff09c42a051294ed9"
     },
     {
       "path": "scripts/memory-runtime-headless.cjs",
@@ -93,10 +98,10 @@
     },
     {
       "path": "scripts/read-project-knowledge.cjs",
-      "bytes": 148033,
-      "sha256": "57e15342d4665446ffe65659949119b92aa04814bfb103742e0c2e854d42f22b"
+      "bytes": 144801,
+      "sha256": "61aba4173196722fd6f96238e5754c9e7d7b356650f9dd5de900eadcc619a235"
     }
   ],
-  "payloadSha256": "b5ec0c67a663a198561aa1ad883f59f16514204641ba29af5d7d54fe70baf1ca",
-  "releaseGeneration": "sha256:b5ec0c67a663a198561aa1ad883f59f16514204641ba29af5d7d54fe70baf1ca"
+  "payloadSha256": "0101a5ee6f1348e765dff9d58ebbdfa769ade36d7425720643969c56fbafec84",
+  "releaseGeneration": "sha256:0101a5ee6f1348e765dff9d58ebbdfa769ade36d7425720643969c56fbafec84"
 }

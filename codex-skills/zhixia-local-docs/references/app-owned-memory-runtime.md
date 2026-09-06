@@ -27,6 +27,10 @@ Only treat the result as current authority when all of these fields are true:
 
 The response also carries `takeover.schemaVersion=zhixia.takeover_control.v2` and a deterministic `takeover.hostRequirements` envelope. Consumers must verify its digest and enforce all of these Host-side requirements before injection: use a distinct clean replacement task, replace context instead of appending, do not fork/copy full old history, keep the frozen task permanently non-executable and free of automatic wakeups, build a compact ThreadRecoveryPacket, and unbind the old harvest driver before binding one replacement driver. Callback relay is limited to compact decisions, hashes, diffs, and evidence refs. Zhixia explicitly reports `existingTaskHistoryTrimmableByMemoryRuntime=false`; it supplies recovery context but cannot remove Codex task history.
 
+A nonready response carries `takeover.failureDisposition`: pause the memory-dependent lane, deny stale injection and authority-dependent writes, and preserve any existing Host freeze. It does not newly freeze the caller or grant permission for unrelated work. Already-authorized independent lanes remain subject to their own Host preflight. Use one bounded verify to diagnose the failure; never replay an ambiguous refresh.
+
+The legacy Mac `buildCeoTakeoverBootstrap` IPC now returns the exact app-owned `prepare_takeover` envelope instead of the old nested bootstrap/continuity shape. It requires an explicit workspace, uses strict read-only retrieval, and shares the adaptive budget (default 2200, maximum 10000) with the CLI. Consumers should read `items`, `takeover` and `performance.budgetEnvelope`; do not expect `continuityPacket` or `oneLinePrompt`. The standalone compatibility helper remains non-authoritative and strictly budgeted; its plan cannot substitute for verified replacement context.
+
 `fallback_stale`, helper-only output, a missing CLI, an incomplete continuity manifest, a changed HEAD, or changed canonical source hashes cannot authorize recovery.
 
 ## Cross-Project Read-Only Bootstrap

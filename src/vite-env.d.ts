@@ -1693,12 +1693,7 @@ export type ThreadRecoveryPacket = {
   tokenEstimate: number;
 };
 
-export type CeoThreadPressureAction =
-  | "continue"
-  | "writeback_required"
-  | "harvest_only"
-  | "takeover_recommended"
-  | "freeze_risk_stop_dispatch";
+export type CeoThreadPressureAction = "advisory_only";
 
 export type CeoThreadPressureMetrics = {
   sessionBytes?: number;
@@ -1715,14 +1710,19 @@ export type CeoThreadPressureMetrics = {
 };
 
 export type CeoThreadPressureReport = {
-  schemaVersion: "zhixia.ceo_memory_runtime_guard.v1";
+  schemaVersion: "zhixia.ceo_memory_runtime_guard.v2";
   generatedAt: string;
   threadId?: string | null;
   projectPath?: string | null;
-  pressureLevel: "ok" | "watch" | "warning" | "high" | "critical" | string;
+  pressureLevel: "unknown";
+  authority: "none";
+  assessmentScope: "archive_metadata_only";
+  hostAssessmentRequired: true;
+  contextSafe: null;
   action: CeoThreadPressureAction;
-  sessionMb: number;
-  metrics: Required<CeoThreadPressureMetrics>;
+  sessionMb: number | null;
+  metrics: { [K in keyof Required<CeoThreadPressureMetrics>]: number | null };
+  missingMetrics: string[];
   gates: {
     writebackRequired: boolean;
     stopNewDispatch: boolean;
@@ -1764,6 +1764,43 @@ export type CeoLifecycleWritebackPacket = {
   };
 };
 
+export type MemoryContextBudgetEnvelope = {
+  mode: "strict" | "adaptive";
+  preferredTokenBudget: number;
+  maxTokenBudget: number;
+  hardTokenLimit: 10000;
+  strictTokenBudget: boolean;
+};
+
+export type AppOwnedTakeoverPacket = {
+  operation: "prepare_takeover";
+  memoryMode: string;
+  authorityVerification: string;
+  current: boolean;
+  recoveryReady: boolean;
+  returnedCount: number;
+  contextGenerationId: string;
+  items: unknown[];
+  tokenEstimate: number;
+  packetBytes: number;
+  performance: {
+    budgetEnvelope: MemoryContextBudgetEnvelope & { effectiveTokenBudget: number; attemptedTokenBudgets: number[] };
+  };
+  takeover: {
+    schemaVersion: "zhixia.takeover_control.v2";
+    shouldInject: boolean;
+    maxInjectionsPerTask: 1;
+    hostRequirements: Record<string, unknown>;
+    failureDisposition: null | {
+      scope: "memory_dependent_lane";
+      freezeCaller: false;
+      preserveExistingHostFreeze: true;
+      grantsExecutionAuthority: false;
+    };
+    nextAction: string;
+  };
+};
+
 export type CeoTakeoverBootstrapPacket = {
   schemaVersion: "zhixia.ceo_takeover_bootstrap_packet.v1";
   mode: "ceo_takeover_bootstrap_packet";
@@ -1774,7 +1811,10 @@ export type CeoTakeoverBootstrapPacket = {
     replacementThreadId?: string | null;
     staleThreadIds: string[];
   };
-  request: { taskGoal: string; tokenBudget: number; queryType: "thread_recovery" | string };
+  request: { taskGoal: string; tokenBudget: number; budgetEnvelope: MemoryContextBudgetEnvelope; queryType: "thread_recovery" | string };
+  authoritative: false;
+  replacementContextAllowed: false;
+  preferredOperation: "prepare_takeover";
   threadPressure: CeoThreadPressureReport;
   recallPlan: {
     defaultReadOrder: string[];
@@ -2302,7 +2342,7 @@ declare global {
       retrieveMemoryRuntimePrecedent: (options?: { taskType?: string; task_type?: string; query?: string; projectPath?: string | null; parentCeoThreadId?: string | null; tokenBudget?: number; maxResults?: number; allowedKinds?: AgentRetrieveKind[] }) => Promise<RuntimeContextPacket>;
       recoverMemoryRuntimeThread: (options?: { threadId?: string | null; ceoThreadId?: string | null; title?: string; threadTitle?: string; query?: string; taskGoal?: string; projectPath?: string | null; tokenBudget?: number; maxResults?: number; replacementThreadId?: string | null; takeoverThreadId?: string | null; observeRuntimeEvent?: boolean }) => Promise<ThreadRecoveryPacket>;
       evaluateCeoThreadPressure: (options?: CeoThreadPressureMetrics & { threadId?: string | null; currentThreadId?: string | null; projectPath?: string | null }) => Promise<CeoThreadPressureReport>;
-      buildCeoTakeoverBootstrap: (options?: CeoThreadPressureMetrics & { projectName?: string; projectPath?: string | null; projectSummary?: string; title?: string; taskGoal?: string; goal?: string; query?: string; currentCeoThreadId?: string | null; threadId?: string | null; parentCeoThreadId?: string | null; replacementThreadId?: string | null; takeoverThreadId?: string | null; staleThreadIds?: string[]; badThreadIds?: string[]; sourceRefs?: SourceRef[]; coldHistorySources?: SourceRef[]; pressure?: CeoThreadPressureReport; tokenBudget?: number; maxResults?: number }) => Promise<CeoTakeoverBootstrapPacket>;
+      buildCeoTakeoverBootstrap: (options?: CeoThreadPressureMetrics & { projectName?: string; projectPath?: string | null; projectSummary?: string; title?: string; taskGoal?: string; goal?: string; query?: string; currentCeoThreadId?: string | null; threadId?: string | null; parentCeoThreadId?: string | null; replacementThreadId?: string | null; takeoverThreadId?: string | null; staleThreadIds?: string[]; badThreadIds?: string[]; sourceRefs?: SourceRef[]; coldHistorySources?: SourceRef[]; pressure?: CeoThreadPressureReport; tokenBudget?: number; maxTokenBudget?: number; strictTokenBudget?: boolean; maxResults?: number }) => Promise<AppOwnedTakeoverPacket>;
       buildCeoLifecycleWriteback: (options?: Partial<CeoLifecycleWritebackPacket> & Record<string, unknown>) => Promise<CeoLifecycleWritebackPacket>;
       writebackMemoryRuntimeEvidence: (packet: EvidenceWritebackPacket) => Promise<EvidenceWritebackReceipt>;
       observeMemoryRuntimeEvent: (event: RuntimeEventMemoryInput) => Promise<RuntimeEventMemoryReceipt>;

@@ -1182,8 +1182,10 @@ function main() {
       "27438",
       "--json",
     ]);
-    assert.equal(pressure.schemaVersion, "zhixia.ceo_memory_runtime_guard.v1", "helper should expose CEO pressure schema");
-    assert.equal(pressure.action, "freeze_risk_stop_dispatch", "helper pressure mode should stop dispatch for giant image/base64 threads");
+    assert.equal(pressure.schemaVersion, "zhixia.ceo_memory_runtime_guard.v2", "helper should expose diagnostic-only pressure schema");
+    assert.equal(pressure.action, "advisory_only", "helper archive pressure never governs dispatch");
+    assert.equal(pressure.contextSafe, null);
+    assert.ok(Object.values(pressure.gates).every((gate) => gate === false));
     assert.equal(pressure.performance.startsTimers, false, "helper pressure mode must not start timers");
     assert.equal(pressure.performance.scansVault, false, "helper pressure mode must not scan vault");
     assert.equal(pressure.performance.readsRawSessionBody, false, "helper pressure mode must not read raw session bodies");
@@ -1210,7 +1212,20 @@ function main() {
     ]);
     assert.equal(takeover.schemaVersion, "zhixia.ceo_takeover_bootstrap_packet.v1", "helper should expose CEO takeover bootstrap schema");
     assert.equal(takeover.mode, "ceo_takeover_bootstrap_packet", "helper takeover mode should be explicit");
-    assert.equal(takeover.threadPressure.action, "freeze_risk_stop_dispatch", "takeover should include pressure gate");
+    assert.equal(takeover.threadPressure.action, "advisory_only", "legacy takeover never asserts Host pressure authority");
+    assert.equal(takeover.replacementContextAllowed, false);
+    assert.equal(takeover.request.tokenBudget, 2200, "legacy takeover default should agree with app-owned preferred budget");
+    for (const args of [["--ceo-takeover", "--token-budget", "10000"], ["--token-budget", "10000", "--ceo-takeover"]]) {
+      const packet = runHelper(workspace, [...args, "--json"]);
+      assert.equal(packet.request.tokenBudget, 10000, "helper accepts the same ceiling independent of argument order");
+      assert.equal(packet.budgetEnvelope.maxTokenBudget, 10000);
+      assert.equal(packet.budgetEnvelope.mode, "strict", "legacy helper must not claim adaptive verified retrieval");
+      assert.equal(packet.recommendedHooks[0].hook, "prepare_takeover");
+      assert.equal(packet.recommendedHooks[0].tokenBudget, 10000);
+    }
+    const missingPressure = runHelper(workspace, ["--thread-pressure", "--json"]);
+    assert.equal(missingPressure.metrics.sessionBytes, null);
+    assert.ok(missingPressure.missingMetrics.includes("sessionBytes"));
     assert.equal(takeover.recallPlan.coldLayer.defaultRead, false, "takeover cold layer should stay pointer-only");
     assert.equal(takeover.safety.rawSessionBodyRead, false, "takeover helper must not read raw session bodies");
     assert.equal(takeover.safety.startsTimers, false, "takeover helper must not start timers");

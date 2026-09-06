@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { fileURLToPath } = require("node:url");
+const { evaluateArchivePressure, retrievalBudgetEnvelope, MAX_RETRIEVAL_TOKEN_BUDGET } = require("./memory-context-policy.cjs");
 const {
   deriveProjectIdentityEnvelope,
   pathBelongsToProject,
@@ -65,7 +66,7 @@ const DEFAULT_TOKEN_BUDGET = 1200;
 const DEFAULT_RECOVERY_TOKEN_BUDGET = 1800;
 const MAX_LIMIT = 40;
 const MIN_TOKEN_BUDGET = 200;
-const MAX_TOKEN_BUDGET = 4000;
+const MAX_TOKEN_BUDGET = MAX_RETRIEVAL_TOKEN_BUDGET;
 const MB = 1024 * 1024;
 const MAX_KNOWLEDGE_FILE_BYTES = 256 * 1024;
 const FRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -284,17 +285,17 @@ function parseArgs(argv) {
     projectName: "",
     projectSummary: "",
     taskGoal: "",
-    sessionBytes: 0,
-    lineCount: 0,
-    maxLineChars: 0,
-    linesOver100k: 0,
-    dataImageHits: 0,
-    base64Hits: 0,
-    imagePathHits: 0,
-    toolOutputLikeHits: 0,
-    visibleThreadCount: 0,
-    activeWorkerCount: 0,
-    longTitleCount: 0,
+    sessionBytes: null,
+    lineCount: null,
+    maxLineChars: null,
+    linesOver100k: null,
+    dataImageHits: null,
+    base64Hits: null,
+    imagePathHits: null,
+    toolOutputLikeHits: null,
+    visibleThreadCount: null,
+    activeWorkerCount: null,
+    longTitleCount: null,
     writebackDryRun: false,
     evidenceJson: "",
     evidenceOut: "",
@@ -355,7 +356,6 @@ function parseArgs(argv) {
     } else if (item === "--ceo-takeover" || item === "--takeover-bootstrap") {
       args.ceoTakeover = true;
       args.queryType = "thread_recovery";
-      args.tokenBudget = Math.max(args.tokenBudget, DEFAULT_RECOVERY_TOKEN_BUDGET);
     } else if (item === "--evaluate-ceo-pressure" || item === "--thread-pressure") {
       args.evaluateCeoPressure = true;
     } else if (item === "--thread-id") {
@@ -465,6 +465,11 @@ function parseArgs(argv) {
     }
   }
   if (args.queryType === "retrieve_context") args.runtimeContext = true;
+  if (args.ceoTakeover) {
+    args.tokenBudget = retrievalBudgetEnvelope({
+      tokenBudget: argv.includes("--token-budget") ? args.tokenBudget : undefined,
+    }, "prepare_takeover").preferredTokenBudget;
+  }
   if (args.queryType === "retrieve_precedent") args.precedent = true;
   if (args.queryType === "recover_thread" || args.queryType === "thread_recovery") args.recoverThread = true;
   if (args.precedent && args.includeKinds.length === 0) args.includeKinds = PRECEDENT_KINDS;
@@ -2758,102 +2763,13 @@ function buildThreadRecoveryPacket(retrieval, options) {
   return packet;
 }
 
-function pressureMetric(options, name) {
-  return Math.max(0, Number(options[name] || 0) || 0);
-}
-
 function evaluateCeoThreadPressure(options = {}) {
-  const metrics = {
-    sessionBytes: pressureMetric(options, "sessionBytes"),
-    lineCount: pressureMetric(options, "lineCount"),
-    maxLineChars: pressureMetric(options, "maxLineChars"),
-    linesOver100k: pressureMetric(options, "linesOver100k"),
-    dataImageHits: pressureMetric(options, "dataImageHits"),
-    base64Hits: pressureMetric(options, "base64Hits"),
-    imagePathHits: pressureMetric(options, "imagePathHits"),
-    toolOutputLikeHits: pressureMetric(options, "toolOutputLikeHits"),
-    visibleThreadCount: pressureMetric(options, "visibleThreadCount"),
-    activeWorkerCount: pressureMetric(options, "activeWorkerCount"),
-    longTitleCount: pressureMetric(options, "longTitleCount"),
-  };
-  const gates = {
-    writebackRequired: false,
-    stopNewDispatch: false,
-    harvestOnly: false,
-    takeoverRecommended: false,
-    freezeRisk: false,
-  };
-  const warnings = [];
-  if (metrics.sessionBytes >= 50 * MB || metrics.maxLineChars >= 100000 || metrics.linesOver100k > 0) {
-    gates.writebackRequired = true;
-    warnings.push("thread_pressure_writeback_required");
-  }
-  if (metrics.sessionBytes >= 100 * MB || metrics.linesOver100k >= 25 || metrics.toolOutputLikeHits >= 5000) {
-    gates.harvestOnly = true;
-    warnings.push("thread_pressure_harvest_only");
-  }
-  if (metrics.sessionBytes >= 150 * MB || metrics.linesOver100k >= 80 || metrics.dataImageHits >= 200 || metrics.base64Hits >= 1000) {
-    gates.takeoverRecommended = true;
-    warnings.push("thread_pressure_takeover_recommended");
-  }
-  if (metrics.sessionBytes >= 200 * MB || metrics.linesOver100k >= 150 || metrics.dataImageHits >= 1000 || metrics.base64Hits >= 2000) {
-    gates.freezeRisk = true;
-    gates.stopNewDispatch = true;
-    warnings.push("thread_pressure_freeze_risk_stop_dispatch");
-  }
-  if (metrics.activeWorkerCount >= 4 || metrics.visibleThreadCount >= 8 || metrics.longTitleCount >= 8) {
-    gates.writebackRequired = true;
-    gates.harvestOnly = true;
-    warnings.push("multi_thread_visible_pressure_harvest_only");
-  }
-  const pressureLevel = gates.freezeRisk
-    ? "critical"
-    : gates.takeoverRecommended
-    ? "high"
-    : gates.harvestOnly
-    ? "warning"
-    : gates.writebackRequired
-    ? "watch"
-    : "ok";
-  const action = gates.freezeRisk
-    ? "freeze_risk_stop_dispatch"
-    : gates.takeoverRecommended
-    ? "takeover_recommended"
-    : gates.harvestOnly
-    ? "harvest_only"
-    : gates.writebackRequired
-    ? "writeback_required"
-    : "continue";
-  return {
-    schemaVersion: "zhixia.ceo_memory_runtime_guard.v1",
-    generatedAt: new Date().toISOString(),
-    threadId: options.threadId || options.currentCeoThreadId || null,
-    projectPath: options.workspace || options.projectPath || null,
-    pressureLevel,
-    action,
-    sessionMb: Number((metrics.sessionBytes / MB).toFixed(2)),
-    metrics,
-    gates,
-    recommendations: [
-      gates.writebackRequired ? "write_compact_ceo_memory_before_more_work" : "",
-      gates.harvestOnly ? "harvest_existing_workers_do_not_dispatch_new_lanes" : "",
-      gates.takeoverRecommended ? "build_takeover_bootstrap_packet_for_clean_ceo_thread" : "",
-      gates.freezeRisk ? "stop_using_visible_bloated_thread_for_new_work" : "",
-      metrics.dataImageHits || metrics.base64Hits ? "keep_visual_evidence_as_local_paths_hashes_summaries_not_chat_payloads" : "",
-    ].filter(Boolean),
-    warnings,
-    performance: {
-      purePolicy: true,
-      startsTimers: false,
-      scansVault: false,
-      readsRawSessionBody: false,
-      mutatesCodexSessions: false,
-      archiveCompactDeleteMoveRestore: false,
-    },
-  };
+  return evaluateArchivePressure(options);
 }
 
 function buildCeoTakeoverBootstrapPacket(retrieval, options) {
+  const budgetEnvelope = retrievalBudgetEnvelope({ ...options, strictTokenBudget: true }, "prepare_takeover");
+  options = { ...options, tokenBudget: budgetEnvelope.preferredTokenBudget };
   const context = buildRuntimeContextPacket(retrieval, {
     ...options,
     queryType: "project_resume",
@@ -2890,6 +2806,10 @@ function buildCeoTakeoverBootstrapPacket(retrieval, options) {
       tokenBudget: options.tokenBudget,
       queryType: "thread_recovery",
     },
+    authoritative: false,
+    replacementContextAllowed: false,
+    preferredOperation: "prepare_takeover",
+    budgetEnvelope,
     threadPressure: pressure,
     runtimeContext: context,
     recoveryPacket: {
@@ -2909,11 +2829,12 @@ function buildCeoTakeoverBootstrapPacket(retrieval, options) {
       cold: "Thread History Vault/raw session/archive pointers only; readByDefault=false unless an explicit recovery hard gate is satisfied",
       coldLayer: { defaultRead: false, requiresExplicitGate: true },
     },
-    recommendedHooks: [
-      { hook: "retrieve_context", queryType: "project_resume", tokenBudget: 1800, reason: "recover hot/warm project state before old-thread history" },
-      { hook: "retrieve_precedent", queryType: "thread_recovery", tokenBudget: 1000, reason: "find broken-thread and bloat lessons" },
-      { hook: "writeback_evidence", queryType: "handoff", tokenBudget: 800, reason: "write compact decisions after each accepted slice" },
-    ],
+    recommendedHooks: [{
+      hook: "prepare_takeover",
+      queryType: "thread_recovery",
+      tokenBudget: budgetEnvelope.preferredTokenBudget,
+      reason: "use one verified app-owned envelope; this legacy plan is not replacement context",
+    }],
     sourceRefs: context.sourceRefs,
     coldHistorySources: recovery.coldHistorySources,
     oneLinePrompt: `你是 ${projectName} 的新 CEO 接管线程。请使用知匣 Memory Runtime 恢复当前项目状态：先读 Hot/Warm/Skill 记忆和 canonical docs，Cold/raw 历史只看 sourceRefs，不默认加载旧线程全文、图片/base64 或完整工具日志。`,
