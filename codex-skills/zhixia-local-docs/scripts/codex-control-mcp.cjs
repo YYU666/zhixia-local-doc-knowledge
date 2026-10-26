@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const fs = require("node:fs");
+const crypto = require("node:crypto");
 const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline");
@@ -8,7 +9,7 @@ const { spawnSync } = require("node:child_process");
 const { invoke } = require("./invoke-app-memory-runtime.cjs");
 
 const SERVER_NAME = "zhixia-control";
-const SERVER_VERSION = "1.4.0";
+const SERVER_VERSION = "1.5.0";
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 const MAX_MESSAGE_BYTES = 128 * 1024;
 const MAX_PORTFOLIO_WORKSPACES = 6;
@@ -134,6 +135,26 @@ const tools = [
     inputSchema: {
       type: "object",
       properties: retrievalProperties,
+      required: ["workspace", "taskGoal"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "sync_context",
+    description: "At a CEO safe boundary, verify the exact project and return compact context only for a new authoritative generation. An unchanged or stale project returns no memory items. The caller must persist the last consumed generation and invoke this tool at each boundary.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: workspaceProperty,
+        taskGoal: { type: "string", minLength: 1, maxLength: 600 },
+        queryType: { type: "string", maxLength: 80 },
+        knownContextGenerationId: { type: "string", pattern: "^context-[a-zA-Z0-9_-]{1,180}$" },
+        knownContextQueryKey: { type: "string", pattern: "^query-[a-f0-9]{64}$" },
+        tokenBudget: { type: "integer", minimum: 800, maximum: 10000 },
+        limit: { type: "integer", minimum: 1, maximum: 12 },
+        showApp: showAppProperty,
+      },
       required: ["workspace", "taskGoal"],
       additionalProperties: false,
     },
@@ -694,9 +715,115 @@ function portfolioContext(args) {
   return output;
 }
 
+function syncContext(args) {
+  const workspace = resolveWorkspace(args.workspace);
+  if (typeof args.taskGoal !== "string" || !args.taskGoal.trim() || args.taskGoal.length > 600) {
+    throw new Error("zhixia_control_sync_task_goal_required");
+  }
+  const tokenBudget = boundedPortfolioInteger(args.tokenBudget, 1600, 800, 10000,
+    "zhixia_control_sync_token_budget_invalid");
+  const limit = boundedPortfolioInteger(args.limit, 6, 1, 12,
+    "zhixia_control_sync_limit_invalid");
+  const knownGeneration = args.knownContextGenerationId || null;
+  if (knownGeneration !== null && (typeof knownGeneration !== "string"
+      || !/^context-[a-zA-Z0-9_-]{1,180}$/.test(knownGeneration))) {
+    throw new Error("zhixia_control_sync_known_generation_invalid");
+  }
+  const knownQueryKey = args.knownContextQueryKey || null;
+  if (knownQueryKey !== null && (typeof knownQueryKey !== "string" || !/^query-[a-f0-9]{64}$/.test(knownQueryKey))) {
+    throw new Error("zhixia_control_sync_known_query_key_invalid");
+  }
+  const queryType = args.queryType || "task_dispatch";
+  if (typeof queryType !== "string" || queryType.length > 80) throw new Error("zhixia_control_sync_query_type_invalid");
+  const contextQueryKey = `query-${crypto.createHash("sha256")
+    .update(JSON.stringify([queryType, args.taskGoal.trim()])).digest("hex")}`;
+  const app = args.showApp === true ? openApp(workspace) : null;
+  const verified = invokeRuntime({ operation: "verify", workspace, taskGoal: args.taskGoal });
+  const identity = compactPortfolioIdentity(verified.projectIdentity);
+  const scanBinding = {
+    matched: verified.scanBinding?.matched === true,
+    currentScanSha256: verified.scanBinding?.currentScanSha256 || null,
+    authorizedCheckpointId: verified.scanBinding?.authorizedCheckpointId || null,
+  };
+  const ready = portfolioProjectStatus(verified) === "ready";
+  const common = {
+    schemaVersion: "zhixia.sync_context.v1",
+    operation: "sync_context",
+    readOnly: true,
+    writeAuthority: false,
+    workspace,
+    projectIdentity: identity,
+    scanBinding,
+    memoryMode: verified.memoryMode || "fallback_stale",
+    authorityVerification: verified.authorityVerification || "unavailable",
+    current: ready,
+    recoveryReady: ready,
+    contextGenerationId: ready ? verified.contextGenerationId || null : null,
+    contextQueryKey,
+    returnedCount: 0,
+    tokenEstimate: 0,
+    items: [],
+    sourceRefs: [],
+    warnings: (verified.warnings || []).slice(0, 8),
+    safety: { rawSessionBodyRead: false, lifecycleWrites: false, staleInjection: false },
+    ...(app ? { app } : {}),
+  };
+  if (!ready || !/^context-[a-zA-Z0-9_-]{1,180}$/.test(String(verified.contextGenerationId || ""))) {
+    return { ...common, status: "stale", current: false, recoveryReady: false,
+      contextGenerationId: null, nextAction: "repair_exact_authority_then_sync_again" };
+  }
+  if (knownGeneration === verified.contextGenerationId && knownQueryKey === contextQueryKey) {
+    return { ...common, status: "unchanged", nextAction: "continue_without_reinjecting_context" };
+  }
+  const retrieved = invokeRuntime({
+    operation: "retrieve",
+    workspace,
+    taskGoal: args.taskGoal,
+    queryType,
+    limit,
+    tokenBudget,
+    maxTokenBudget: tokenBudget,
+    strictTokenBudget: true,
+    readOnly: true,
+  });
+  const projectId = verified.projectIdentity?.projectId;
+  const returnedCount = Number(retrieved.returnedCount || 0);
+  const tokenEstimate = Number(retrieved.tokenEstimate || 0);
+  const stillReady = retrieved.memoryMode === "app_owned_memory_core"
+    && retrieved.authorityVerification === "app_owned_verified"
+    && retrieved.current === true
+    && retrieved.recoveryReady === true
+    && retrieved.scanHash === scanBinding.currentScanSha256
+    && retrieved.projectIdentity?.projectId === projectId
+    && retrieved.contextGenerationId === verified.contextGenerationId
+    && returnedCount > 0
+    && Number.isFinite(tokenEstimate) && tokenEstimate <= tokenBudget;
+  if (!stillReady) {
+    return { ...common, status: "stale", current: false, recoveryReady: false,
+      contextGenerationId: null, warnings: [...new Set([...common.warnings, "sync_retrieve_authority_mismatch"])],
+      nextAction: "repair_exact_authority_then_sync_again" };
+  }
+  const output = {
+    ...common,
+    status: "ready_new",
+    contextGenerationId: retrieved.contextGenerationId,
+    returnedCount,
+    tokenEstimate,
+    items: compactPortfolioItems(retrieved.items, projectId, limit),
+    sourceRefs: compactPortfolioSourceRefs(retrieved.sourceRefs, projectId),
+    warnings: [...new Set([...common.warnings, ...(retrieved.warnings || [])])].slice(0, 8),
+    nextAction: "consume_generation_once_then_persist_known_context_generation_id",
+  };
+  if (Buffer.byteLength(JSON.stringify(output), "utf8") > MAX_PORTFOLIO_PACKET_BYTES) {
+    throw new Error("zhixia_control_sync_packet_too_large");
+  }
+  return output;
+}
+
 function callTool(name, args) {
   if (name === "open_app") return openApp(args.workspace);
   if (name === "portfolio_context") return portfolioContext(args);
+  if (name === "sync_context") return syncContext(args);
   const workspace = resolveWorkspace(args.workspace);
   if (name === "scan_workspace") {
     const app = maybeOpenApp({ ...args, workspace }, true);
@@ -812,7 +939,7 @@ function handleRequest(message) {
       protocolVersion: requestedVersion,
       capabilities: { tools: { listChanged: false } },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
-      instructions: "Use the installed app-owned Zhixia Runtime. Read-only scan/verify/retrieve may run automatically. Lifecycle writes require exact current identity, exact scan, execute=true, and source-backed formal evidence. Never request raw sessions, credentials, images/base64, SQLite, or complete logs.",
+      instructions: "Use sync_context at CEO bootstrap, before dispatch, and after accepted refresh; persist the consumed generation per task and project. Read-only scan/verify/retrieve may run automatically. Lifecycle writes require exact current identity, exact scan, execute=true, and source-backed formal evidence. Never request raw sessions, credentials, images/base64, SQLite, or complete logs.",
     });
     return;
   }

@@ -37,6 +37,8 @@ The legacy Mac `buildCeoTakeoverBootstrap` IPC now returns the exact app-owned `
 
 The `zhixia-control` MCP adapter exposes `portfolio_context` for a task that intentionally spans multiple projects while writing reports to a neutral artifact directory.
 
+For a single canonical project, `sync_context` is the read-only CEO safe-boundary entry point. The caller invokes it at bootstrap, before dispatch, and after accepted refresh with the last consumed `knownContextGenerationId` and `knownContextQueryKey`. It verifies the exact scan first. `ready_new` returns a bounded compact packet when the verified generation or task goal differs; `unchanged` returns no items only for the same generation/query pair; `stale` returns no items and cannot be used for takeover or write authority. The caller must own event triggering and persist per-task/per-project generation/query consumption. The MCP server has no Codex Host push or history-trimming capability, and its response does not prove that a CEO task actually invoked it.
+
 ```json
 {
   "workspaces": ["<canonical root A>", "<canonical root B>"],

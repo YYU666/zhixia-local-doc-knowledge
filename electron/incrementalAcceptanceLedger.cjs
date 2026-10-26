@@ -15,6 +15,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".c", ".cc", ".cpp", ".css", ".go", ".h", ".hpp", ".html", ".java", ".js", ".jsx",
   ".json", ".md", ".mjs", ".cjs", ".py", ".rb", ".rs", ".sh", ".sql", ".ts", ".tsx",
   ".txt", ".vue", ".xml", ".yaml", ".yml",
+  ".lock", ".toml", ".swift", ".mts",
 ]);
 const RAW_SESSION_RE = /(?:\.codex[\\/](?:archived_)?sessions[\\/]|session[_ -]?jsonl|raw[_ -]?session)/i;
 const SECRET_RE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+/=-]{12,}|\bsk-[A-Za-z0-9_-]{12,}|\b(?:ghp|gho|github_pat)_[A-Za-z0-9_]{12,}|\bAKIA[0-9A-Z]{16}\b/i;
@@ -369,7 +370,29 @@ function reconcileAcceptedSlices(request = {}, options = {}) {
   const entries = readEntries(options.storeRoot, projectIdentity.projectId, options.signingKey);
   const heads = pathHeads(entries);
   const requiredPaths = [...new Set((options.requiredChangedPaths || []).map(normalizeRelativePath))].sort();
-  if (requiredPaths.length > MAX_PATHS_PER_RECONCILIATION) throw new Error("incremental_acceptance_reconciliation_capacity_reached");
+  if (requiredPaths.length > MAX_PATHS_PER_RECONCILIATION) {
+    return {
+      schemaVersion: RECONCILIATION_SCHEMA,
+      operation: "reconcile_accepted_slices",
+      status: "not_ready",
+      current: false,
+      recoveryReady: false,
+      authorityGranted: false,
+      writeAuthority: false,
+      workspace,
+      projectIdentity,
+      scanSha256: scan.scanSha256,
+      previousCheckpointId: options.previousCheckpointId || null,
+      stagedEntryCount: entries.length,
+      activePathCount: heads.size,
+      requiredPathCount: requiredPaths.length,
+      maxPathCount: MAX_PATHS_PER_RECONCILIATION,
+      pathListsOmitted: true,
+      blockers: ["incremental_acceptance_reconciliation_capacity_reached"],
+      readyForAuthorityReview: false,
+      nextAction: "review_bounded_snapshot_or_partition_workspace_delta",
+    };
+  }
   const currentHashes = new Map((options.currentPostimages || []).map((item) => [normalizeRelativePath(item.relativePath), item.sha256]));
   const matchedPaths = [];
   const uncoveredPaths = [];

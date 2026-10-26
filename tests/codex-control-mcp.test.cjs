@@ -5,7 +5,7 @@ const path = require("node:path");
 const readline = require("node:readline");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
-const { execute } = require("../electron/memoryRuntimeCli.cjs");
+const { execute, issueAcceptedEvidenceReceiptFromApp } = require("../electron/memoryRuntimeCli.cjs");
 const { listMemoryRuntimeTriggerReceipts } = require("../electron/memoryRuntimeIndexStore.cjs");
 
 const appRoot = path.resolve(__dirname, "..");
@@ -148,13 +148,13 @@ async function main() {
       clientInfo: { name: "codex-control-test", version: "1.0.0" },
     });
     assert.equal(initialize.result.serverInfo.name, "zhixia-control");
-    assert.equal(initialize.result.serverInfo.version, "1.4.0");
+    assert.equal(initialize.result.serverInfo.version, "1.5.0");
     client.notify("notifications/initialized");
 
     const listed = await client.request("tools/list");
     assert.deepEqual(
       listed.result.tools.map((tool) => tool.name),
-      ["open_app", "scan_workspace", "verify_project", "retrieve_context", "portfolio_context", "prepare_takeover", "stage_accepted_slice", "reconcile_accepted_slices", "writeback_evidence", "refresh_binding"],
+      ["open_app", "scan_workspace", "verify_project", "retrieve_context", "sync_context", "portfolio_context", "prepare_takeover", "stage_accepted_slice", "reconcile_accepted_slices", "writeback_evidence", "refresh_binding"],
     );
     const takeoverTool = listed.result.tools.find((tool) => tool.name === "prepare_takeover");
     assert.equal(takeoverTool.inputSchema.properties.tokenBudget.maximum, 10000);
@@ -424,7 +424,154 @@ async function main() {
     assert.equal(arbitraryUri.result.isError, true);
     assert.match(arbitraryUri.result.content[0].text, /lifecycle_non_file_source_ref_not_trusted/);
 
-    const serialized = JSON.stringify({ opened, scanned, verified, writeback, portfolio, arbitraryUri });
+    const beforeSync = snapshotFileContents(storeRoot);
+    const sync = await client.request("tools/call", {
+      name: "sync_context",
+      arguments: { workspace, taskGoal: "Resume accepted project work", tokenBudget: 2200 },
+    });
+    assert.equal(sync.result.isError, false, JSON.stringify(sync));
+    const synced = sync.result.structuredContent;
+    assert.equal(synced.status, "ready_new", JSON.stringify(synced));
+    assert.equal(synced.current, true);
+    assert.equal(synced.recoveryReady, true);
+    assert.equal(synced.readOnly, true);
+    assert.equal(synced.writeAuthority, false);
+    assert.ok(synced.returnedCount > 0);
+    assert.ok(synced.tokenEstimate <= 2200);
+    assert.match(synced.contextGenerationId, /^context-/);
+    assert.match(synced.contextQueryKey, /^query-[a-f0-9]{64}$/);
+    assert.ok(synced.items.length > 0);
+    assert.deepEqual(snapshotFileContents(storeRoot), beforeSync, "sync must not mutate app-owned memory");
+
+    const unchangedSync = await client.request("tools/call", {
+      name: "sync_context",
+      arguments: {
+        workspace, taskGoal: "Resume accepted project work",
+        knownContextGenerationId: synced.contextGenerationId,
+        knownContextQueryKey: synced.contextQueryKey,
+      },
+    });
+    assert.equal(unchangedSync.result.isError, false, JSON.stringify(unchangedSync));
+    assert.equal(unchangedSync.result.structuredContent.status, "unchanged");
+    assert.equal(unchangedSync.result.structuredContent.returnedCount, 0);
+    assert.deepEqual(unchangedSync.result.structuredContent.items, []);
+    assert.deepEqual(snapshotFileContents(storeRoot), beforeSync);
+
+    const changedGoalSync = await client.request("tools/call", {
+      name: "sync_context",
+      arguments: {
+        workspace, taskGoal: "Review a different module",
+        knownContextGenerationId: synced.contextGenerationId,
+        knownContextQueryKey: synced.contextQueryKey,
+      },
+    });
+    assert.equal(changedGoalSync.result.isError, false, JSON.stringify(changedGoalSync));
+    assert.equal(changedGoalSync.result.structuredContent.status, "ready_new");
+    assert.equal(changedGoalSync.result.structuredContent.contextGenerationId, synced.contextGenerationId);
+    assert.notEqual(changedGoalSync.result.structuredContent.contextQueryKey, synced.contextQueryKey);
+    assert.deepEqual(snapshotFileContents(storeRoot), beforeSync);
+
+    fs.writeFileSync(path.join(workspace, "docs", "PRD.md"), "# Unaccepted changed source\n", "utf8");
+    const staleSync = await client.request("tools/call", {
+      name: "sync_context",
+      arguments: { workspace, taskGoal: "Do not inject unaccepted source", knownContextGenerationId: synced.contextGenerationId },
+    });
+    assert.equal(staleSync.result.isError, false, JSON.stringify(staleSync));
+    assert.equal(staleSync.result.structuredContent.status, "stale");
+    assert.equal(staleSync.result.structuredContent.current, false);
+    assert.equal(staleSync.result.structuredContent.recoveryReady, false);
+    assert.equal(staleSync.result.structuredContent.contextGenerationId, null);
+    assert.deepEqual(staleSync.result.structuredContent.items, []);
+    assert.deepEqual(snapshotFileContents(storeRoot), beforeSync, "stale sync must not repair or write authority");
+
+    const acceptedScan = execute({ operation: "scan", workspace, storeRoot, relativePaths: ["docs/PRD.md"] });
+    const acceptedSource = acceptedScan.sourceRefs.find((ref) => ref.title === "docs/PRD.md");
+    assert.ok(acceptedSource);
+    const acceptedReceipt = issueAcceptedEvidenceReceiptFromApp({
+      workspace,
+      storeRoot,
+      execute: true,
+      expectedProjectIdentitySha256: acceptedScan.projectIdentity.projectIdentitySha256,
+      expectedScanSha256: acceptedScan.scanSha256,
+      previousCheckpointId: readyVerify.result.structuredContent.scanBinding.authorizedCheckpointId,
+      acceptedChangedPaths: ["docs/PRD.md"],
+      lane: "codex-control-accepted-doc",
+      decision: "accept",
+    });
+    const refreshed = await client.request("tools/call", {
+      name: "refresh_binding",
+      arguments: {
+        workspace,
+        showApp: false,
+        execute: true,
+        expectedProjectIdentitySha256: acceptedScan.projectIdentity.projectIdentitySha256,
+        expectedScanSha256: acceptedScan.scanSha256,
+        previousCheckpointId: readyVerify.result.structuredContent.scanBinding.authorizedCheckpointId,
+        acceptedEvidenceReceipt: acceptedReceipt.receiptId,
+        acceptedChangedPaths: ["docs/PRD.md"],
+        lane: "codex-control-accepted-doc",
+        title: "Accepted document update",
+        summary: "Source-backed review accepted the updated project document.",
+        sourceRefs: [{ path: "docs/PRD.md", hash: acceptedSource.hash }],
+      },
+    });
+    assert.equal(refreshed.result.isError, false, JSON.stringify(refreshed));
+    assert.equal(refreshed.result.structuredContent.current, true);
+    assert.equal(refreshed.result.structuredContent.recoveryReady, true);
+    const refreshedSync = await client.request("tools/call", {
+      name: "sync_context",
+      arguments: {
+        workspace, taskGoal: "Resume accepted project work",
+        knownContextGenerationId: synced.contextGenerationId,
+        knownContextQueryKey: synced.contextQueryKey,
+      },
+    });
+    assert.equal(refreshedSync.result.isError, false, JSON.stringify(refreshedSync));
+    assert.equal(refreshedSync.result.structuredContent.status, "ready_new");
+    assert.notEqual(refreshedSync.result.structuredContent.contextGenerationId, synced.contextGenerationId);
+    assert.equal(refreshedSync.result.structuredContent.scanBinding.currentScanSha256, acceptedScan.scanSha256);
+    const refreshedAgain = await client.request("tools/call", {
+      name: "sync_context",
+      arguments: {
+        workspace, taskGoal: "Resume accepted project work",
+        knownContextGenerationId: refreshedSync.result.structuredContent.contextGenerationId,
+        knownContextQueryKey: refreshedSync.result.structuredContent.contextQueryKey,
+      },
+    });
+    assert.equal(refreshedAgain.result.isError, false, JSON.stringify(refreshedAgain));
+    assert.equal(refreshedAgain.result.structuredContent.status, "unchanged");
+    assert.deepEqual(refreshedAgain.result.structuredContent.items, []);
+
+    const profilePath = path.join(storeRoot, "scan-profiles", acceptedScan.projectIdentity.projectId,
+      `${acceptedScan.scanSha256}.json`);
+    const profileBytes = fs.readFileSync(profilePath);
+    const invalidProfile = JSON.parse(profileBytes.toString("utf8"));
+    invalidProfile.baselineHead = "invalid-head";
+    fs.writeFileSync(profilePath, `${JSON.stringify(invalidProfile)}\n`);
+    const tamperedProfileSync = await client.request("tools/call", {
+      name: "sync_context",
+      arguments: { workspace, taskGoal: "Do not trust a malformed scan profile" },
+    });
+    assert.equal(tamperedProfileSync.result.isError, false, JSON.stringify(tamperedProfileSync));
+    assert.equal(tamperedProfileSync.result.structuredContent.status, "stale");
+    assert.deepEqual(tamperedProfileSync.result.structuredContent.items, []);
+    fs.writeFileSync(profilePath, profileBytes);
+
+    const malformedGeneration = await client.request("tools/call", {
+      name: "sync_context",
+      arguments: { workspace, taskGoal: "Reject a malformed generation", knownContextGenerationId: "wrong-generation" },
+    });
+    assert.equal(malformedGeneration.result.isError, true);
+    assert.match(malformedGeneration.result.content[0].text, /sync_known_generation_invalid/);
+
+    const malformedQueryKey = await client.request("tools/call", {
+      name: "sync_context",
+      arguments: { workspace, taskGoal: "Reject a malformed query key", knownContextQueryKey: "wrong-key" },
+    });
+    assert.equal(malformedQueryKey.result.isError, true);
+    assert.match(malformedQueryKey.result.content[0].text, /sync_known_query_key_invalid/);
+
+    const serialized = JSON.stringify({ opened, scanned, verified, writeback, portfolio, arbitraryUri, sync, unchangedSync, changedGoalSync, staleSync, refreshedSync });
     assert.doesNotMatch(serialized, /data:image|\.codex[\\/]sessions|BEGIN PRIVATE KEY|A{240}/);
     console.log("Zhixia Codex control MCP tests passed.");
   } finally {

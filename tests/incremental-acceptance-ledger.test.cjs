@@ -113,6 +113,10 @@ function main() {
     { relativePath: "src/a.ts", sha256: firstA },
   ]);
   assert.equal(firstReady.status, "ready_for_authority_review");
+  const additionalSources = ["src/code.swift", "src/config.toml", "src/types.d.mts", "src-tauri/Cargo.lock"];
+  const additionalProbe = reconcile(workspace, identity, storeRoot, signingKey, additionalSources,
+    additionalSources.map((relativePath) => ({ relativePath, sha256: "b".repeat(64) })));
+  assert.equal(additionalProbe.status, "not_ready", "source formats must be recognized without authorizing unaccepted paths");
   assert.equal(firstReady.readyForAuthorityReview, true);
   assert.equal(firstReady.authorityGranted, false);
   assert.match(firstReady.reconciliationProof, /^[a-f0-9]{64}$/);
@@ -181,6 +185,16 @@ function main() {
   const wideReady = reconcile(workspace, identity, storeRoot, signingKey, widePostimages.map((item) => item.relativePath), widePostimages);
   assert.equal(wideReady.readyForAuthorityReview, true);
   assert.equal(wideReady.acceptedChangedPaths.length, 30);
+
+  const overCapacity = reconcile(workspace, identity, storeRoot, signingKey,
+    Array.from({ length: 129 }, (_, index) => `src/overflow-${index}.ts`), []);
+  assert.equal(overCapacity.status, "not_ready");
+  assert.equal(overCapacity.requiredPathCount, 129);
+  assert.equal(overCapacity.maxPathCount, 128);
+  assert.equal(overCapacity.pathListsOmitted, true);
+  assert.equal(overCapacity.authorityGranted, false);
+  assert.equal(overCapacity.readyForAuthorityReview, false);
+  assert.deepEqual(overCapacity.blockers, ["incremental_acceptance_reconciliation_capacity_reached"]);
 
   const mismatchedCandidate = path.join(root, "slice-003", "candidate");
   writeCandidate(mismatchedCandidate, "src/c.ts", "actual content\n");

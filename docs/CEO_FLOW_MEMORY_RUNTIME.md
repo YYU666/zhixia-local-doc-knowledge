@@ -10,6 +10,8 @@ Zhixia is the official local-first Memory Runtime for CEO Flow. It gives CEO Flo
 - CEO Flow 负责何时触发 Memory Trigger Gate / Project Continuity Gate、角色所需槽位、事件预算、task-card/result 字段和 accept/revise/block 决策。
 - packaged `zhixia-local-docs` helper 是 IPC 不可用时的只读 adapter，不是第二个 authority root。
 
+For the installed Codex control surface, `sync_context` combines exact read-only verification, per-task generation/query deduplication, and bounded retrieval in one call. CEO Flow or Codex Host must call it at bootstrap, before dispatch, and after accepted refresh, then persist the consumed generation and query key per project and task. A new task goal may retrieve a different memory selection within the same generation. A stale or unchanged result carries no memory items. This prevents repeated packet injection but does not run autonomously when the Host makes no tool call; it cannot trim an existing CEO chat history. Formal acceptance still requires the app-owned receipt, `refresh_binding`, and reverify before a new generation is available.
+
 ## Project Continuity Gate
 
 Continuity Gate 是事件触发的生命周期 gate，不是每回合 recall，也不是 heartbeat、timer 或后台扫描。

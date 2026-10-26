@@ -43,6 +43,8 @@ const MAX_SCAN_FILES = 48;
 const MAX_SCAN_DIRECTORIES = 48;
 const MAX_SCAN_CANDIDATES = 4096;
 const MAX_WORKTREE_POSTIMAGES = 128;
+const MAX_WORKTREE_INTEGRITY_PATHS = 4096;
+const MAX_WORKTREE_INTEGRITY_BYTES = 128 * 1024 * 1024;
 const MAX_SCANNED_FILE_BYTES = 1024 * 1024;
 const MAX_RESUME_PACKET_BYTES = 16 * 1024;
 const MAX_RETRIEVAL_PACKET_BYTES = 48 * 1024;
@@ -63,6 +65,7 @@ const WORKTREE_TEXT_EXTENSIONS = new Set([
   ...ALLOWED_SOURCE_EXTENSIONS,
   ".c", ".cc", ".cpp", ".css", ".go", ".h", ".hpp", ".html", ".java", ".js", ".jsx",
   ".mjs", ".cjs", ".py", ".rb", ".rs", ".sh", ".sql", ".ts", ".tsx", ".vue", ".xml",
+  ".lock", ".toml", ".swift", ".mts",
 ]);
 const ROOT_SOURCE_FILES = ["README.md", "AGENTS.md", "package.json"];
 const PRIORITY_SOURCE_FILES = [
@@ -83,8 +86,9 @@ const GENERATED_KNOWLEDGE_FILES = [
 ];
 const SKIP_DIRECTORY_NAMES = new Set([
   ".git", ".codex-knowledge", "node_modules", "dist", "release", "artifacts",
-  "coverage", "backups", "vault", "vaults", "tmp", "temp",
+  "coverage", "backups", "vault", "vaults", "tmp", "temp", "evidence",
 ]);
+const DOCUMENT_VISUAL_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]);
 const RAW_SESSION_RE = /(?:\.codex[\\/](?:archived_)?sessions[\\/]|session[_ -]?jsonl|rollout-[^\s]+\.jsonl|raw[_ -]?session[_ -]?(?:body|payload)\s*[:=])/i;
 const SECRET_RE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+/=-]{12,}|\bsk-[A-Za-z0-9_-]{12,}|\b(?:ghp|gho|github_pat)_[A-Za-z0-9_]{12,}|\bAKIA[0-9A-Z]{16}\b/i;
 const BASE64_RE = /(?:data:[^;]+;base64,|[A-Za-z0-9+/]{240,}={0,2})/;
@@ -272,6 +276,15 @@ function hashFileBytes(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
+function canonicalTextSourcePath(relativePath) {
+  const normalized = String(relativePath || "").replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!normalized || path.isAbsolute(normalized) || normalized.split("/").includes("..")) return false;
+  if (normalized.toLowerCase().split("/").some((segment) => SKIP_DIRECTORY_NAMES.has(segment))) return false;
+  if (normalized.startsWith("docs/") && DOCUMENT_VISUAL_EXTENSIONS.has(path.extname(normalized).toLowerCase())) return false;
+  return !SENSITIVE_WORKTREE_PATH_RE.test(normalized)
+    && WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase());
+}
+
 function collectChangedSourcePaths(workspace) {
   const changed = new Set();
   const collect = (args) => {
@@ -306,10 +319,7 @@ function collectHeadSourcePaths(workspace) {
   for (const item of output.split("\0")) {
     const normalized = item.replace(/\\/g, "/").trim();
     if (!normalized || path.isAbsolute(normalized)) continue;
-    const segments = normalized.toLowerCase().split("/");
-    if (segments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))) continue;
-    if (SENSITIVE_WORKTREE_PATH_RE.test(normalized)) continue;
-    if (!WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase())) continue;
+    if (!canonicalTextSourcePath(normalized)) continue;
     const inspected = inspectContainedScanPath(workspace, normalized);
     if (!inspected.exists) continue;
     if (!inspected.stats.isFile() || inspected.stats.size > MAX_SCANNED_FILE_BYTES) continue;
@@ -321,10 +331,7 @@ function collectHeadSourcePaths(workspace) {
 function eligibleTrackedSourcePath(workspace, value) {
   const normalized = String(value || "").replace(/\\\\/g, "/").replace(/^\.\//, "").trim();
   if (!normalized || path.isAbsolute(normalized) || normalized.startsWith("docs/") || ROOT_SOURCE_FILES.includes(normalized)) return null;
-  const segments = normalized.toLowerCase().split("/");
-  if (segments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))) return null;
-  if (SENSITIVE_WORKTREE_PATH_RE.test(normalized)) return null;
-  if (!WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase())) return null;
+  if (!canonicalTextSourcePath(normalized)) return null;
   const inspected = inspectContainedScanPath(workspace, normalized);
   if (!inspected.exists) return null;
   if (!inspected.stats.isFile() || inspected.stats.size > MAX_SCANNED_FILE_BYTES) return null;
@@ -377,9 +384,10 @@ function collectRangeDeltaForReconciliation(workspace, fromHead, toHead) {
     const normalized = item.replace(/\\/g, "/").trim();
     if (!normalized) continue;
     const segments = normalized.toLowerCase().split("/");
-    if (path.isAbsolute(normalized) || segments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))
-        || SENSITIVE_WORKTREE_PATH_RE.test(normalized)
-        || !WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase())) {
+    if (segments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))
+        || normalized.startsWith("docs/") && DOCUMENT_VISUAL_EXTENSIONS.has(path.extname(normalized).toLowerCase())
+        || SENSITIVE_WORKTREE_PATH_RE.test(normalized)) continue;
+    if (!canonicalTextSourcePath(normalized)) {
       excludedCount += 1;
       continue;
     }
@@ -405,7 +413,7 @@ function readAuthorizedScanProfile(storeRoot, projectId, scanSha256) {
     if (profile?.schemaVersion !== SCAN_PROFILE_SCHEMA
         || profile.projectId !== projectId
         || profile.scanSha256 !== scanSha256
-        || !/^[a-f0-9]{40,64}$/.test(String(profile.baselineHead || ""))
+        || (profile.baselineHead !== null && !/^[a-f0-9]{40,64}$/.test(String(profile.baselineHead || "")))
         || !Array.isArray(profile.files)
         || profile.files.length === 0
         || profile.files.length > MAX_SCAN_FILES) return null;
@@ -575,6 +583,7 @@ function issueAcceptedEvidenceReceiptFromApp(request = {}, options = {}) {
     ...request,
     relativePaths: [...new Set([...(Array.isArray(request.relativePaths) ? request.relativePaths : []), ...initialPaths])].slice(0, MAX_SCAN_FILES),
   });
+  assertCompleteWorkspaceScan(scan);
   if (request.expectedProjectIdentitySha256 !== scan.projectIdentity.projectIdentitySha256) throw new Error("exact_project_identity_sha256_mismatch");
   if (request.expectedScanSha256 !== scan.scanSha256) throw new Error("exact_workspace_scan_sha256_mismatch");
   const storeRoot = resolveStoreRoot(request);
@@ -729,33 +738,60 @@ function authorizedScanProfile(request, projectIdentity) {
 }
 
 function workingTreeSnapshot(workspace) {
-  const changedPaths = [...collectChangedSourcePaths(workspace)].sort();
+  const exclusions = { generated: 0, documentVisual: 0, sensitive: 0, unsupported: 0 };
+  const changedPaths = [...collectChangedSourcePaths(workspace)].filter((relativePath) => {
+    const normalized = relativePath.replace(/\\/g, "/");
+    if (normalized.toLowerCase().split("/").some((segment) => SKIP_DIRECTORY_NAMES.has(segment))) {
+      exclusions.generated += 1;
+      return false;
+    }
+    if (normalized.startsWith("docs/") && DOCUMENT_VISUAL_EXTENSIONS.has(path.extname(normalized).toLowerCase())) {
+      exclusions.documentVisual += 1;
+      return false;
+    }
+    if (SENSITIVE_WORKTREE_PATH_RE.test(normalized)) {
+      exclusions.sensitive += 1;
+      return false;
+    }
+    if (!WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase())) exclusions.unsupported += 1;
+    return true;
+  }).sort();
   const eligiblePaths = changedPaths.filter((relativePath) => {
     const normalized = relativePath.replace(/\\/g, "/");
-    const pathSegments = normalized.toLowerCase().split("/");
-    return !pathSegments.some((segment) => SKIP_DIRECTORY_NAMES.has(segment))
-      && !SENSITIVE_WORKTREE_PATH_RE.test(normalized)
+    return !SENSITIVE_WORKTREE_PATH_RE.test(normalized)
       && WORKTREE_TEXT_EXTENSIONS.has(path.extname(normalized).toLowerCase());
   });
   const entries = [];
   let textPostimagesHashed = 0;
   let excludedBodyCount = changedPaths.length - eligiblePaths.length;
-  for (const relativePath of eligiblePaths.slice(0, MAX_WORKTREE_POSTIMAGES)) {
+  let integrityBytesHashed = 0;
+  let integrityComplete = excludedBodyCount === 0 && eligiblePaths.length <= MAX_WORKTREE_INTEGRITY_PATHS;
+  const integrityHash = crypto.createHash("sha256");
+  for (const relativePath of eligiblePaths.slice(0, MAX_WORKTREE_INTEGRITY_PATHS)) {
     const normalized = relativePath.replace(/\\/g, "/");
     const inspected = inspectContainedScanPath(workspace, normalized);
+    let entry;
     if (!inspected.exists) {
-      entries.push({ relativePath: normalized, state: "deleted", sizeBytes: 0, sha256: null });
-      continue;
-    }
-    const stats = inspected.stats;
-    if (!stats.isFile() || stats.size > MAX_SCANNED_FILE_BYTES) {
-      entries.push({ relativePath: normalized, state: "body_excluded", sizeBytes: stats.size, sha256: null });
+      entry = { relativePath: normalized, state: "deleted", sizeBytes: 0, sha256: null };
+    } else if (!inspected.stats.isFile() || inspected.stats.size > MAX_SCANNED_FILE_BYTES
+        || integrityBytesHashed + inspected.stats.size > MAX_WORKTREE_INTEGRITY_BYTES) {
+      entry = { relativePath: normalized, state: "body_excluded", sizeBytes: inspected.stats.size, sha256: null };
       excludedBodyCount += 1;
-      continue;
+      integrityComplete = false;
+    } else {
+      const opened = openContainedScanFile(workspace, normalized);
+      entry = {
+        relativePath: normalized,
+        state: "text_postimage",
+        sizeBytes: opened.stats.size,
+        sha256: crypto.createHash("sha256").update(opened.bytes).digest("hex"),
+      };
+      integrityBytesHashed += opened.stats.size;
+      textPostimagesHashed += 1;
     }
-    const opened = openContainedScanFile(workspace, normalized);
-    entries.push({ relativePath: normalized, state: "text_postimage", sizeBytes: opened.stats.size, sha256: sha256(opened.bytes) });
-    textPostimagesHashed += 1;
+    integrityHash.update(stableStringify(entry));
+    integrityHash.update("\n");
+    if (entries.length < MAX_WORKTREE_POSTIMAGES) entries.push(entry);
   }
   const core = {
     trackedPathCount: eligiblePaths.length,
@@ -766,10 +802,19 @@ function workingTreeSnapshot(workspace) {
     ...core,
     changedPathCount: changedPaths.length,
     excludedPathCount: changedPaths.length - eligiblePaths.length,
-    fingerprint: sha256(stableStringify(core)),
+    fingerprint: integrityComplete && !core.truncated
+      ? sha256(stableStringify(core))
+      : sha256(stableStringify({ ...core, integrityDigest: integrityHash.digest("hex"), integrityComplete })),
+    integrityComplete,
+    integrityBytesHashed,
     textPostimagesHashed,
     excludedBodyCount,
+    exclusions,
   };
+}
+
+function assertCompleteWorkspaceScan(scan) {
+  if (scan.workingTree?.integrityComplete !== true) throw new Error("workspace_scan_integrity_incomplete");
 }
 
 function collectDocCandidates(workspace, request = {}) {
@@ -778,20 +823,23 @@ function collectDocCandidates(workspace, request = {}) {
   for (const requested of Array.isArray(request.relativePaths) ? request.relativePaths.slice(0, MAX_SCAN_FILES) : []) {
     const normalized = String(requested || "").replace(/\\/g, "/");
     if (normalized.startsWith(".codex-knowledge/")) throw new Error("generated_knowledge_cannot_be_canonical_source");
+    if (!canonicalTextSourcePath(normalized)) {
+      throw new Error("workspace_required_source_not_canonical_text");
+    }
     candidates.add(normalized);
     requestedCandidates.push(normalized);
   }
   const automaticCandidates = [];
   for (const value of Array.isArray(request.automaticRelativePaths) ? request.automaticRelativePaths.slice(0, MAX_SCAN_FILES) : []) {
     const normalized = String(value || "").replace(/\\\\/g, "/").replace(/^\.\//, "");
-    if (!normalized || normalized.startsWith(".codex-knowledge/") || path.isAbsolute(normalized)) continue;
+    if (!canonicalTextSourcePath(normalized)) continue;
     candidates.add(normalized);
     automaticCandidates.push(normalized);
   }
   const authorizedProfileCandidates = [];
   for (const value of Array.isArray(request.authorizedProfilePaths) ? request.authorizedProfilePaths.slice(0, MAX_SCAN_FILES) : []) {
     const normalized = String(value || "").replace(/\\\\/g, "/").replace(/^\.\//, "");
-    if (!normalized || normalized.startsWith(".codex-knowledge/") || path.isAbsolute(normalized)) continue;
+    if (!canonicalTextSourcePath(normalized)) continue;
     candidates.add(normalized);
     authorizedProfileCandidates.push(normalized);
   }
@@ -801,9 +849,9 @@ function collectDocCandidates(workspace, request = {}) {
   if (docsInspection.exists && !docsInspection.stats.isDirectory()) throw new Error("workspace_docs_directory_required");
   const directoriesRead = 0;
   const preferred = [...new Set([
+    ...requestedCandidates,
     ...PRIORITY_SOURCE_FILES,
     ...ROOT_SOURCE_FILES,
-    ...requestedCandidates,
     ...automaticCandidates,
     ...authorizedProfileCandidates,
   ])];
@@ -874,6 +922,9 @@ function sourceArtifactType(relativePath) {
 }
 
 function scanExactWorkspace(request = {}) {
+  if (Array.isArray(request.relativePaths) && request.relativePaths.length > MAX_SCAN_FILES) {
+    throw new Error("workspace_required_source_limit_exceeded");
+  }
   const { workspace, projectIdentity } = resolveWorkspace(request);
   const authorizedProfile = authorizedScanProfile(request, projectIdentity);
   const rangeSourcePaths = collectRangeSourcePaths(workspace, authorizedProfile.baselineHead, projectIdentity.baselineHead);
@@ -899,6 +950,7 @@ function scanExactWorkspace(request = {}) {
     const stats = inspected.stats;
     if (!stats.isFile()) continue;
     if (stats.size > MAX_SCANNED_FILE_BYTES) {
+      if (explicitlyRequired) throw new Error("workspace_required_source_too_large");
       skipped.push({ relativePath, reason: "canonical_source_too_large", sizeBytes: stats.size });
       continue;
     }
@@ -914,6 +966,11 @@ function scanExactWorkspace(request = {}) {
       sha256: hashCanonicalTextBytes(opened.bytes),
     });
     if (files.length >= MAX_SCAN_FILES) break;
+  }
+  for (const relativePath of Array.isArray(request.relativePaths) ? request.relativePaths : []) {
+    if (!files.some((file) => file.relativePath === String(relativePath).replace(/\\/g, "/"))) {
+      throw new Error("workspace_required_sources_not_scanned");
+    }
   }
   const generatedKnowledge = [];
   for (const fileName of GENERATED_KNOWLEDGE_FILES) {
@@ -953,6 +1010,8 @@ function scanExactWorkspace(request = {}) {
       maxFiles: MAX_SCAN_FILES,
       maxDirectories: MAX_SCAN_DIRECTORIES,
       maxWorktreePostimages: MAX_WORKTREE_POSTIMAGES,
+      maxWorktreeIntegrityPaths: MAX_WORKTREE_INTEGRITY_PATHS,
+      maxWorktreeIntegrityBytes: MAX_WORKTREE_INTEGRITY_BYTES,
       directoriesRead,
       textPostimagesHashed: workingTree.textPostimagesHashed,
       excludedWorktreeBodies: workingTree.excludedBodyCount,
@@ -965,6 +1024,7 @@ function scanExactWorkspace(request = {}) {
       ...(generatedKnowledge.length > 0 ? ["generated_codex_knowledge_excluded_from_authority_seed"] : []),
       ...(skipped.length > 0 ? ["oversized_canonical_sources_skipped"] : []),
       ...(workingTree.truncated ? ["working_tree_postimages_truncated"] : []),
+      ...(workingTree.integrityComplete ? [] : ["workspace_scan_integrity_incomplete"]),
       ...(workingTree.excludedBodyCount > 0 ? ["non_text_or_sensitive_worktree_bodies_excluded"] : []),
     ],
   };
@@ -1300,12 +1360,16 @@ function verifyMemoryCore(request = {}) {
       scanBinding: {
         currentScanSha256: currentScan.scanSha256,
         baselineHead: projectIdentity.baselineHead,
+        integrityComplete: currentScan.workingTree.integrityComplete,
         authorizedBindingCount: 0,
         matched: false,
         matchedPath: null,
         authorizedCheckpointId: null,
       },
-      warnings: ["app_owned_memory_core_private_state_missing"],
+      warnings: [
+        "app_owned_memory_core_private_state_missing",
+        ...(currentScan.workingTree.integrityComplete ? [] : ["workspace_scan_integrity_incomplete"]),
+      ],
     }, MAX_RESUME_PACKET_BYTES, "resume");
   }
   const optionalSlots = Array.isArray(request.optionalSlots)
@@ -1340,7 +1404,7 @@ function verifyMemoryCore(request = {}) {
   const authorizedScanBindings = (verifiedReceipt?.payload?.sourceRefs || verifiedReceipt?.sourceRefs || [])
     .filter((ref) => ref.kind === "workspace_scan_receipt" && ref.projectId === continuityRaw.projectId);
   const matchingScanBinding = authorizedScanBindings.find((ref) => ref.hash === currentScan.scanSha256) || null;
-  const baselineAndSourcesCurrent = Boolean(matchingScanBinding);
+  const baselineAndSourcesCurrent = Boolean(matchingScanBinding) && currentScan.workingTree.integrityComplete === true;
   const authorityVerified = diagnostics.privateStateReady === true
     && diagnostics.sidecarReady === true
     && authorityReceiptCount > 0
@@ -1370,6 +1434,7 @@ function verifyMemoryCore(request = {}) {
     scanBinding: {
       currentScanSha256: currentScan.scanSha256,
       baselineHead: projectIdentity.baselineHead,
+      integrityComplete: currentScan.workingTree.integrityComplete,
       currentSourceRefs: coreSourceRefs(currentScan, continuityRaw.projectId || projectIdentity.projectId, null).slice(0, 16),
       authorizedBindingCount: authorizedScanBindings.length,
       matched: baselineAndSourcesCurrent,
@@ -1378,7 +1443,8 @@ function verifyMemoryCore(request = {}) {
     },
     warnings: [
       ...(recoveryReady ? [] : ["full_app_owned_memory_core_not_recovery_ready"]),
-      ...(baselineAndSourcesCurrent ? [] : ["workspace_head_or_canonical_sources_changed_reseed_required"]),
+      ...(matchingScanBinding ? [] : ["workspace_head_or_canonical_sources_changed_reseed_required"]),
+      ...(currentScan.workingTree.integrityComplete ? [] : ["workspace_scan_integrity_incomplete"]),
       ...(authorityVerified ? [] : ["helper_only_or_unverified_authority_cannot_claim_current"]),
     ],
   };
@@ -1389,6 +1455,7 @@ function verifyMemoryCore(request = {}) {
 function seedMemoryCore(request = {}) {
   if (request.execute !== true) throw new Error("seed_execute_true_required");
   const scan = scanExactWorkspace(request);
+  assertCompleteWorkspaceScan(scan);
   if (!request.expectedScanSha256 || request.expectedScanSha256 !== scan.scanSha256) throw new Error("exact_workspace_scan_sha256_mismatch");
   const storeRoot = resolveStoreRoot(request);
   const runtime = runtimeForWrite(storeRoot);
@@ -2258,6 +2325,7 @@ function prepareTakeover(request = {}) {
 function exactWorkspaceWriteBinding(request = {}, operation) {
   if (request.execute !== true) throw new Error(`${operation}_execute_true_required`);
   const scan = scanExactWorkspace(request);
+  assertCompleteWorkspaceScan(scan);
   if (!request.expectedProjectIdentitySha256 || request.expectedProjectIdentitySha256 !== scan.projectIdentity.projectIdentitySha256) {
     throw new Error("exact_project_identity_sha256_mismatch");
   }
